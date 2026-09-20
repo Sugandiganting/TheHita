@@ -1,0 +1,228 @@
+// Skema database The Hita Finance
+// Satu sistem untuk semua cabang & jenis usaha, dipisah lewat dimensi BusinessUnit
+// dan Chart of Account (COA) yang dipakai bersama.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Grup usaha — dipakai untuk laporan konsolidasi.
+model BusinessGroup {
+  id        String         @id @default(cuid())
+  code      String         @unique
+  name      String
+  units     BusinessUnit[]
+  createdAt DateTime       @default(now())
+}
+
+/// Cabang / unit usaha (hotel, laundry, cafe).
+/// Inilah pengganti "pemisahan lewat COA" di PMS lama: satu COA dipakai bersama,
+/// pemisahan terjadi lewat unitId di setiap baris jurnal.
+model BusinessUnit {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  /// HOTEL | LAUNDRY | CAFE | OTHER
+  type        String
+  groupId     String
+  /// Asal data di PMS lama (mis. "GuestPro 1"), hanya untuk penelusuran saat migrasi.
+  legacyPms   String?
+  address     String?
+  /// Jumlah kamar — dipakai untuk metrik okupansi/ADR pada unit hotel.
+  roomCount   Int     @default(0)
+  /// Saldo kas awal saat sistem mulai dipakai (jika tidak diinput lewat jurnal pembuka).
+  openingCash Float   @default(0)
+  active      Boolean @default(true)
+
+  group    BusinessGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lines    JournalLine[]
+  entries  JournalEntry[]
+  projects Project[]
+  stats    MonthlyStat[]
+
+  createdAt DateTime @default(now())
+
+  @@index([groupId])
+}
+
+/// Chart of Account. Dipakai bersama seluruh unit sehingga laporan bisa
+/// dibandingkan antar cabang maupun dikonsolidasi.
+model Account {
+  id               String  @id @default(cuid())
+  code             String  @unique
+  name             String
+  /// ASSET | LIABILITY | EQUITY | REVENUE | COGS | EXPENSE
+  type             String
+  /// Pengelompokan detail, mis. CASH_BANK, ROOM_REVENUE, PAYROLL, UTILITIES.
+  subtype          String?
+  /// Akun induk untuk COA bertingkat (header tidak boleh dipakai posting).
+  parentId         String?
+  /// true = akun header (hanya untuk pengelompokan, tidak bisa diposting).
+  isHeader         Boolean @default(false)
+  /// true = akun kas/bank; saldo akun ini yang dipakai mesin peramalan.
+  isCash           Boolean @default(false)
+  /// OPERATING | INVESTING | FINANCING — klasifikasi laporan arus kas.
+  cashflowCategory String?
+  description      String?
+  active           Boolean @default(true)
+
+  parent    Account?          @relation("AccountTree", fields: [parentId], references: [id])
+  children  Account[]         @relation("AccountTree")
+  lines     JournalLine[]
+  costItems ProjectCostItem[]
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([parentId])
+}
+
+/// Bukti transaksi (header jurnal). Satu bukti boleh menyentuh lebih dari satu unit.
+model JournalEntry {
+  id          String   @id @default(cuid())
+  date        DateTime
+  /// Unit utama dari bukti ini (baris tetap punya unitId sendiri).
+  unitId      String
+  reference   String?
+  description String
+  /// MANUAL | QUICK | IMPORT | PROJECT | OPENING
+  source      String   @default("MANUAL")
+  projectId   String?
+  notes       String?
+
+  unit    BusinessUnit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  project Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lines   JournalLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([unitId])
+  @@index([projectId])
+}
+
+/// Baris jurnal — inti sistem double-entry.
+model JournalLine {
+  id        String  @id @default(cuid())
+  entryId   String
+  accountId String
+  /// Unit pemilik baris ini. Memungkinkan satu bukti dibagi ke beberapa cabang
+  /// (mis. tagihan listrik satu meteran untuk hotel + laundry).
+  unitId    String
+  debit     Float   @default(0)
+  credit    Float   @default(0)
+  memo      String?
+
+  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account Account      @relation(fields: [accountId], references: [id])
+  unit    BusinessUnit @relation(fields: [unitId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId])
+  @@index([unitId])
+}
+
+/// Rencana proyek / belanja modal (mis. menambah kamar baru).
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  unitId      String
+  /// DRAFT | PLANNED | ONGOING | DONE | CANCELLED
+  status      String    @default("PLANNED")
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+
+  /// Dana tambahan yang masuk untuk proyek (pinjaman bank / setoran modal).
+  fundingAmount   Float     @default(0)
+  fundingDate     DateTime?
+  /// ownership: LOAN | EQUITY | NONE
+  fundingType     String    @default("NONE")
+  /// Bunga tahunan pinjaman (%) — dipakai menghitung cicilan pada peramalan.
+  loanRatePct     Float     @default(0)
+  loanTenorMonths Int       @default(0)
+
+  /// Perkiraan tambahan pendapatan & biaya per bulan setelah proyek beroperasi.
+  upliftRevenueMonthly Float     @default(0)
+  upliftExpenseMonthly Float     @default(0)
+  upliftStartDate      DateTime?
+
+  unit    BusinessUnit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  items   ProjectCostItem[]
+  entries JournalEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+}
+
+/// Rincian biaya proyek beserta jadwal pembayarannya.
+/// Jadwal inilah yang disuntikkan ke proyeksi arus kas.
+model ProjectCostItem {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  accountId   String?
+  amount      Float
+  plannedDate DateTime
+  /// Sudah dibayar? Item yang sudah dibayar tidak dihitung lagi sebagai rencana keluar.
+  paid        Boolean  @default(false)
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([projectId])
+}
+
+/// Statistik operasional bulanan per unit (kamar terjual, tamu, dll).
+/// Opsional, dipakai untuk metrik okupansi & ADR.
+model MonthlyStat {
+  id             String  @id @default(cuid())
+  unitId         String
+  /// Format YYYY-MM
+  period         String
+  /// Kamar terjual pada bulan tersebut.
+  roomsSold      Int     @default(0)
+  /// Kamar tersedia (roomCount * jumlah hari).
+  roomsAvailable Int     @default(0)
+  guests         Int     @default(0)
+  notes          String?
+
+  unit BusinessUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([unitId, period])
+  @@index([unitId])
+}
+
+/// Skenario peramalan yang disimpan agar bisa dibandingkan.
+model ForecastScenario {
+  id               String  @id @default(cuid())
+  name             String
+  description      String?
+  /// JSON array of unit id; kosong/"ALL" berarti seluruh grup.
+  unitScope        String  @default("ALL")
+  /// Jumlah bulan proyeksi ke depan.
+  horizonMonths    Int     @default(24)
+  /// AVERAGE | WEIGHTED | TREND
+  method           String  @default("WEIGHTED")
+  /// Jumlah bulan histori yang dipakai sebagai dasar.
+  lookbackMonths   Int     @default(12)
+  /// true = pakai indeks musiman (butuh histori >= 12 bulan).
+  useSeasonality   Boolean @default(true)
+  revenueGrowthPct Float   @default(0)
+  expenseGrowthPct Float   @default(0)
+  /// Saldo kas minimum yang ingin dijaga (buffer aman).
+  minCashBuffer    Float   @default(0)
+  /// JSON array of project id yang ikut dihitung.
+  includedProjects String  @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
