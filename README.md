@@ -54,6 +54,15 @@ pengelompokan tersebut tidak lagi membatasi apa pun.
 Yang perlu dipasang lebih dulu: **Node.js versi 20 atau lebih baru**
 (unduh di <https://nodejs.org>, pilih versi LTS).
 
+### Cara termudah (macOS)
+
+Klik dua kali berkas **`mulai.command`**. Berkas itu memeriksa Node.js, memasang
+komponen, menyiapkan database, menjalankan aplikasi, dan membuka browser secara
+otomatis. Panduan lengkap langkah demi langkah ada di
+[docs/panduan-macbook.md](docs/panduan-macbook.md).
+
+### Lewat Terminal
+
 ```bash
 # 1. Ambil kode dan masuk ke foldernya
 git clone https://github.com/Sugandiganting/TheHita.git
