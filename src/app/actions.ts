@@ -201,12 +201,16 @@ export async function deleteEntry(formData: FormData): Promise<void> {
 /* Master data                                                         */
 /* ------------------------------------------------------------------ */
 
+/** Akun yang dibuat dan dipakai sistem — tidak boleh dihapus lewat antarmuka. */
+const SYSTEM_ACCOUNT_CODES = [INTERUNIT_RECEIVABLE, INTERUNIT_PAYABLE];
+
 export async function saveAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const code = String(formData.get('code') ?? '').trim();
   const name = String(formData.get('name') ?? '').trim();
   const type = String(formData.get('type') ?? '');
   const subtype = String(formData.get('subtype') ?? '').trim();
+  const parentId = String(formData.get('parentId') ?? '').trim();
   const isCash = formData.get('isCash') === 'on';
   const isHeader = formData.get('isHeader') === 'on';
   const cashflowCategory = String(formData.get('cashflowCategory') ?? '').trim();
@@ -217,28 +221,118 @@ export async function saveAccount(_prev: ActionState, formData: FormData): Promi
     return fail('Jenis akun tidak valid.');
   }
   if (isCash && type !== 'ASSET') return fail('Akun kas/bank harus berjenis Aset.');
+  if (isCash && isHeader) return fail('Akun induk tidak bisa sekaligus menjadi akun kas/bank.');
+  if (parentId && parentId === id) return fail('Akun tidak bisa menjadi induk bagi dirinya sendiri.');
+
+  const duplicate = await prisma.account.findUnique({ where: { code }, select: { id: true } });
+  if (duplicate && duplicate.id !== id) return fail(`Nomor akun ${code} sudah dipakai.`);
+
+  if (parentId) {
+    const parent = await prisma.account.findUnique({
+      where: { id: parentId },
+      select: { isHeader: true, code: true, name: true, parentId: true },
+    });
+    if (!parent) return fail('Akun induk tidak ditemukan.');
+    if (!parent.isHeader) return fail(`${parent.code} ${parent.name} bukan akun induk.`);
+    // Cegah lingkaran sederhana: induk tidak boleh anak dari akun ini.
+    if (id && parent.parentId === id) return fail('Akun induk yang dipilih adalah anak dari akun ini.');
+  }
 
   const payload = {
     code,
     name,
     type,
     subtype: subtype || null,
+    parentId: parentId || null,
     isCash,
     isHeader,
     cashflowCategory: cashflowCategory || null,
   };
 
-  const duplicate = await prisma.account.findUnique({ where: { code }, select: { id: true } });
-  if (duplicate && duplicate.id !== id) return fail(`Nomor akun ${code} sudah dipakai.`);
-
-  if (id) {
-    await prisma.account.update({ where: { id }, data: payload });
-  } else {
+  if (!id) {
     await prisma.account.create({ data: payload });
+    revalidatePath('/coa');
+    return ok(`Akun ${code} — ${name} berhasil ditambahkan.`);
   }
 
+  const existing = await prisma.account.findUnique({
+    where: { id },
+    select: { type: true, isCash: true, isHeader: true, code: true, _count: { select: { lines: true } } },
+  });
+  if (!existing) return fail('Akun tidak ditemukan.');
+
+  // Akun yang sudah punya transaksi tidak boleh berubah sifat dasarnya.
+  // Mengubah jenis akun membalik tanda saldo pada seluruh laporan lama,
+  // dan mencabut tanda kas mengubah saldo kas serta hasil peramalan.
+  if (existing._count.lines > 0) {
+    if (existing.type !== type) {
+      return fail(
+        `Akun ${existing.code} sudah dipakai di ${existing._count.lines} baris jurnal, jenisnya tidak bisa diubah ` +
+          'karena akan mengubah seluruh laporan yang sudah jadi. Non-aktifkan akun ini lalu buat akun baru.',
+      );
+    }
+    if (existing.isCash !== isCash) {
+      return fail(
+        `Akun ${existing.code} sudah dipakai di ${existing._count.lines} baris jurnal, tanda kas/bank tidak bisa diubah ` +
+          'karena akan mengubah saldo kas dan hasil peramalan.',
+      );
+    }
+    if (!existing.isHeader && isHeader) {
+      return fail(
+        `Akun ${existing.code} sudah dipakai di ${existing._count.lines} baris jurnal, jadi tidak bisa dijadikan akun induk.`,
+      );
+    }
+  }
+
+  await prisma.account.update({ where: { id }, data: payload });
   revalidatePath('/coa');
-  return ok(`Akun ${code} — ${name} tersimpan.`);
+  return ok(`Perubahan pada akun ${code} — ${name} tersimpan.`);
+}
+
+/**
+ * Menghapus akun. Hanya boleh bila akun benar-benar bersih: belum pernah
+ * dipakai di jurnal, tidak punya akun anak, dan tidak dirujuk item biaya proyek.
+ * Akun yang sudah dipakai cukup dinonaktifkan supaya laporan lama tetap utuh.
+ */
+export async function deleteAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return fail('Akun tidak ditemukan.');
+
+  const account = await prisma.account.findUnique({
+    where: { id },
+    select: {
+      code: true,
+      name: true,
+      _count: { select: { lines: true, children: true, costItems: true } },
+    },
+  });
+  if (!account) return fail('Akun tidak ditemukan.');
+
+  if (SYSTEM_ACCOUNT_CODES.includes(account.code)) {
+    return fail(
+      `Akun ${account.code} ${account.name} dipakai sistem untuk menjembatani transaksi antar cabang dan tidak bisa dihapus.`,
+    );
+  }
+  if (account._count.lines > 0) {
+    return fail(
+      `Akun ${account.code} tidak bisa dihapus karena sudah dipakai di ${account._count.lines} baris jurnal. ` +
+        'Non-aktifkan saja agar laporan lama tetap utuh.',
+    );
+  }
+  if (account._count.children > 0) {
+    return fail(
+      `Akun ${account.code} masih menaungi ${account._count.children} akun di bawahnya. Pindahkan atau hapus akun tersebut terlebih dahulu.`,
+    );
+  }
+  if (account._count.costItems > 0) {
+    return fail(
+      `Akun ${account.code} masih dirujuk ${account._count.costItems} item biaya proyek. Ubah item tersebut terlebih dahulu.`,
+    );
+  }
+
+  await prisma.account.delete({ where: { id } });
+  revalidatePath('/coa');
+  return ok(`Akun ${account.code} — ${account.name} berhasil dihapus.`);
 }
 
 export async function toggleAccountActive(formData: FormData): Promise<void> {

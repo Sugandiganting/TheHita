@@ -144,6 +144,33 @@ Aturan penomoran: `1` aset, `2` kewajiban, `3` modal, `4` pendapatan, `5` harga 
 Centang **Akun kas / bank** hanya untuk rekening atau kas fisik — saldo akun inilah yang
 dipakai mesin peramalan.
 
+### Mengubah akun
+
+Tekan **Ubah** pada baris akun. Formulir di kanan berganti ke mode ubah dengan isian
+yang sudah terisi. Tekan **Batal** untuk kembali menambah akun baru.
+
+Untuk akun yang sudah pernah dipakai, **jenis akun** dan **tanda kas/bank** dikunci.
+Nomor, nama, kelompok, dan induknya tetap bisa diubah. Penguncian ini disengaja:
+mengubah jenis akun akan membalik tanda saldo pada seluruh laporan yang sudah jadi,
+dan mencabut tanda kas akan mengubah saldo kas serta hasil peramalan. Bila memang perlu
+jenis yang berbeda, non-aktifkan akun lama lalu buat akun baru.
+
+### Menghapus akun
+
+Tombol **Hapus** hanya muncul untuk akun yang benar-benar bersih. Bila tidak bisa dihapus,
+alasannya langsung tertulis di kolom Aksi:
+
+| Yang tertulis | Artinya |
+|---|---|
+| `Dipakai 846 jurnal` | Sudah ada transaksinya. Non-aktifkan saja agar laporan lama tetap utuh. |
+| `Punya 7 akun anak` | Akun induk. Pindahkan atau hapus akun di bawahnya dulu. |
+| `Dipakai 3 item proyek` | Masih dirujuk rincian biaya proyek. |
+| `Dipakai sistem` | Akun antar unit, dipakai otomatis oleh menu Cash and Bank. |
+
+Penghapusan memakai konfirmasi dua langkah: tekan **Hapus**, lalu **Ya, hapus**.
+Akun yang sudah terhapus tidak bisa dikembalikan, tetapi karena syaratnya belum pernah
+dipakai, tidak ada data transaksi yang ikut hilang.
+
 ## 8. Menambah cabang baru
 
 Menu **Unit Usaha** → panel **Unit baru**. Isi kode singkat, nama, jenis usaha, dan saldo
