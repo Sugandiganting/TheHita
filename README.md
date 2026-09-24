@@ -114,6 +114,30 @@ Ringkasan saldo kas, pendapatan, beban, dan laba bersih. Bisa difilter per caban
 ditampilkan konsolidasi seluruh grup. Termasuk perbandingan laba antar cabang dan
 peringatan dini bila kas diproyeksikan habis.
 
+### Cash and Bank
+Tiga cara uang bergerak, masing-masing punya halamannya sendiri:
+
+- **Transfer Money** — memindahkan uang antar rekening milik grup, misalnya dari Bank IGYT ke
+  Bank The Hita Legian, atau dari bank ke Kas Kecil Purchasing. Transfer tidak menambah atau
+  mengurangi kekayaan grup, hanya memindahkan letaknya.
+- **Receive Money** — mencatat uang masuk. Satu penerimaan boleh dipecah ke beberapa akun sekaligus.
+- **Pay Money** — mencatat uang keluar. Satu pembayaran boleh dipecah ke beberapa akun beban dan
+  dibagi ke beberapa cabang, misalnya satu tagihan listrik satu meteran untuk hotel dan laundry.
+
+Halaman **Ringkasan Saldo** menampilkan posisi tiap rekening per cabang, sehingga "Bank BCA milik
+IGYT" dan "Bank BCA milik The Hita Legian" terbaca sebagai dua kantong uang berbeda meski memakai
+satu nomor akun.
+
+#### Transaksi antar cabang
+
+Ketika uang berpindah antar cabang, sistem otomatis menambahkan sepasang baris:
+`1-2500 Piutang Antar Unit` pada cabang pemberi dan `2-3500 Hutang Antar Unit` pada cabang penerima.
+
+Tanpa keduanya, jurnal memang tetap balance secara keseluruhan — tetapi neraca masing-masing cabang
+tidak lagi seimbang berdiri sendiri, dan laporan per cabang menjadi salah tanpa ketahuan. Saldo kedua
+akun itu selalu saling meniadakan pada laporan konsolidasi; kartu **Posisi antar unit** di halaman
+Ringkasan Saldo memantaunya.
+
 ### Transaksi
 Dua cara mencatat:
 

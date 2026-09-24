@@ -11,6 +11,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { COA_TEMPLATE } from '../src/lib/coa-template';
+import { checkPerUnitBalance } from '../src/lib/accounting';
 
 const prisma = new PrismaClient();
 
@@ -141,6 +142,16 @@ async function postEntry(opts: {
     throw new Error(`Jurnal tidak balance: ${opts.description} (D ${totalDebit} / K ${totalCredit})`);
   }
 
+  // Tiap unit harus seimbang berdiri sendiri, bukan hanya gabungannya —
+  // kalau tidak, laporan per cabang akan timpang tanpa ketahuan.
+  const timpang = checkPerUnitBalance(lines);
+  if (timpang.length > 0) {
+    throw new Error(
+      `Jurnal timpang di tingkat unit: ${opts.description} — ` +
+        timpang.map((u) => `${u.unitId}: ${u.difference}`).join(', '),
+    );
+  }
+
   await prisma.journalEntry.create({
     data: {
       date: opts.date,
@@ -179,6 +190,8 @@ async function seedTransactions() {
     const day = (d: number) => new Date(Date.UTC(year, month, Math.min(d, daysInMonth)));
     /** Omzet tiap unit pada bulan ini, dipakai menghitung PB1, service charge dan prive. */
     const monthRevenue = new Map<string, number>();
+    /** Uang tunai yang masuk ke kas fisik bulan ini, nantinya disetor ke bank. */
+    const monthTill = new Map<string, { code: string; amount: number }>();
 
     for (const u of UNITS) {
       const unitId = units.get(u.code)!;
@@ -252,6 +265,7 @@ async function seedTransactions() {
         entryCount += 2;
 
         monthRevenue.set(u.code, roomRevenue + fnbRevenue);
+        monthTill.set(u.code, { code: '1-1200', amount: directRevenue + fnbRevenue });
 
         // Amenities & guest supplies
         const amenities = roundTo(roomNights * jitter(22_000, 0.12));
@@ -272,10 +286,14 @@ async function seedTransactions() {
         await postEntry({
           date: day(daysInMonth),
           unitId,
-          description: `Jasa laundry linen oleh Play Laundry`,
+          description: 'Jasa laundry linen oleh Play Laundry',
           accounts,
           lines: [
+            // Sisi hotel: beban dibayar dari bank hotel.
             { code: '5-7000', debit: laundryCharge, unitId },
+            { code: '1-1300', credit: laundryCharge, unitId },
+            // Sisi laundry: pendapatan masuk ke bank laundry.
+            { code: '1-1300', debit: laundryCharge, unitId: units.get('PLD')! },
             { code: '4-3300', credit: laundryCharge, unitId: units.get('PLD')! },
           ],
         });
@@ -318,6 +336,7 @@ async function seedTransactions() {
         });
         entryCount += 3;
         monthRevenue.set(u.code, outsideRevenue);
+        monthTill.set(u.code, { code: '1-1100', amount: roundTo(outsideRevenue * 0.7) });
       }
 
       if (u.type === 'CAFE') {
@@ -349,6 +368,7 @@ async function seedTransactions() {
         });
         entryCount += 2;
         monthRevenue.set(u.code, cafeRevenue);
+        monthTill.set(u.code, { code: '1-1100', amount: roundTo(cafeRevenue * 0.45) });
       }
 
       /* ---- Beban rutin semua unit ---- */
@@ -415,6 +435,25 @@ async function seedTransactions() {
           lines: [
             { code: '3-3000', debit: prive },
             { code: '1-1300', credit: prive },
+          ],
+        });
+        entryCount++;
+      }
+
+      // Setoran kas ke bank. Tanpa langkah ini saldo bank terus minus padahal
+      // uangnya menumpuk di laci — persis kekeliruan yang sering terjadi di lapangan.
+      const till = monthTill.get(u.code);
+      if (till && till.amount > 0) {
+        const setoran = roundTo(till.amount);
+        await postEntry({
+          date: day(daysInMonth),
+          unitId,
+          description: 'Setoran kas ke bank',
+          source: 'TRANSFER',
+          accounts,
+          lines: [
+            { code: '1-1300', debit: setoran },
+            { code: till.code, credit: setoran },
           ],
         });
         entryCount++;

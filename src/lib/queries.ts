@@ -269,3 +269,105 @@ export async function getHistoryWindow(unitIds: UnitFilter = null): Promise<{ fr
   if (earliest > to) return { from: earliest, to: earliest };
   return { from: earliest, to };
 }
+
+export type CashAccountBalance = {
+  accountId: string;
+  code: string;
+  name: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  balance: number;
+};
+
+/**
+ * Saldo tiap pasangan rekening + cabang.
+ *
+ * Inilah yang membuat "Bank BCA milik IGYT" dan "Bank BCA milik The Hita Legian"
+ * terbaca sebagai dua kantong uang berbeda, meski memakai satu nomor akun.
+ * Rekening yang belum pernah dipakai tetap ditampilkan dengan saldo nol supaya
+ * bisa dipilih sebagai tujuan transfer.
+ */
+export async function getCashAccountsByUnit(unitIds: UnitFilter = null): Promise<CashAccountBalance[]> {
+  const [accounts, units, lines] = await Promise.all([
+    prisma.account.findMany({
+      where: { isCash: true, active: true, isHeader: false },
+      orderBy: { code: 'asc' },
+      select: { id: true, code: true, name: true },
+    }),
+    prisma.businessUnit.findMany({
+      where: { active: true, ...(unitIds && unitIds.length > 0 ? { id: { in: unitIds } } : {}) },
+      orderBy: { code: 'asc' },
+      select: { id: true, code: true, name: true, openingCash: true },
+    }),
+    prisma.journalLine.groupBy({
+      by: ['accountId', 'unitId'],
+      where: { account: { isCash: true } },
+      _sum: { debit: true, credit: true },
+    }),
+  ]);
+
+  const moved = new Map(
+    lines.map((l) => [`${l.accountId}|${l.unitId}`, (l._sum.debit ?? 0) - (l._sum.credit ?? 0)]),
+  );
+
+  const out: CashAccountBalance[] = [];
+  for (const unit of units) {
+    for (const account of accounts) {
+      out.push({
+        accountId: account.id,
+        code: account.code,
+        name: account.name,
+        unitId: unit.id,
+        unitCode: unit.code,
+        unitName: unit.name,
+        balance: moved.get(`${account.id}|${unit.id}`) ?? 0,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Posisi antar unit: siapa menalangi siapa, dan berapa.
+ * Pada laporan konsolidasi seluruhnya harus saling meniadakan; bila tidak,
+ * ada jurnal lintas unit yang belum dijembatani.
+ */
+export async function getInterUnitPositions(): Promise<{
+  rows: { unitId: string; unitCode: string; unitName: string; net: number }[];
+  total: number;
+}> {
+  const lines = await prisma.journalLine.findMany({
+    where: { account: { subtype: 'INTERUNIT' } },
+    select: { debit: true, credit: true, unit: { select: { id: true, code: true, name: true } } },
+  });
+
+  const map = new Map<string, { unitId: string; unitCode: string; unitName: string; net: number }>();
+  for (const l of lines) {
+    const cur = map.get(l.unit.id) ?? { unitId: l.unit.id, unitCode: l.unit.code, unitName: l.unit.name, net: 0 };
+    // Positif = unit ini menalangi (punya piutang); negatif = unit ini berhutang.
+    cur.net += l.debit - l.credit;
+    map.set(l.unit.id, cur);
+  }
+
+  const rows = [...map.values()].filter((r) => Math.abs(r.net) >= 1).sort((a, b) => b.net - a.net);
+  return { rows, total: rows.reduce((s, r) => s + r.net, 0) };
+}
+
+/** Transaksi kas terakhir untuk ditampilkan di bawah formulir. */
+export async function getRecentCashEntries(sources: string[], take = 12) {
+  return prisma.journalEntry.findMany({
+    where: { source: { in: sources } },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    take,
+    include: {
+      unit: { select: { code: true } },
+      lines: {
+        include: {
+          account: { select: { code: true, name: true, isCash: true, subtype: true } },
+          unit: { select: { code: true } },
+        },
+      },
+    },
+  });
+}

@@ -45,6 +45,29 @@ Menu **Transaksi** → tab **Jurnal manual**:
 Tombol **Simpan jurnal** baru aktif setelah tulisan **Balance ✓** muncul. Beban listrik
 akan muncul di laporan masing-masing cabang sesuai porsinya, memakai satu akun yang sama.
 
+## 3b. Memindahkan uang antar rekening
+
+Menu **Cash and Bank → Transfer Money**.
+
+Pilih rekening asal dan tujuan — daftarnya dikelompokkan per cabang, dan saldo tiap rekening
+ditampilkan langsung di pilihannya. Isi nominal dan keterangan, lalu simpan.
+
+Contoh pemakaian:
+
+| Keperluan | Dari | Ke |
+|---|---|---|
+| Isi ulang kas belanja | `1-1300 Bank BCA` · SKR | `1-1150 Kas Kecil Purchasing` · SKR |
+| Setor hasil penjualan | `1-1200 Kas Front Office` · THL | `1-1300 Bank BCA` · THL |
+| Pinjam dana antar cabang | `1-1300 Bank BCA` · IGYT | `1-1300 Bank BCA` · THL |
+
+Bila asal dan tujuan berada di cabang berbeda, muncul kotak biru pemberitahuan. Sistem otomatis
+mencatat piutang pada cabang pemberi dan hutang pada cabang penerima, supaya neraca kedua cabang
+tetap seimbang masing-masing. Anda tidak perlu mengisi apa pun untuk itu.
+
+Pantau hasilnya di kartu **Posisi antar unit** pada halaman Ringkasan Saldo: angka positif berarti
+cabang tersebut sedang menalangi, negatif berarti sedang ditalangi. Totalnya harus selalu
+**Seimbang** — bila tidak, ada jurnal manual lintas cabang yang perlu diperiksa.
+
 ## 4. Melihat laporan
 
 Menu **Laporan**. Kosongkan filter unit untuk laporan seluruh grup, atau pilih satu
@@ -53,6 +76,25 @@ cabang untuk laporan cabang tersebut. Atur rentang bulan lewat kolom *Dari bulan
 
 Periksa bagian **Neraca saldo** di kanan bawah — bila tertulis **Balance ✓**, seluruh
 jurnal pada periode itu seimbang.
+
+## 4b. Uang masuk dan uang keluar
+
+Menu **Cash and Bank → Receive Money** dan **Pay Money**. Bentuk keduanya sama:
+
+1. Pilih tanggal dan rekening yang dipakai
+2. Isi lawan transaksi (dari siapa / kepada siapa) dan keterangan
+3. Isi **rincian** — boleh lebih dari satu baris
+
+Kolom **Untuk cabang** pada tiap baris rincian itulah kuncinya. Contoh tagihan listrik Rp 30 juta
+yang dibayar dari bank Sri Krisna tetapi dipakai bersama Play Laundry:
+
+| Akun beban | Untuk cabang | Nominal |
+|---|---|---|
+| `6-2100 Listrik PLN` | SKR | 20.000.000 |
+| `6-2100 Listrik PLN` | PLD | 10.000.000 |
+
+Simpan sekali, dan beban listrik langsung muncul di laporan masing-masing cabang sesuai porsinya —
+memakai satu nomor akun yang sama. Penyeimbang antar unitnya dibuat otomatis.
 
 ## 5. Merencanakan proyek
 

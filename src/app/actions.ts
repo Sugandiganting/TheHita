@@ -3,7 +3,20 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { buildQuickEntryLines, checkBalance, round, type DraftLine } from '@/lib/accounting';
+import {
+  INTERUNIT_PAYABLE,
+  INTERUNIT_RECEIVABLE,
+  buildPayLines,
+  buildQuickEntryLines,
+  buildReceiveLines,
+  buildTransferLines,
+  checkBalance,
+  checkPerUnitBalance,
+  round,
+  type DraftLine,
+  type InterUnitAccounts,
+  type MoneyLine,
+} from '@/lib/accounting';
 
 export type ActionState = { ok: boolean; message: string };
 
@@ -396,4 +409,211 @@ export async function deleteProject(formData: FormData): Promise<void> {
   await prisma.project.delete({ where: { id } });
   revalidatePath('/proyek');
   revalidatePath('/peramalan');
+}
+
+/* ------------------------------------------------------------------ */
+/* Kas & Bank                                                          */
+/* ------------------------------------------------------------------ */
+
+function revalidateCash(): void {
+  revalidatePath('/kas');
+  revalidatePath('/kas/transfer');
+  revalidatePath('/kas/terima');
+  revalidatePath('/kas/bayar');
+  revalidatePath('/transaksi');
+  revalidatePath('/');
+  revalidatePath('/laporan');
+  revalidatePath('/peramalan');
+}
+
+/**
+ * Mengambil akun penghubung antar unit, membuatnya bila belum ada.
+ * Database yang dibuat sebelum fitur Kas & Bank hadir tidak punya akun ini,
+ * jadi dibuat otomatis daripada menggagalkan transaksi pengguna.
+ */
+async function getInterUnitAccounts(): Promise<InterUnitAccounts> {
+  const [recv, pay] = await Promise.all([
+    prisma.account.upsert({
+      where: { code: INTERUNIT_RECEIVABLE },
+      update: {},
+      create: {
+        code: INTERUNIT_RECEIVABLE,
+        name: 'Piutang Antar Unit',
+        type: 'ASSET',
+        subtype: 'INTERUNIT',
+        cashflowCategory: 'OPERATING',
+        description: 'Dipakai otomatis saat satu cabang menalangi cabang lain.',
+      },
+      select: { id: true },
+    }),
+    prisma.account.upsert({
+      where: { code: INTERUNIT_PAYABLE },
+      update: {},
+      create: {
+        code: INTERUNIT_PAYABLE,
+        name: 'Hutang Antar Unit',
+        type: 'LIABILITY',
+        subtype: 'INTERUNIT',
+        cashflowCategory: 'OPERATING',
+        description: 'Pasangan dari 1-2500. Dibuat otomatis saat uang berpindah antar cabang.',
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  return { receivableId: recv.id, payableId: pay.id };
+}
+
+/** Memastikan akun yang dipilih memang akun kas/bank yang aktif. */
+async function assertCashAccount(id: string, label: string): Promise<string | null> {
+  const account = await prisma.account.findUnique({
+    where: { id },
+    select: { code: true, name: true, isCash: true, active: true, isHeader: true },
+  });
+  if (!account) return `${label} tidak ditemukan.`;
+  if (account.isHeader) return `${account.code} ${account.name} adalah akun induk dan tidak bisa dipakai.`;
+  if (!account.isCash) return `${account.code} ${account.name} bukan akun kas/bank.`;
+  if (!account.active) return `${account.code} ${account.name} sudah non-aktif.`;
+  return null;
+}
+
+/** Pemeriksaan terakhir sebelum menyimpan: balance total dan balance tiap unit. */
+async function guardCashEntry(lines: DraftLine[]): Promise<string | null> {
+  const total = checkBalance(lines);
+  if (!total.balanced) {
+    return `Jurnal tidak seimbang (selisih Rp ${Math.abs(total.difference).toLocaleString('id-ID')}). Transaksi dibatalkan.`;
+  }
+
+  const timpang = checkPerUnitBalance(lines);
+  if (timpang.length > 0) {
+    return 'Jurnal tidak seimbang pada tingkat unit usaha. Transaksi dibatalkan agar laporan per cabang tetap benar.';
+  }
+
+  return validateLines(lines);
+}
+
+/** Transfer uang antar rekening milik grup. */
+export async function createTransfer(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const date = String(formData.get('date') ?? '');
+  const fromAccountId = String(formData.get('fromAccountId') ?? '');
+  const fromUnitId = String(formData.get('fromUnitId') ?? '');
+  const toAccountId = String(formData.get('toAccountId') ?? '');
+  const toUnitId = String(formData.get('toUnitId') ?? '');
+  const description = String(formData.get('description') ?? '').trim();
+  const reference = String(formData.get('reference') ?? '').trim();
+  const amount = parseAmount(formData.get('amount'));
+
+  if (!date) return fail('Tanggal wajib diisi.');
+  if (!fromAccountId || !fromUnitId) return fail('Rekening asal wajib dipilih.');
+  if (!toAccountId || !toUnitId) return fail('Rekening tujuan wajib dipilih.');
+  if (amount <= 0) return fail('Nominal harus lebih besar dari nol.');
+  if (fromAccountId === toAccountId && fromUnitId === toUnitId) {
+    return fail('Rekening asal dan tujuan tidak boleh sama.');
+  }
+
+  const bad = (await assertCashAccount(fromAccountId, 'Rekening asal')) ?? (await assertCashAccount(toAccountId, 'Rekening tujuan'));
+  if (bad) return fail(bad);
+
+  const interUnit = await getInterUnitAccounts();
+  const memo = description || 'Transfer antar rekening';
+  const lines = buildTransferLines({ amount, fromAccountId, fromUnitId, toAccountId, toUnitId, interUnit, memo });
+
+  const guard = await guardCashEntry(lines);
+  if (guard) return fail(guard);
+
+  await prisma.journalEntry.create({
+    data: {
+      date: parseDate(date),
+      unitId: fromUnitId,
+      description: memo,
+      reference: reference || null,
+      source: 'TRANSFER',
+      lines: { create: lines },
+    },
+  });
+
+  revalidateCash();
+  const lintas = fromUnitId !== toUnitId;
+  return ok(
+    `Transfer Rp ${amount.toLocaleString('id-ID')} tercatat.` +
+      (lintas ? ' Karena berbeda cabang, sistem otomatis mencatat piutang dan hutang antar unit.' : ''),
+  );
+}
+
+/** Baris rincian dari formulir uang masuk / uang keluar. */
+function readMoneyLines(formData: FormData, fallbackUnitId: string): MoneyLine[] {
+  const accountIds = formData.getAll('lineAccountId').map(String);
+  const unitIds = formData.getAll('lineUnitId').map(String);
+  const amounts = formData.getAll('lineAmount');
+  const memos = formData.getAll('lineMemo').map(String);
+
+  const out: MoneyLine[] = [];
+  for (let i = 0; i < accountIds.length; i++) {
+    const amount = parseAmount(amounts[i] ?? null);
+    if (!accountIds[i] || amount <= 0) continue;
+    out.push({ accountId: accountIds[i], unitId: unitIds[i] || fallbackUnitId, amount, memo: memos[i] || null });
+  }
+  return out;
+}
+
+async function saveMoneyEntry(
+  kind: 'RECEIVE' | 'PAY',
+  formData: FormData,
+): Promise<ActionState> {
+  const date = String(formData.get('date') ?? '');
+  const cashAccountId = String(formData.get('cashAccountId') ?? '');
+  const cashUnitId = String(formData.get('cashUnitId') ?? '');
+  const counterparty = String(formData.get('counterparty') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const reference = String(formData.get('reference') ?? '').trim();
+
+  const label = kind === 'RECEIVE' ? 'Rekening penerima' : 'Rekening pembayar';
+  if (!date) return fail('Tanggal wajib diisi.');
+  if (!cashAccountId || !cashUnitId) return fail(`${label} wajib dipilih.`);
+  if (!description) return fail('Keterangan wajib diisi.');
+
+  const bad = await assertCashAccount(cashAccountId, label);
+  if (bad) return fail(bad);
+
+  const lines = readMoneyLines(formData, cashUnitId);
+  if (lines.length === 0) return fail('Isi minimal satu baris rincian dengan nominal di atas nol.');
+
+  const interUnit = await getInterUnitAccounts();
+  const built = kind === 'RECEIVE'
+    ? buildReceiveLines({ cashAccountId, cashUnitId, lines, interUnit })
+    : buildPayLines({ cashAccountId, cashUnitId, lines, interUnit });
+
+  const guard = await guardCashEntry(built);
+  if (guard) return fail(guard);
+
+  const total = round(lines.reduce((s, l) => s + Math.abs(l.amount), 0));
+  const fullDescription = counterparty
+    ? `${description} — ${kind === 'RECEIVE' ? 'dari' : 'kepada'} ${counterparty}`
+    : description;
+
+  await prisma.journalEntry.create({
+    data: {
+      date: parseDate(date),
+      unitId: cashUnitId,
+      description: fullDescription,
+      reference: reference || null,
+      source: kind === 'RECEIVE' ? 'RECEIVE' : 'PAY',
+      lines: { create: built },
+    },
+  });
+
+  revalidateCash();
+  const lintas = lines.some((l) => l.unitId !== cashUnitId);
+  return ok(
+    `${kind === 'RECEIVE' ? 'Uang masuk' : 'Uang keluar'} Rp ${total.toLocaleString('id-ID')} tercatat dalam ${lines.length} baris rincian.` +
+      (lintas ? ' Baris milik cabang lain otomatis dijembatani akun antar unit.' : ''),
+  );
+}
+
+export async function createReceiveMoney(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  return saveMoneyEntry('RECEIVE', formData);
+}
+
+export async function createPayMoney(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  return saveMoneyEntry('PAY', formData);
 }

@@ -26,6 +26,7 @@ export const COA_TEMPLATE: CoaSeed[] = [
 
   { code: '1-1000', name: 'Kas & Bank', type: 'ASSET', subtype: 'CASH_BANK', isHeader: true, parent: '1-0000' },
   { code: '1-1100', name: 'Kas Kecil (Petty Cash)', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, parent: '1-1000' },
+  { code: '1-1150', name: 'Kas Kecil Purchasing', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, parent: '1-1000', description: 'Kas belanja harian bagian purchasing.' },
   { code: '1-1200', name: 'Kas Front Office', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, parent: '1-1000' },
   { code: '1-1300', name: 'Bank BCA', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, parent: '1-1000' },
   { code: '1-1400', name: 'Bank Mandiri', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, parent: '1-1000' },
@@ -36,6 +37,8 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '1-2200', name: 'Piutang OTA', type: 'ASSET', subtype: 'RECEIVABLE', cashflow: 'OPERATING', parent: '1-2000', description: 'Tagihan ke Agoda, Booking.com, Traveloka, dll.' },
   { code: '1-2300', name: 'Piutang Travel Agent / Korporat', type: 'ASSET', subtype: 'RECEIVABLE', cashflow: 'OPERATING', parent: '1-2000' },
   { code: '1-2400', name: 'Piutang Laundry Pihak Ketiga', type: 'ASSET', subtype: 'RECEIVABLE', cashflow: 'OPERATING', parent: '1-2000' },
+
+  { code: '1-2500', name: 'Piutang Antar Unit', type: 'ASSET', subtype: 'INTERUNIT', cashflow: 'OPERATING', parent: '1-2000', description: 'Dipakai otomatis saat satu cabang menalangi cabang lain. Saldo seluruh unit harus saling meniadakan.' },
 
   { code: '1-3000', name: 'Persediaan', type: 'ASSET', subtype: 'INVENTORY', isHeader: true, parent: '1-0000' },
   { code: '1-3100', name: 'Persediaan Makanan', type: 'ASSET', subtype: 'INVENTORY', cashflow: 'OPERATING', parent: '1-3000' },
@@ -77,6 +80,8 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '2-3200', name: 'Pendapatan Diterima Dimuka', type: 'LIABILITY', cashflow: 'OPERATING', parent: '2-3000' },
   { code: '2-3300', name: 'Biaya Yang Masih Harus Dibayar', type: 'LIABILITY', cashflow: 'OPERATING', parent: '2-3000' },
   { code: '2-3400', name: 'Hutang Service Charge Karyawan', type: 'LIABILITY', cashflow: 'OPERATING', parent: '2-3000' },
+
+  { code: '2-3500', name: 'Hutang Antar Unit', type: 'LIABILITY', subtype: 'INTERUNIT', cashflow: 'OPERATING', parent: '2-3000', description: 'Pasangan dari 1-2500. Dibuat otomatis saat uang berpindah antar cabang.' },
 
   { code: '2-4000', name: 'Pinjaman', type: 'LIABILITY', subtype: 'LOAN', isHeader: true, parent: '2-0000' },
   { code: '2-4100', name: 'Hutang Bank Jangka Pendek', type: 'LIABILITY', subtype: 'LOAN', cashflow: 'FINANCING', parent: '2-4000' },
