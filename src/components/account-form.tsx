@@ -25,11 +25,11 @@ export function AccountForm() {
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="label" htmlFor="a-code">Nomor</label>
-          <input id="a-code" name="code" className="input" placeholder="6-2600" required />
+          <input id="a-code" name="code" className="input" placeholder="6120.10" required />
         </div>
         <div className="col-span-2">
           <label className="label" htmlFor="a-name">Nama akun</label>
-          <input id="a-name" name="name" className="input" placeholder="Beban Genset & Solar" required />
+          <input id="a-name" name="name" className="input" placeholder="Biaya Genset & Solar" required />
         </div>
       </div>
 

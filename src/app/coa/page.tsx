@@ -27,7 +27,7 @@ export default async function CoaPage() {
       <div className="mb-6">
         <Alert tone="info" title="Kenapa COA-nya cuma satu?">
           Di PMS lama, cabang dipisahkan dengan membuat nomor akun berbeda untuk tiap cabang. Di sini setiap baris
-          jurnal membawa penanda unit usaha, sehingga akun yang sama — misalnya 6-2100 Listrik PLN — bisa dipakai
+          jurnal membawa penanda unit usaha, sehingga akun yang sama — misalnya 6120.01 Biaya Listrik — bisa dipakai
           Sri Krisna, The Hita Legian, Play Laundry, dan lainnya. Laporan per cabang maupun konsolidasi sama-sama bisa
           dihasilkan tanpa mengubah COA.
         </Alert>

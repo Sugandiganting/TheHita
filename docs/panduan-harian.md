@@ -14,7 +14,7 @@ Menu **Transaksi** → tab **Entri cepat** → tombol **Pemasukan**.
 | Unit usaha | Cabang yang menerima, mis. `SKR — Sri Krisna` |
 | Nominal | Angka saja, tanpa titik. Contoh `4750000` |
 | Kategori pendapatan | Jenis pemasukannya, mis. `4-1200 Kamar - OTA` |
-| Masuk ke kas/bank | Uangnya masuk ke mana, mis. `1-1300 Bank BCA` |
+| Masuk ke kas/bank | Uangnya masuk ke mana, mis. `1120.01 Bank Mandiri/BCA` |
 | Keterangan | Penjelasan singkat |
 | No. bukti | Opsional, mis. nomor invoice |
 
@@ -24,7 +24,7 @@ Sistem otomatis membuat jurnal: **kas didebit, pendapatan dikredit**.
 
 Sama seperti di atas, tekan tombol **Pengeluaran**. Yang berubah hanya:
 
-- **Kategori beban / HPP** — jenis pengeluarannya, mis. `6-2100 Listrik PLN`
+- **Kategori beban / HPP** — jenis pengeluarannya, mis. `6120.01 Biaya Listrik`
 - **Dibayar dari kas/bank** — uangnya diambil dari mana
 
 Jurnal yang terbentuk: **beban didebit, kas dikredit**.
@@ -38,9 +38,9 @@ Menu **Transaksi** → tab **Jurnal manual**:
 
 | Akun | Unit | Debit | Kredit |
 |---|---|---|---|
-| `6-2100 Listrik PLN` | SKR | 20.000.000 | |
-| `6-2100 Listrik PLN` | PLD | 10.000.000 | |
-| `1-1300 Bank BCA` | SKR | | 30.000.000 |
+| `6120.01 Biaya Listrik` | SKR | 20.000.000 | |
+| `6120.01 Biaya Listrik` | PLD | 10.000.000 | |
+| `1120.01 Bank Mandiri/BCA` | SKR | | 30.000.000 |
 
 Tombol **Simpan jurnal** baru aktif setelah tulisan **Balance ✓** muncul. Beban listrik
 akan muncul di laporan masing-masing cabang sesuai porsinya, memakai satu akun yang sama.
@@ -56,9 +56,9 @@ Contoh pemakaian:
 
 | Keperluan | Dari | Ke |
 |---|---|---|
-| Isi ulang kas belanja | `1-1300 Bank BCA` · SKR | `1-1150 Kas Kecil Purchasing` · SKR |
-| Setor hasil penjualan | `1-1200 Kas Front Office` · THL | `1-1300 Bank BCA` · THL |
-| Pinjam dana antar cabang | `1-1300 Bank BCA` · IGYT | `1-1300 Bank BCA` · THL |
+| Isi ulang kas belanja | `1120.01 Bank Mandiri/BCA` · SKR | `1110.03 Petty Cash Purchasing` · SKR |
+| Setor hasil penjualan | `1110.01 Kas Pemasukan` · THL | `1120.01 Bank Mandiri/BCA` · THL |
+| Pinjam dana antar cabang | `1120.01 Bank Mandiri/BCA` · IGYT | `1120.01 Bank Mandiri/BCA` · THL |
 
 Bila asal dan tujuan berada di cabang berbeda, muncul kotak biru pemberitahuan. Sistem otomatis
 mencatat piutang pada cabang pemberi dan hutang pada cabang penerima, supaya neraca kedua cabang
@@ -90,8 +90,8 @@ yang dibayar dari bank Sri Krisna tetapi dipakai bersama Play Laundry:
 
 | Akun beban | Untuk cabang | Nominal |
 |---|---|---|
-| `6-2100 Listrik PLN` | SKR | 20.000.000 |
-| `6-2100 Listrik PLN` | PLD | 10.000.000 |
+| `6120.01 Biaya Listrik` | SKR | 20.000.000 |
+| `6120.01 Biaya Listrik` | PLD | 10.000.000 |
 
 Simpan sekali, dan beban listrik langsung muncul di laporan masing-masing cabang sesuai porsinya —
 memakai satu nomor akun yang sama. Penyeimbang antar unitnya dibuat otomatis.

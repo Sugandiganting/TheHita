@@ -123,8 +123,8 @@ export function buildQuickEntryLines(input: {
 /* ------------------------------------------------------------------ */
 
 /** Kode akun penghubung antar unit. Dipakai otomatis, tidak perlu dipilih pengguna. */
-export const INTERUNIT_RECEIVABLE = '1-2500';
-export const INTERUNIT_PAYABLE = '2-3500';
+export const INTERUNIT_RECEIVABLE = '1190.01';
+export const INTERUNIT_PAYABLE = '2190.01';
 
 export type InterUnitAccounts = {
   /** Piutang Antar Unit — dipakai oleh unit yang uangnya keluar/menalangi. */

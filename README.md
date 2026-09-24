@@ -27,7 +27,7 @@ Di GuestPro keduanya dipaksa masuk ke satu kolom yang sama (nomor akun), sehingg
 baru berarti COA baru. Di sini keduanya jadi dua kolom terpisah pada setiap baris jurnal.
 Akibatnya:
 
-- Akun `6-2100 Listrik PLN` dipakai kelima unit, tetapi laporannya tetap bisa dipisah.
+- Akun `6120.01 Biaya Listrik` dipakai kelima unit, tetapi laporannya tetap bisa dipisah.
 - Satu tagihan listrik yang dipakai bersama hotel dan laundry bisa dibagi dua dalam satu
   bukti transaksi — sesuatu yang tidak mungkin dilakukan dengan pemisahan berbasis COA.
 - Menambah cabang keenam cukup lewat menu **Unit Usaha**, tanpa menyentuh COA sama sekali.
@@ -131,7 +131,7 @@ satu nomor akun.
 #### Transaksi antar cabang
 
 Ketika uang berpindah antar cabang, sistem otomatis menambahkan sepasang baris:
-`1-2500 Piutang Antar Unit` pada cabang pemberi dan `2-3500 Hutang Antar Unit` pada cabang penerima.
+`1190.01 Piutang Antar Unit` pada cabang pemberi dan `2190.01 Hutang Antar Unit` pada cabang penerima.
 
 Tanpa keduanya, jurnal memang tetap balance secara keseluruhan — tetapi neraca masing-masing cabang
 tidak lagi seimbang berdiri sendiri, dan laporan per cabang menjadi salah tanpa ketahuan. Saldo kedua
@@ -254,12 +254,22 @@ dipertanggungjawabkan.
 
 | Rentang | Kelompok | Contoh |
 |---|---|---|
-| `1-xxxx` | Aset | Kas Front Office, Bank BCA, Piutang OTA, Mesin Laundry |
-| `2-xxxx` | Kewajiban | Hutang Supplier F&B, Hutang PB1, Hutang Bank Jangka Panjang |
-| `3-xxxx` | Modal | Modal Disetor, Laba Ditahan, Prive |
-| `4-xxxx` | Pendapatan | Kamar - OTA, Penjualan Kopi & Pastry, Laundry - Pelanggan Luar |
-| `5-xxxx` | Harga pokok | HPP Makanan, Chemical Laundry, Komisi OTA |
-| `6-xxxx` | Beban operasional | Gaji & Upah, Listrik PLN, Iklan & Promosi, PB1 |
+| `1110` – `1120` | Kas & bank | Kas Pemasukan, Petty Cash FO, Bank Mandiri/BCA, Shopee Pay |
+| `1130` – `1131` | Piutang | Guest Ledger, Piutang EDC, Piutang Booking.com, Piutang Traveloka |
+| `1140` – `1143` | Persediaan | Amenities, Chemical HK, Bahan Makanan, Linen, Chemical Laundry |
+| `1190` / `2190` | Antar unit | Piutang & Hutang Antar Unit (dibuat otomatis) |
+| `1210` – `1220` | Aset tetap | Gedung & Bangunan, FF&E, Aset Dalam Pengerjaan |
+| `2101` – `2103` | Kewajiban | Account Payable, Utang Pajak, Hotel Tax / PHR, Service Charge |
+| `3101` | Modal | Modal Pemilik, Prive, Laba Ditahan, Opening Balance Equity |
+| `4110` – `4113` | Pendapatan | Pendapatan Kamar, F&B Makanan, Laundry Kiloan, Rental Motor |
+| `5110` | Harga pokok | HPP Food, HPP Minuman, HPP Breakfast, HPP Tour & Transfer |
+| `6110` | Komisi OTA | Komisi Booking.com, Agoda, Traveloka, Klook, Trip.com |
+| `6120` – `6191` | Beban operasional | Biaya Listrik, Gaji Karyawan, Pemeliharaan AC, Biaya Laundry |
+| `7110` / `8110` | Non operasional | Interest Income, Bank Charge Expense |
+
+Struktur ini diambil langsung dari COA GuestPro yang sedang dipakai, dengan akun yang
+digandakan per cabang digabung menjadi satu. Padanan nomor lama ke nomor baru ada di
+[docs/pemetaan-coa-guestpro.md](docs/pemetaan-coa-guestpro.md).
 
 Daftar lengkap ada di [`src/lib/coa-template.ts`](src/lib/coa-template.ts).
 
@@ -269,10 +279,12 @@ Daftar lengkap ada di [`src/lib/coa-template.ts`](src/lib/coa-template.ts).
 
 1. **Tutup buku** di GuestPro sampai tanggal tertentu, misalnya akhir bulan.
 2. **Catat saldo awal.** Isi saldo kas & bank tiap unit lewat menu *Unit Usaha*, atau buat
-   jurnal pembuka memakai akun `3-9000 Saldo Pembuka`.
-3. **Petakan COA lama ke COA baru.** Akun cabang yang dulu digandakan (misalnya
-   "Listrik SKR", "Listrik THL") kini menjadi satu akun `6-2100 Listrik PLN`, dibedakan
-   oleh kolom unit.
+   jurnal pembuka memakai akun `3101.02 Opening Balance Equity`.
+3. **Pakai tabel padanan COA.** Seluruh 376 baris akun dari kedua berkas GuestPro sudah
+   dipetakan ke nomor baru di [docs/pemetaan-coa-guestpro.md](docs/pemetaan-coa-guestpro.md).
+   Akun yang dulu digandakan per cabang — `Biaya Listrik - TH`, `Biaya Listrik - SRK`, dan
+   `Biaya Listrik` pada PMS satunya — kini menjadi satu akun `6120.01 Biaya Listrik`,
+   dibedakan oleh kolom unit.
 4. **Jalankan paralel satu bulan.** Catat di kedua sistem, lalu bandingkan laba rugi dan
    saldo kas untuk memastikan hasilnya cocok.
 5. **Masukkan histori** minimal 12 bulan bila ingin peramalan langsung memperhitungkan

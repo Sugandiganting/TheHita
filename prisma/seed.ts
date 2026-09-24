@@ -216,10 +216,9 @@ async function seedTransactions() {
           reference: `RV-${u.code}-${year}${String(month + 1).padStart(2, '0')}`,
           accounts,
           lines: [
-            { code: '1-1200', debit: directRevenue },
-            { code: '1-2200', debit: otaRevenue },
-            { code: '4-1100', credit: directRevenue },
-            { code: '4-1200', credit: otaRevenue },
+            { code: '1110.01', debit: directRevenue, memo: 'Tunai & kartu' },
+            { code: '1131.01', debit: otaRevenue, memo: 'Tagihan OTA' },
+            { code: '4110.01', credit: roomRevenue },
           ],
         });
         entryCount++;
@@ -231,9 +230,9 @@ async function seedTransactions() {
           description: 'Pencairan piutang OTA dipotong komisi',
           accounts,
           lines: [
-            { code: '1-1300', debit: otaRevenue - otaCommission },
-            { code: '5-6000', debit: otaCommission },
-            { code: '1-2200', credit: otaRevenue },
+            { code: '1120.01', debit: otaRevenue - otaCommission },
+            { code: '6110.01', debit: otaCommission },
+            { code: '1131.01', credit: otaRevenue },
           ],
         });
         entryCount++;
@@ -247,9 +246,9 @@ async function seedTransactions() {
           description: 'Pendapatan F&B & breakfast',
           accounts,
           lines: [
-            { code: '1-1200', debit: fnbRevenue },
-            { code: '4-2500', credit: roundTo(fnbRevenue * 0.6) },
-            { code: '4-2100', credit: fnbRevenue - roundTo(fnbRevenue * 0.6) },
+            { code: '1110.01', debit: fnbRevenue },
+            { code: '4111.03', credit: roundTo(fnbRevenue * 0.6) },
+            { code: '4111.01', credit: fnbRevenue - roundTo(fnbRevenue * 0.6) },
           ],
         });
         await postEntry({
@@ -258,14 +257,14 @@ async function seedTransactions() {
           description: 'Pembelian bahan makanan & minuman',
           accounts,
           lines: [
-            { code: '5-1000', debit: fnbCogs },
-            { code: '1-1300', credit: fnbCogs },
+            { code: '5110.01', debit: fnbCogs },
+            { code: '1120.01', credit: fnbCogs },
           ],
         });
         entryCount += 2;
 
         monthRevenue.set(u.code, roomRevenue + fnbRevenue);
-        monthTill.set(u.code, { code: '1-1200', amount: directRevenue + fnbRevenue });
+        monthTill.set(u.code, { code: '1110.01', amount: directRevenue + fnbRevenue });
 
         // Amenities & guest supplies
         const amenities = roundTo(roomNights * jitter(22_000, 0.12));
@@ -275,8 +274,8 @@ async function seedTransactions() {
           description: 'Pembelian amenities & guest supplies',
           accounts,
           lines: [
-            { code: '5-5000', debit: amenities },
-            { code: '1-1300', credit: amenities },
+            { code: '6150.02', debit: amenities },
+            { code: '1120.01', credit: amenities },
           ],
         });
         entryCount++;
@@ -290,11 +289,11 @@ async function seedTransactions() {
           accounts,
           lines: [
             // Sisi hotel: beban dibayar dari bank hotel.
-            { code: '5-7000', debit: laundryCharge, unitId },
-            { code: '1-1300', credit: laundryCharge, unitId },
+            { code: '6150.12', debit: laundryCharge, unitId },
+            { code: '1120.01', credit: laundryCharge, unitId },
             // Sisi laundry: pendapatan masuk ke bank laundry.
-            { code: '1-1300', debit: laundryCharge, unitId: units.get('PLD')! },
-            { code: '4-3300', credit: laundryCharge, unitId: units.get('PLD')! },
+            { code: '1120.01', debit: laundryCharge, unitId: units.get('PLD')! },
+            { code: '4112.03', credit: laundryCharge, unitId: units.get('PLD')! },
           ],
         });
         entryCount++;
@@ -309,9 +308,9 @@ async function seedTransactions() {
           description: 'Pendapatan laundry pelanggan luar',
           accounts,
           lines: [
-            { code: '1-1100', debit: roundTo(outsideRevenue * 0.7) },
-            { code: '1-2400', debit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
-            { code: '4-3200', credit: outsideRevenue },
+            { code: '1110.01', debit: roundTo(outsideRevenue * 0.7) },
+            { code: '1130.03', debit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
+            { code: '4112.01', credit: outsideRevenue },
           ],
         });
         await postEntry({
@@ -320,8 +319,8 @@ async function seedTransactions() {
           description: 'Penerimaan piutang laundry',
           accounts,
           lines: [
-            { code: '1-1300', debit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
-            { code: '1-2400', credit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
+            { code: '1120.01', debit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
+            { code: '1130.03', credit: outsideRevenue - roundTo(outsideRevenue * 0.7) },
           ],
         });
         await postEntry({
@@ -330,13 +329,13 @@ async function seedTransactions() {
           description: 'Pembelian chemical & deterjen',
           accounts,
           lines: [
-            { code: '5-4000', debit: chemical },
-            { code: '1-1300', credit: chemical },
+            { code: '6170.01', debit: chemical },
+            { code: '1120.01', credit: chemical },
           ],
         });
         entryCount += 3;
         monthRevenue.set(u.code, outsideRevenue);
-        monthTill.set(u.code, { code: '1-1100', amount: roundTo(outsideRevenue * 0.7) });
+        monthTill.set(u.code, { code: '1110.01', amount: roundTo(outsideRevenue * 0.7) });
       }
 
       if (u.type === 'CAFE') {
@@ -350,10 +349,10 @@ async function seedTransactions() {
           description: 'Penjualan cafe & resto',
           accounts,
           lines: [
-            { code: '1-1100', debit: roundTo(cafeRevenue * 0.45) },
-            { code: '1-1300', debit: cafeRevenue - roundTo(cafeRevenue * 0.45) },
-            { code: '4-2300', credit: coffee },
-            { code: '4-2100', credit: food },
+            { code: '1110.01', debit: roundTo(cafeRevenue * 0.45) },
+            { code: '1120.01', debit: cafeRevenue - roundTo(cafeRevenue * 0.45) },
+            { code: '4111.02', credit: coffee },
+            { code: '4111.01', credit: food },
           ],
         });
         await postEntry({
@@ -362,13 +361,13 @@ async function seedTransactions() {
           description: 'Pembelian bahan baku cafe',
           accounts,
           lines: [
-            { code: '5-3000', debit: cafeCogs },
-            { code: '1-1300', credit: cafeCogs },
+            { code: '5110.02', debit: cafeCogs },
+            { code: '1120.01', credit: cafeCogs },
           ],
         });
         entryCount += 2;
         monthRevenue.set(u.code, cafeRevenue);
-        monthTill.set(u.code, { code: '1-1100', amount: roundTo(cafeRevenue * 0.45) });
+        monthTill.set(u.code, { code: '1110.01', amount: roundTo(cafeRevenue * 0.45) });
       }
 
       /* ---- Beban rutin semua unit ---- */
@@ -383,9 +382,9 @@ async function seedTransactions() {
         description: 'Gaji, tunjangan & BPJS karyawan',
         accounts,
         lines: [
-          { code: '6-1100', debit: payroll },
-          { code: '6-1300', debit: bpjs },
-          { code: '1-1300', credit: payroll + bpjs },
+          { code: '6130.01', debit: payroll },
+          { code: '6181.03', debit: bpjs },
+          { code: '1120.01', credit: payroll + bpjs },
         ],
       });
       entryCount++;
@@ -399,10 +398,10 @@ async function seedTransactions() {
         description: 'Tagihan listrik, air & internet',
         accounts,
         lines: [
-          { code: '6-2100', debit: listrik },
-          { code: '6-2200', debit: air },
-          { code: '6-2400', debit: internet },
-          { code: '1-1300', credit: listrik + air + internet },
+          { code: '6120.01', debit: listrik },
+          { code: '6160.05', debit: air },
+          { code: '6120.02', debit: internet },
+          { code: '1120.01', credit: listrik + air + internet },
         ],
       });
       entryCount++;
@@ -418,9 +417,9 @@ async function seedTransactions() {
           description: 'Setoran PB1 & service charge karyawan',
           accounts,
           lines: [
-            { code: '6-6300', debit: pb1 },
-            { code: '6-1400', debit: serviceCharge },
-            { code: '1-1300', credit: pb1 + serviceCharge },
+            { code: '6120.03', debit: pb1 },
+            { code: '6130.02', debit: serviceCharge },
+            { code: '1120.01', credit: pb1 + serviceCharge },
           ],
         });
         entryCount++;
@@ -433,8 +432,8 @@ async function seedTransactions() {
           description: 'Prive / pengambilan pemilik',
           accounts,
           lines: [
-            { code: '3-3000', debit: prive },
-            { code: '1-1300', credit: prive },
+            { code: '3101.03', debit: prive },
+            { code: '1120.01', credit: prive },
           ],
         });
         entryCount++;
@@ -452,7 +451,7 @@ async function seedTransactions() {
           source: 'TRANSFER',
           accounts,
           lines: [
-            { code: '1-1300', debit: setoran },
+            { code: '1120.01', debit: setoran },
             { code: till.code, credit: setoran },
           ],
         });
@@ -468,12 +467,12 @@ async function seedTransactions() {
         description: 'Beban pemeliharaan, pemasaran & administrasi',
         accounts,
         lines: [
-          { code: '6-3200', debit: maintenance },
-          { code: '6-4100', debit: marketing },
-          { code: '6-5100', debit: roundTo(admin * 0.3) },
-          { code: '6-5500', debit: roundTo(admin * 0.25) },
-          { code: '6-5600', debit: admin - roundTo(admin * 0.3) - roundTo(admin * 0.25) },
-          { code: '1-1300', credit: maintenance + marketing + admin },
+          { code: '6180.07', debit: maintenance },
+          { code: '6130.05', debit: marketing },
+          { code: '6120.06', debit: roundTo(admin * 0.3) },
+          { code: '6120.05', debit: roundTo(admin * 0.25) },
+          { code: '6180.02', debit: admin - roundTo(admin * 0.3) - roundTo(admin * 0.25) },
+          { code: '1120.01', credit: maintenance + marketing + admin },
         ],
       });
       entryCount++;
@@ -517,13 +516,13 @@ async function seedProject() {
       upliftStartDate: monthOffset(9),
       items: {
         create: [
-          { name: 'Desain & perizinan (IMB/PBG)', amount: 85_000_000, plannedDate: monthOffset(1), accountId: accounts.get('1-5700') },
-          { name: 'Pondasi & struktur', amount: 420_000_000, plannedDate: monthOffset(2), accountId: accounts.get('1-5700') },
-          { name: 'Dinding, atap & finishing', amount: 380_000_000, plannedDate: monthOffset(4), accountId: accounts.get('1-5700') },
-          { name: 'Instalasi listrik & plumbing', amount: 160_000_000, plannedDate: monthOffset(5), accountId: accounts.get('1-5700') },
-          { name: 'Furniture & perlengkapan kamar', amount: 240_000_000, plannedDate: monthOffset(7), accountId: accounts.get('1-5300') },
-          { name: 'AC, TV & elektronik', amount: 96_000_000, plannedDate: monthOffset(7), accountId: accounts.get('1-5300') },
-          { name: 'Landscaping & area luar', amount: 75_000_000, plannedDate: monthOffset(8), accountId: accounts.get('1-5700') },
+          { name: 'Desain & perizinan (IMB/PBG)', amount: 85_000_000, plannedDate: monthOffset(1), accountId: accounts.get('1220.01') },
+          { name: 'Pondasi & struktur', amount: 420_000_000, plannedDate: monthOffset(2), accountId: accounts.get('1220.01') },
+          { name: 'Dinding, atap & finishing', amount: 380_000_000, plannedDate: monthOffset(4), accountId: accounts.get('1220.01') },
+          { name: 'Instalasi listrik & plumbing', amount: 160_000_000, plannedDate: monthOffset(5), accountId: accounts.get('1220.01') },
+          { name: 'Furniture & perlengkapan kamar', amount: 240_000_000, plannedDate: monthOffset(7), accountId: accounts.get('1210.02') },
+          { name: 'AC, TV & elektronik', amount: 96_000_000, plannedDate: monthOffset(7), accountId: accounts.get('1210.02') },
+          { name: 'Landscaping & area luar', amount: 75_000_000, plannedDate: monthOffset(8), accountId: accounts.get('1220.01') },
         ],
       },
     },
