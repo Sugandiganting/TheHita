@@ -4,6 +4,8 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createQuickEntry, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
+import { SearchableSelect, type PickerOption } from './searchable-select';
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 
 export type AccountOption = {
   id: string;
@@ -43,10 +45,17 @@ export function QuickEntryForm({
   const [kind, setKind] = useState<'INCOME' | 'EXPENSE'>('INCOME');
   const [amount, setAmount] = useState('');
 
-  const categories = accounts.filter((a) =>
-    kind === 'INCOME' ? a.type === 'REVENUE' : a.type === 'EXPENSE' || a.type === 'COGS',
-  );
-  const cashAccounts = accounts.filter((a) => a.isCash);
+  const toOption = (a: AccountOption): PickerOption => ({
+    value: a.id,
+    code: a.code,
+    label: a.name,
+    group: ACCOUNT_TYPE_LABEL[a.type as AccountType] ?? a.type,
+  });
+
+  const categories = accounts
+    .filter((a) => (kind === 'INCOME' ? a.type === 'REVENUE' : a.type === 'EXPENSE' || a.type === 'COGS'))
+    .map(toOption);
+  const cashAccounts = accounts.filter((a) => a.isCash).map(toOption);
   const numericAmount = Number(String(amount).replace(/[^\d]/g, '')) || 0;
 
   return (
@@ -110,28 +119,28 @@ export function QuickEntryForm({
         <label className="label" htmlFor="q-category">
           {kind === 'INCOME' ? 'Kategori pendapatan' : 'Kategori beban / HPP'}
         </label>
-        <select id="q-category" name="categoryAccountId" className="input" required>
-          <option value="">— Pilih akun —</option>
-          {categories.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          id="q-category"
+          name="categoryAccountId"
+          options={categories}
+          required
+          key={`cat-${kind}`}
+          placeholder="— Pilih akun —"
+        />
       </div>
 
       <div>
         <label className="label" htmlFor="q-counter">
           {kind === 'INCOME' ? 'Masuk ke kas/bank' : 'Dibayar dari kas/bank'}
         </label>
-        <select id="q-counter" name="counterAccountId" className="input" required>
-          <option value="">— Pilih akun —</option>
-          {cashAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          id="q-counter"
+          name="counterAccountId"
+          options={cashAccounts}
+          required
+          placeholder="— Pilih rekening —"
+          searchPlaceholder="Ketik nama rekening…"
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

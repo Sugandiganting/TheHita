@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { createPayMoney, createReceiveMoney, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import type { CashAccountBalance } from '@/lib/queries';
+import { SearchableSelect, type PickerOption } from './searchable-select';
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -62,15 +64,29 @@ export function MoneyForm({
   const filled = rows.filter((r) => r.accountId && Number(r.amount.replace(/[^\d]/g, '')) > 0);
   const crossUnit = filled.some((r) => (r.unitId || cashUnitId) !== cashUnitId);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, CashAccountBalance[]>();
-    for (const a of accounts) {
-      const label = `${a.unitCode} — ${a.unitName}`;
-      if (!m.has(label)) m.set(label, []);
-      m.get(label)!.push(a);
-    }
-    return [...m.entries()];
-  }, [accounts]);
+  // Rekening kas dikelompokkan per cabang; saldonya ikut tampil di daftar.
+  const cashOptions: PickerOption[] = useMemo(
+    () =>
+      accounts.map((a) => ({
+        value: keyOf(a),
+        code: a.code,
+        label: a.name,
+        group: `${a.unitCode} — ${a.unitName}`,
+        meta: formatRupiah(a.balance),
+      })),
+    [accounts],
+  );
+
+  const categoryOptions: PickerOption[] = useMemo(
+    () =>
+      categories.map((c) => ({
+        value: c.id,
+        code: c.code,
+        label: c.name,
+        group: ACCOUNT_TYPE_LABEL[c.type as AccountType] ?? c.type,
+      })),
+    [categories],
+  );
 
   const isReceive = kind === 'RECEIVE';
 
@@ -88,18 +104,16 @@ export function MoneyForm({
           <label className="label" htmlFor="m-cash">
             {isReceive ? 'Uang masuk ke rekening' : 'Uang dibayar dari rekening'}
           </label>
-          <select id="m-cash" className="input" value={cash} onChange={(e) => setCash(e.target.value)} required>
-            <option value="">— Pilih rekening —</option>
-            {grouped.map(([unitLabel, list]) => (
-              <optgroup key={unitLabel} label={unitLabel}>
-                {list.map((a) => (
-                  <option key={keyOf(a)} value={keyOf(a)}>
-                    {a.code} {a.name} · {formatRupiah(a.balance)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <SearchableSelect
+            id="m-cash"
+            options={cashOptions}
+            value={cash}
+            onChange={setCash}
+            required
+            showGroup
+            placeholder="— Pilih rekening —"
+            searchPlaceholder="Ketik nama rekening atau cabang…"
+          />
         </div>
       </div>
 
@@ -148,19 +162,13 @@ export function MoneyForm({
               {rows.map((row) => (
                 <tr key={row.key}>
                   <td className="td">
-                    <select
+                    <SearchableSelect
                       name="lineAccountId"
-                      className="input"
+                      options={categoryOptions}
                       value={row.accountId}
-                      onChange={(e) => update(row.key, { accountId: e.target.value })}
-                    >
-                      <option value="">— Pilih akun —</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.code} — {c.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => update(row.key, { accountId: v })}
+                      placeholder="— Pilih akun —"
+                    />
                   </td>
                   <td className="td">
                     <select

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { addCostItem, type ActionState } from '@/app/actions';
+import { SearchableSelect } from './searchable-select';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -45,14 +46,12 @@ export function CostItemForm({
 
       <div>
         <label className="label" htmlFor="c-account">Akun (opsional)</label>
-        <select id="c-account" name="accountId" className="input">
-          <option value="">— Tidak ditentukan —</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          id="c-account"
+          name="accountId"
+          options={accounts.map((a) => ({ value: a.id, code: a.code, label: a.name }))}
+          placeholder="— Tidak ditentukan —"
+        />
       </div>
 
       {state.message && (

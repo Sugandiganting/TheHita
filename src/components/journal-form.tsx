@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { createJournalEntry, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import type { AccountOption, UnitOption } from './quick-entry-form';
+import { SearchableSelect, type PickerOption } from './searchable-select';
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -38,6 +40,13 @@ export function JournalForm({
   const [state, formAction] = useActionState(createJournalEntry, initial);
   const defaultUnit = units[0]?.id ?? '';
   const [rows, setRows] = useState<Row[]>([blankRow(defaultUnit), blankRow(defaultUnit)]);
+
+  const accountOptions: PickerOption[] = accounts.map((a) => ({
+    value: a.id,
+    code: a.code,
+    label: a.name,
+    group: ACCOUNT_TYPE_LABEL[a.type as AccountType] ?? a.type,
+  }));
 
   const update = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -92,19 +101,13 @@ export function JournalForm({
             {rows.map((row) => (
               <tr key={row.key}>
                 <td className="td">
-                  <select
+                  <SearchableSelect
                     name="lineAccountId"
-                    className="input"
+                    options={accountOptions}
                     value={row.accountId}
-                    onChange={(e) => update(row.key, { accountId: e.target.value })}
-                  >
-                    <option value="">— Pilih akun —</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => update(row.key, { accountId: v })}
+                    placeholder="— Pilih akun —"
+                  />
                 </td>
                 <td className="td">
                   <select

@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { createTransfer, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import type { CashAccountBalance } from '@/lib/queries';
+import { SearchableSelect, type PickerOption } from './searchable-select';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -41,31 +42,32 @@ export function TransferForm({
   const sameAccount = !!from && from === to;
   const notEnough = !!fromAcc && nominal > fromAcc.balance;
 
-  // Kelompokkan per cabang agar daftar rekening mudah dibaca.
-  const grouped = useMemo(() => {
-    const m = new Map<string, CashAccountBalance[]>();
-    for (const a of accounts) {
-      const label = `${a.unitCode} — ${a.unitName}`;
-      (m.get(label) ?? m.set(label, []).get(label)!).push(a);
-    }
-    return [...m.entries()];
-  }, [accounts]);
+  // Dikelompokkan per cabang, dengan saldo tiap rekening ikut tampil.
+  const options: PickerOption[] = useMemo(
+    () =>
+      accounts.map((a) => ({
+        value: keyOf(a),
+        code: a.code,
+        label: a.name,
+        group: `${a.unitCode} — ${a.unitName}`,
+        meta: formatRupiah(a.balance),
+      })),
+    [accounts],
+  );
 
   const picker = (id: string, value: string, onChange: (v: string) => void, label: string) => (
     <div>
       <label className="label" htmlFor={id}>{label}</label>
-      <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)} required>
-        <option value="">— Pilih rekening —</option>
-        {grouped.map(([unitLabel, rows]) => (
-          <optgroup key={unitLabel} label={unitLabel}>
-            {rows.map((a) => (
-              <option key={keyOf(a)} value={keyOf(a)}>
-                {a.code} {a.name} · {formatRupiah(a.balance)}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      <SearchableSelect
+        id={id}
+        options={options}
+        value={value}
+        onChange={onChange}
+        required
+        showGroup
+        placeholder="— Pilih rekening —"
+        searchPlaceholder="Ketik nama rekening atau cabang…"
+      />
     </div>
   );
 

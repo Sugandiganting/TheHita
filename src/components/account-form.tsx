@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { saveAccount, type ActionState } from '@/app/actions';
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABEL } from '@/lib/accounting';
+import { SearchableSelect } from './searchable-select';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -87,16 +88,17 @@ export function AccountForm({
 
       <div>
         <label className="label" htmlFor="a-parent">Akun induk</label>
-        <select id="a-parent" name="parentId" className="input" defaultValue={values?.parentId ?? ''}>
-          <option value="">— Tanpa induk —</option>
-          {parents
+        <SearchableSelect
+          id="a-parent"
+          name="parentId"
+          key={`parent-${type}`}
+          defaultValue={values?.parentId ?? ''}
+          options={parents
             .filter((p) => p.type === type && p.id !== values?.id)
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} — {p.name}
-              </option>
-            ))}
-        </select>
+            .map((p) => ({ value: p.id, code: p.code, label: p.name }))}
+          placeholder="— Tanpa induk —"
+          searchPlaceholder="Ketik nomor atau nama akun induk…"
+        />
         <p className="hint mt-1 text-xs text-slate-500">Menentukan posisi akun pada susunan COA.</p>
       </div>
 

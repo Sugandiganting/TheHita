@@ -4,6 +4,27 @@ Panduan singkat untuk staf akunting. Tidak perlu latar belakang teknis.
 
 ---
 
+## 0. Cara memilih akun
+
+Semua tempat yang meminta Anda memilih akun memakai kotak pencarian, bukan daftar
+gulung biasa. Dengan 181 akun, mencari lewat daftar panjang terlalu lambat.
+
+Klik kotaknya, lalu **ketik apa saja yang Anda ingat** — nomornya, namanya, atau keduanya:
+
+| Anda ketik | Yang ditemukan |
+|---|---|
+| `listrik` | 6120.01 Biaya Listrik |
+| `6130` | Seluruh akun kelompok 6130 (gaji, service, THR, bonus, marketing) |
+| `biaya pemel` | 13 akun pemeliharaan |
+| `listrik 6120` | Sama saja — urutan kata tidak harus tepat |
+
+Tombol panah atas/bawah untuk berpindah pilihan, **Enter** untuk memilih, **Esc** untuk
+menutup. Di bagian bawah daftar tertulis berapa akun yang cocok dari total yang ada.
+
+Khusus rekening kas, cabang pemiliknya ikut tampil sebagai label kecil — penting karena
+satu nomor rekening dipakai banyak cabang, misalnya `1120.01 Bank Mandiri/BCA` milik
+**IGYT** berbeda dengan milik **THL**.
+
 ## 1. Mencatat pemasukan
 
 Menu **Transaksi** → tab **Entri cepat** → tombol **Pemasukan**.

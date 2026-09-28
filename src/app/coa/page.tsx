@@ -138,7 +138,7 @@ export default async function CoaPage({ searchParams }: { searchParams: Promise<
         </div>
 
         <div>
-          <Card className="card-pad sticky top-20">
+          <Card className="card-pad sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
             <SectionTitle
               hint={
                 editing
