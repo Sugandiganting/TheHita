@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  balanceUnitsWithInterUnit,
   buildPayLines,
   buildReceiveLines,
   buildTransferLines,
@@ -201,4 +202,55 @@ test('checkPerUnitBalance menangkap jurnal lintas unit yang tidak dijembatani', 
   const broken = checkPerUnitBalance(naive);
   assert.equal(broken.length, 2, 'tetapi kedua unit timpang');
   assert.deepEqual(broken.map((b) => b.unitId).sort(), ['igyt', 'thl']);
+});
+
+/* ---------------- Penyeimbang antar unit untuk data impor ---------------- */
+
+test('jurnal yang sudah seimbang per unit dibiarkan apa adanya', () => {
+  const lines = [
+    { accountId: 'beban', unitId: 'skr', debit: 1_000_000, credit: 0 },
+    { accountId: 'bank', unitId: 'skr', debit: 0, credit: 1_000_000 },
+  ];
+  assert.deepEqual(balanceUnitsWithInterUnit(lines, IU), lines);
+});
+
+test('jurnal lintas unit dari PMS lama ditambal baris antar unit', () => {
+  // Bank Sri Krisna membayar beban milik Play Laundry — khas data PMS lama
+  // yang tidak mengenal akun antar unit.
+  const raw = [
+    { accountId: 'beban', unitId: 'pld', debit: 4_000_000, credit: 0 },
+    { accountId: 'bank', unitId: 'skr', debit: 0, credit: 4_000_000 },
+  ];
+  assert.ok(checkBalance(raw).balanced, 'totalnya memang sudah balance');
+  assert.equal(checkPerUnitBalance(raw).length, 2, 'tetapi kedua unit timpang');
+
+  const fixed = balanceUnitsWithInterUnit(raw, IU);
+  assert.equal(fixed.length, 4);
+  assert.ok(checkBalance(fixed).balanced);
+  assert.deepEqual(checkPerUnitBalance(fixed), []);
+
+  // PLD menyerap beban -> berhutang; SKR menalangi -> berpiutang.
+  assert.equal(fixed.find((l) => l.unitId === 'pld' && l.accountId === 'iu-pay')!.credit, 4_000_000);
+  assert.equal(fixed.find((l) => l.unitId === 'skr' && l.accountId === 'iu-recv')!.debit, 4_000_000);
+});
+
+test('jurnal tiga unit ditambal dengan benar', () => {
+  const raw = [
+    { accountId: 'beban', unitId: 'thl', debit: 3_000_000, credit: 0 },
+    { accountId: 'beban', unitId: 'skr', debit: 2_000_000, credit: 0 },
+    { accountId: 'bank', unitId: 'igyt', debit: 0, credit: 5_000_000 },
+  ];
+  const fixed = balanceUnitsWithInterUnit(raw, IU);
+  assert.ok(checkBalance(fixed).balanced);
+  assert.deepEqual(checkPerUnitBalance(fixed), []);
+  assert.equal(fixed.find((l) => l.unitId === 'igyt' && l.accountId === 'iu-recv')!.debit, 5_000_000);
+});
+
+test('jurnal yang totalnya belum balance tidak ditambal, harus ditolak', () => {
+  const raw = [
+    { accountId: 'a', unitId: 'skr', debit: 1_000_000, credit: 0 },
+    { accountId: 'b', unitId: 'skr', debit: 0, credit: 900_000 },
+  ];
+  assert.deepEqual(balanceUnitsWithInterUnit(raw, IU), raw, 'dikembalikan apa adanya');
+  assert.equal(checkBalance(raw).balanced, false);
 });

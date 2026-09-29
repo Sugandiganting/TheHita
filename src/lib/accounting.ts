@@ -277,3 +277,37 @@ export function checkPerUnitBalance(lines: DraftLine[]): { unitId: string; diffe
     .map(([unitId, difference]) => ({ unitId, difference: round(difference) }))
     .filter((u) => Math.abs(u.difference) >= TOLERANCE);
 }
+
+/**
+ * Menyeimbangkan sebuah jurnal pada tingkat unit dengan menyisipkan baris
+ * antar unit seperlunya.
+ *
+ * Data dari PMS lama tidak mengenal akun antar unit, sehingga satu bukti yang
+ * menyentuh dua cabang akan balance secara total tetapi timpang per cabang.
+ * Fungsi ini menutup selisihnya: cabang yang menyerap nilai lebih besar
+ * mencatat hutang, cabang yang menyediakan mencatat piutang.
+ *
+ * Mengembalikan daftar baris apa adanya bila jurnalnya sudah seimbang, atau
+ * bila totalnya sendiri belum balance — kasus itu memang harus ditolak, bukan
+ * ditambal.
+ */
+export function balanceUnitsWithInterUnit(
+  lines: DraftLine[],
+  accounts: InterUnitAccounts,
+  memo?: string | null,
+): DraftLine[] {
+  if (!checkBalance(lines).balanced) return lines;
+
+  const off = checkPerUnitBalance(lines);
+  if (off.length === 0) return lines;
+
+  const extra: DraftLine[] = off.map(({ unitId, difference }) =>
+    difference > 0
+      ? // Unit ini menyerap nilai dari unit lain, jadi berhutang.
+        { accountId: accounts.payableId, unitId, debit: 0, credit: difference, memo: memo ?? null }
+      : // Unit ini menyediakan nilai untuk unit lain, jadi berpiutang.
+        { accountId: accounts.receivableId, unitId, debit: -difference, credit: 0, memo: memo ?? null },
+  );
+
+  return [...lines, ...extra];
+}

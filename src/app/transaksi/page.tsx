@@ -6,6 +6,7 @@ import { resolveRange, resolveUnit, type SearchParams } from '@/lib/search-param
 import { deleteEntry } from '@/app/actions';
 import { EntryTabs } from '@/components/entry-tabs';
 import { ReportFilters } from '@/components/filters';
+import Link from 'next/link';
 import { Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,9 @@ export default async function TransaksiPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const { from, to } = resolveRange(params, 3);
   const unitIds = resolveUnit(params);
+
+  const rawPage = Array.isArray(params.hal) ? params.hal[0] : params.hal;
+  const page = Math.max(1, Number(rawPage) || 1);
 
   const where = {
     date: { gte: periodStart(from), lt: periodEndExclusive(to) },
@@ -33,6 +37,7 @@ export default async function TransaksiPage({ searchParams }: { searchParams: Pr
       where,
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
       include: {
         unit: { select: { code: true, name: true } },
         lines: {
@@ -47,6 +52,18 @@ export default async function TransaksiPage({ searchParams }: { searchParams: Pr
   ]);
 
   const today = toDateInput(new Date());
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /** Alamat halaman lain dengan filter periode dan unit tetap terbawa. */
+  const pageHref = (n: number) => {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', String(params.from));
+    if (params.to) q.set('to', String(params.to));
+    if (params.unit) q.set('unit', String(params.unit));
+    if (n > 1) q.set('hal', String(n));
+    const qs = q.toString();
+    return qs ? `/transaksi?${qs}` : '/transaksi';
+  };
 
   return (
     <>
@@ -66,7 +83,14 @@ export default async function TransaksiPage({ searchParams }: { searchParams: Pr
           </Suspense>
 
           <Card className="card-pad">
-            <SectionTitle hint={`Menampilkan ${entries.length} dari ${total} bukti pada rentang periode terpilih.`}>
+            <SectionTitle
+              hint={
+                total === 0
+                  ? 'Tidak ada bukti pada rentang periode terpilih.'
+                  : `Menampilkan bukti ke-${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + entries.length} ` +
+                    `dari ${total} pada rentang periode terpilih.`
+              }
+            >
               Daftar transaksi
             </SectionTitle>
 
@@ -120,6 +144,28 @@ export default async function TransaksiPage({ searchParams }: { searchParams: Pr
                   );
                 })}
               </ul>
+            )}
+
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                {page > 1 ? (
+                  <Link href={pageHref(page - 1)} className="btn-secondary">
+                    ← Sebelumnya
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                <span className="text-xs text-slate-500">
+                  Halaman {page} dari {totalPages}
+                </span>
+                {page < totalPages ? (
+                  <Link href={pageHref(page + 1)} className="btn-secondary">
+                    Berikutnya →
+                  </Link>
+                ) : (
+                  <span />
+                )}
+              </div>
             )}
           </Card>
         </div>

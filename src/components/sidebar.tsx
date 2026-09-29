@@ -45,6 +45,7 @@ const MENU: Entry[] = [
     ],
   },
   { href: '/transaksi', label: 'Jurnal Transaksi', icon: ICON.journal },
+  { href: '/impor', label: 'Impor Data', icon: ICON.receive },
   { href: '/laporan', label: 'Laporan', icon: ICON.report },
   { href: '/peramalan', label: 'Peramalan', icon: ICON.forecast },
   { href: '/proyek', label: 'Proyek', icon: ICON.project },

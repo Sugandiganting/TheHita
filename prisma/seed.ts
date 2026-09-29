@@ -158,7 +158,7 @@ async function postEntry(opts: {
       unitId: opts.unitId,
       description: opts.description,
       reference: opts.reference ?? null,
-      source: opts.source ?? 'IMPORT',
+      source: opts.source ?? 'SEED',
       projectId: opts.projectId ?? null,
       lines: { create: lines },
     },

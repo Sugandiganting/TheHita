@@ -138,6 +138,20 @@ tidak lagi seimbang berdiri sendiri, dan laporan per cabang menjadi salah tanpa 
 akun itu selalu saling meniadakan pada laporan konsolidasi; kartu **Posisi antar unit** di halaman
 Ringkasan Saldo memantaunya.
 
+### Impor Data
+Memasukkan transaksi dari ekspor GuestPro. Nomor akun lama diterjemahkan otomatis ke COA baru
+memakai tabel padanan, dan penanda cabang pada nomor akun (`-10`, `-30`, awalan `TH -`, `SK -`,
+`IGYT -`) dipakai menentukan unit usahanya — sehingga berkas ekspor tidak perlu punya kolom cabang.
+
+Alurnya tiga langkah: unggah berkas, cocokkan kolom (sistem menebak sendiri dari judulnya), lalu
+periksa pratinjau sebelum disimpan. Hanya bukti yang seimbang yang masuk; sisanya dilaporkan
+beserta nomor barisnya. Bukti yang menyentuh lebih dari satu cabang otomatis dilengkapi baris
+antar unit. Berkas yang sama bisa diunggah ulang tanpa risiko data ganda.
+
+Menerima CSV dan XLSX. Berkas `.xls` lama dari GuestPro perlu dibuka di Excel atau Numbers lalu
+disimpan ulang — pustaka pembaca `.xls` untuk Node yang tersedia punya celah keamanan yang belum
+diperbaiki, jadi sengaja tidak dipakai.
+
 ### Transaksi
 Dua cara mencatat:
 

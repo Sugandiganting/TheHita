@@ -117,6 +117,33 @@ yang dibayar dari bank Sri Krisna tetapi dipakai bersama Play Laundry:
 Simpan sekali, dan beban listrik langsung muncul di laporan masing-masing cabang sesuai porsinya —
 memakai satu nomor akun yang sama. Penyeimbang antar unitnya dibuat otomatis.
 
+## 4c. Memasukkan data lama dari GuestPro
+
+Menu **Impor Data**.
+
+1. Di GuestPro, ekspor laporan **jurnal** atau **buku besar** untuk periode yang diinginkan.
+2. Bila hasilnya berkas `.xls`, buka di Excel atau Numbers lalu **File → Save As → CSV**.
+3. Unggah berkasnya, pilih **PMS asalnya**, lalu tekan Baca berkas.
+4. Periksa pencocokan kolom — sistem sudah menebak dari judul kolomnya.
+5. Baca pratinjaunya, lalu tekan tombol impor.
+
+Yang dikerjakan sistem secara otomatis:
+
+| Hal | Perlakuan |
+|---|---|
+| Nomor akun lama | Diterjemahkan, mis. `6120.03-10` dan `612.01` sama-sama jadi `6120.01 Biaya Listrik` |
+| Akhiran `-10` / `-30` | Dipakai menentukan cabang (The Hita Legian / Sri Krisna) |
+| Bukti lintas cabang | Dilengkapi baris Piutang dan Hutang Antar Unit |
+| Bukti tidak seimbang | Tidak disimpan, dilaporkan beserta nomor barisnya |
+| Berkas terunggah dua kali | Dikenali dan dilewati, tidak menjadi data ganda |
+
+> **Perhatikan kotak peringatan kuning** yang menyebut berapa baris memakai cabang bawaan.
+> Baris itu tidak menyebut cabang dan nomor akunnya tidak membawa penanda — biasanya akun
+> bersama seperti bank dan gaji. Pastikan cabang bawaannya memang benar sebelum menyimpan.
+
+Sarannya: impor **satu bulan dulu**, periksa hasilnya di menu Laporan, baru lanjutkan bulan
+berikutnya. Lebih mudah menemukan kekeliruan pada 50 bukti daripada 600.
+
 ## 5. Merencanakan proyek
 
 1. Menu **Proyek** → **Proyek baru**.
