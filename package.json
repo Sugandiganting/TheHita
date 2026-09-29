@@ -13,7 +13,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "setup": "prisma generate && prisma db push && npm run db:seed",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "impor": "tsx scripts/impor.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

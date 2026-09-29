@@ -104,6 +104,24 @@ proyek contoh yang dilewati.
 | `npm test` | Menjalankan 25 pengujian mesin peramalan & aturan akuntansi |
 | `npm run db:reset` | Mengosongkan database lalu mengisi ulang data awal |
 | `npx prisma studio` | Membuka database secara langsung bila perlu koreksi manual |
+| `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
+
+### Impor lewat baris perintah
+
+Untuk memuat banyak berkas sekaligus, mis. dua belas berkas bulanan:
+
+```bash
+# Lihat dulu hasilnya tanpa menyimpan apa pun
+npm run impor -- data/*.csv --pms=PMS2 --unit=THL --coba
+
+# Bila sudah yakin, jalankan tanpa --coba
+npm run impor -- data/*.csv --pms=PMS2 --unit=THL
+```
+
+`--pms` menentukan arti penanda cabang pada nomor akun lama, `--unit` adalah cabang bawaan
+untuk baris yang tidak membawa penanda apa pun. Berkas yang sama boleh dijalankan ulang —
+bukti yang sudah masuk dikenali dan dilewati. Setelah selesai, seluruh buku diperiksa
+keseimbangannya.
 
 ---
 
