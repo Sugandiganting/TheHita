@@ -7,6 +7,7 @@ import { addMonths, currentPeriod } from '@/lib/period';
 import { formatNumber, formatPeriod, formatPeriodShort, formatRupiah } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import { ForecastControls, type ForecastControlValues } from '@/components/forecast-controls';
+import { PurchaseCalculator } from '@/components/purchase-calculator';
 import { CashBalanceChart, NetCashChart } from '@/components/charts';
 import { Alert, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -188,6 +189,24 @@ export default async function PeramalanPage({ searchParams }: { searchParams: Pr
               hint="Sebelum belanja proyek"
             />
           </div>
+
+          <Card className="card-pad">
+            <SectionTitle hint="Isi harga barang atau proyek, lalu lihat apakah kasnya cukup. Bila belum, sistem menghitung sendiri berapa kali pembelian itu perlu dipecah.">
+              Cukup tidak untuk membeli?
+            </SectionTitle>
+            <PurchaseCalculator
+              context={{
+                rows: result.rows.map((r) => ({
+                  period: r.period,
+                  netCash: r.netCash,
+                  cashBalance: r.cashBalance,
+                })),
+                openingCash: result.openingCash,
+                minCashBuffer: result.minCashBuffer,
+                maxAffordableNow: result.maxAffordableNow,
+              }}
+            />
+          </Card>
 
           <Card className="card-pad">
             <SectionTitle

@@ -250,6 +250,33 @@ enam langkah:
 | **Saldo terendah** | Titik paling kritis sepanjang periode proyeksi, dan bulan terjadinya |
 | **Kemampuan belanja proyek** | Dana maksimum yang bisa dikeluarkan sekarang tanpa menembus batas aman — dihitung tanpa memperhitungkan proyek yang sudah ada |
 | **Surplus/defisit rata-rata** | Selisih pemasukan dan pengeluaran rutin per bulan, sebelum belanja proyek |
+| **Cukup tidak untuk membeli** | Apakah kas cukup membeli sesuatu, dan berapa kali pembelian itu perlu dipecah bila belum |
+
+### Cukup tidak untuk membeli?
+
+Pemeriksa kemampuan beli di menu **Peramalan**. Isi harga barang, lalu sistem menjawab
+cukup atau tidak, dan bila tidak — berapa kali pembelian itu perlu dipecah supaya aman.
+
+| | |
+|---|---|
+| **Dipecah berapa kali** | 1 berarti dibayar sekaligus. Jaraknya bisa mingguan atau bulanan. |
+| **Jawabannya** | Cukup, atau kurang sekian dari batas aman, beserta bulan titik terendahnya |
+| **Usulannya** | Jumlah cicilan terkecil yang membuat pembelian itu aman |
+
+Dua hal yang membuat jawabannya bisa dipercaya:
+
+- **Yang diperiksa bukan hanya saat tiap cicilan dibayar, tetapi juga bulan-bulan
+  sesudahnya.** Pembelian menurunkan saldo kas seterusnya, jadi bisa saja tiap cicilan
+  terlihat aman tetapi kasnya jebol beberapa bulan kemudian. Pemeriksaan yang hanya
+  melihat titik pembayaran akan memberi lampu hijau yang keliru.
+- **Ada pembelian yang tidak akan pernah terjangkau.** Kalau pada akhirnya seluruh harga
+  membuat kas menembus batas aman, dipecah berapa kali pun tidak menolong, dan sistem
+  mengatakannya apa adanya daripada mengusulkan cicilan yang sia-sia.
+
+Satu anggapan yang perlu diingat: di dalam satu bulan, arus kas dianggap mengalir rata
+tiap hari. Kenyataannya hotel menerima uang hampir tiap hari, tetapi gaji dan tagihan
+besar menumpuk di tanggal tertentu. Untuk pembelian yang mepet dengan batas aman, jangan
+bersandar pada selisih beberapa hari.
 
 ### Menguji sebuah proyek
 

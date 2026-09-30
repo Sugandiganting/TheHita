@@ -14,7 +14,7 @@
  * Seluruh fungsi di file ini murni (tanpa akses database) supaya mudah diuji.
  */
 
-import { addMonths, diffMonths, monthOf, periodRange, type Period } from './period';
+import { addMonths, daysInPeriod, diffMonths, monthOf, periodRange, type Period } from './period';
 
 export type ForecastMethod = 'AVERAGE' | 'WEIGHTED' | 'TREND';
 
@@ -452,4 +452,202 @@ export function toProjectPlan(project: {
       : null;
 
   return { id: project.id, name: project.name, unitId: project.unitId, costs, funding, loan, uplift };
+}
+
+/* ------------------------------------------------------------------ */
+/* Rencana pembelian                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Jarak antar cicilan pembelian. */
+export type PurchaseCadence = 'WEEKLY' | 'MONTHLY';
+
+export type PurchaseInstalment = {
+  /** Cicilan ke berapa, mulai dari 1. */
+  index: number;
+  /** Berapa hari dari sekarang cicilan ini dibayar. */
+  dayOffset: number;
+  /** Bulan tempat cicilan ini jatuh. */
+  period: Period;
+  amount: number;
+  /** Saldo kas tepat setelah cicilan ini dibayar. */
+  balanceAfter: number;
+  /** Saldo masih di atas batas aman. */
+  safe: boolean;
+};
+
+export type PurchasePlan = {
+  amount: number;
+  instalments: number;
+  cadence: PurchaseCadence;
+  schedule: PurchaseInstalment[];
+  /** Seluruh jadwal aman: saldo tidak pernah menembus batas aman. */
+  affordable: boolean;
+  /** Titik terendah saldo kas setelah pembelian diperhitungkan. */
+  lowest: { period: Period; dayOffset: number | null; amount: number } | null;
+  /** Kekurangan terhadap batas aman di titik terburuk. Nol bila aman. */
+  shortfall: number;
+};
+
+export type PurchaseAdvice = {
+  /** Rencana yang diminta pengguna. */
+  requested: PurchasePlan;
+  /** Jumlah cicilan terkecil yang membuat pembelian aman. Null bila tidak ada. */
+  minimumInstalments: number | null;
+  /** Rencana dengan jumlah cicilan terkecil itu. */
+  recommended: PurchasePlan | null;
+  /** Harga tertinggi yang masih aman bila dibayar sekaligus sekarang. */
+  maxLumpSum: number;
+};
+
+/**
+ * Bagian ramalan yang dibutuhkan perencana pembelian.
+ *
+ * Sengaja dipersempit dari ForecastResult supaya layar bisa mengirimkan
+ * datanya ke sisi pengguna tanpa membawa seluruh isi ramalan.
+ */
+export type PurchaseContext = {
+  rows: Pick<ForecastRow, 'period' | 'netCash' | 'cashBalance'>[];
+  openingCash: number;
+  minCashBuffer: number;
+  maxAffordableNow: number;
+};
+
+/** Batas wajar percobaan saat mencari jumlah cicilan terkecil. */
+const MAX_INSTALMENTS = 24;
+
+/**
+ * Saldo kas yang diperkirakan pada hari ke-`dayOffset` dari awal proyeksi.
+ *
+ * Ramalan dihitung per bulan, sedangkan cicilan bisa mingguan. Di dalam satu
+ * bulan, arus kas dianggap mengalir rata tiap hari — anggapan yang sederhana
+ * tetapi harus diingat: hotel menerima uang hampir tiap hari, tetapi gaji dan
+ * tagihan besar biasanya menumpuk di tanggal tertentu. Untuk pembelian yang
+ * mepet dengan batas aman, jangan bersandar pada selisih beberapa hari.
+ */
+function balanceAtDay(rows: PurchaseContext['rows'], openingCash: number, dayOffset: number): number {
+  let saldo = openingCash;
+  let hariTerlewat = 0;
+  for (const row of rows) {
+    const hariBulanIni = daysInPeriod(row.period);
+    if (dayOffset >= hariTerlewat + hariBulanIni) {
+      saldo = row.cashBalance;
+      hariTerlewat += hariBulanIni;
+      continue;
+    }
+    const sisa = Math.max(0, dayOffset - hariTerlewat);
+    return saldo + (row.netCash * sisa) / hariBulanIni;
+  }
+  return saldo;
+}
+
+/** Hari ke berapa dari awal proyeksi, untuk cicilan ke-`index` (mulai 1). */
+function dayOffsetFor(rows: PurchaseContext['rows'], index: number, cadence: PurchaseCadence): number {
+  if (index <= 1) return 0;
+  if (cadence === 'WEEKLY') return (index - 1) * 7;
+  let hari = 0;
+  for (let i = 0; i < index - 1; i++) hari += daysInPeriod(rows[Math.min(i, rows.length - 1)].period);
+  return hari;
+}
+
+function periodAtDay(rows: PurchaseContext['rows'], dayOffset: number): Period {
+  let hari = 0;
+  for (const row of rows) {
+    hari += daysInPeriod(row.period);
+    if (dayOffset < hari) return row.period;
+  }
+  return rows[rows.length - 1]?.period ?? '';
+}
+
+/**
+ * Menyusun satu rencana pembelian dan memeriksa apakah kasnya cukup.
+ *
+ * Yang diperiksa bukan hanya saat cicilan dibayar, tetapi juga seluruh bulan
+ * sesudahnya: pembelian menurunkan garis kas secara permanen, jadi bisa saja
+ * tiap cicilan terlihat aman tetapi kasnya jebol beberapa bulan kemudian.
+ */
+export function planPurchase(
+  result: PurchaseContext,
+  amount: number,
+  instalments: number,
+  cadence: PurchaseCadence,
+): PurchasePlan {
+  const jumlah = Math.max(1, Math.min(MAX_INSTALMENTS, Math.round(instalments)));
+  const rows = result.rows;
+  const buffer = result.minCashBuffer;
+
+  // Dibagi rata, sisa pembulatan ditaruh pada cicilan pertama supaya jumlahnya
+  // tetap persis sama dengan harga barangnya.
+  const dasar = Math.round((amount / jumlah) * 100) / 100;
+  const cicilan = Array.from({ length: jumlah }, () => dasar);
+  cicilan[0] = Math.round((amount - dasar * (jumlah - 1)) * 100) / 100;
+
+  const schedule: PurchaseInstalment[] = [];
+  let dibayar = 0;
+  let terendah: PurchasePlan['lowest'] = null;
+
+  for (let i = 0; i < jumlah; i++) {
+    const dayOffset = dayOffsetFor(rows, i + 1, cadence);
+    dibayar += cicilan[i];
+    const saldo = balanceAtDay(rows, result.openingCash, dayOffset) - dibayar;
+    const period = periodAtDay(rows, dayOffset);
+    schedule.push({
+      index: i + 1,
+      dayOffset,
+      period,
+      amount: cicilan[i],
+      balanceAfter: saldo,
+      safe: saldo >= buffer - EPS,
+    });
+    if (!terendah || saldo < terendah.amount) terendah = { period, dayOffset, amount: saldo };
+  }
+
+  // Sesudah cicilan terakhir, seluruh harga sudah keluar dari kas. Periksa
+  // sisa horizon dengan garis kas yang sudah turun sebesar harga barang.
+  const hariTerakhir = schedule[schedule.length - 1]?.dayOffset ?? 0;
+  let hari = 0;
+  for (const row of rows) {
+    hari += daysInPeriod(row.period);
+    if (hari <= hariTerakhir) continue;
+    const saldo = row.cashBalance - amount;
+    if (!terendah || saldo < terendah.amount) {
+      terendah = { period: row.period, dayOffset: null, amount: saldo };
+    }
+  }
+
+  const affordable = terendah ? terendah.amount >= buffer - EPS : true;
+  return {
+    amount,
+    instalments: jumlah,
+    cadence,
+    schedule,
+    affordable,
+    lowest: terendah,
+    shortfall: affordable ? 0 : Math.max(0, buffer - (terendah?.amount ?? 0)),
+  };
+}
+
+/**
+ * Menjawab "uangnya cukup atau tidak", dan bila tidak, berapa kali pembelian
+ * itu perlu dipecah supaya aman.
+ */
+export function advisePurchase(
+  result: PurchaseContext,
+  amount: number,
+  instalments: number,
+  cadence: PurchaseCadence,
+): PurchaseAdvice {
+  const requested = planPurchase(result, amount, instalments, cadence);
+
+  let minimumInstalments: number | null = null;
+  let recommended: PurchasePlan | null = null;
+  for (let n = 1; n <= MAX_INSTALMENTS; n++) {
+    const rencana = n === requested.instalments ? requested : planPurchase(result, amount, n, cadence);
+    if (rencana.affordable) {
+      minimumInstalments = n;
+      recommended = rencana;
+      break;
+    }
+  }
+
+  return { requested, minimumInstalments, recommended, maxLumpSum: result.maxAffordableNow };
 }
