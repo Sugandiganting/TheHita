@@ -32,7 +32,14 @@ import { PMS_SOURCES, resolveLegacyAccount, type PmsSource } from '../src/lib/co
 import { COA_TEMPLATE } from '../src/lib/coa-template';
 
 type Akun = { kode: string; nama: string; nilai: number };
-type Laporan = { berkas?: string; bulan: number; tahun: number; akun: Akun[] };
+type Laporan = {
+  berkas?: string;
+  bulan: number;
+  tahun: number;
+  akun: Akun[];
+  /** Total yang tercetak di PDF, dipakai sebagai pembanding terakhir. */
+  tercetak?: { net?: number | null };
+};
 
 type Baris = {
   kodeSumber: string;
@@ -71,12 +78,14 @@ type HasilBulan = {
   beban: Map<string, number>;
   bebanBersama: number;
   peringatan: string[];
+  galat: string[];
 };
 
 function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
   const label = `${NAMA_BULAN[lap.bulan]} ${lap.tahun}`;
   const keterangan = `Laba rugi ${label} dari GuestPro`;
   const peringatan: string[] = [];
+  const galat: string[] = [];
 
   const pendapatan = new Map<string, number>();
   const beban = new Map<string, number>();
@@ -85,12 +94,17 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
 
   for (const a of lap.akun) {
     const legacy = resolveLegacyAccount(a.kode, o.pms);
-    if (!legacy) {
-      peringatan.push(`akun ${a.kode} (${a.nama}) tidak ada di daftar akun GuestPro`);
-      continue;
-    }
-    if (!legacy.newCode) {
-      peringatan.push(`akun ${a.kode} (${legacy.name}) belum punya padanan di COA baru`);
+    // Akun tanpa padanan yang masih bernilai tidak boleh sekadar diperingatkan.
+    // Melewatinya berarti membuang uang dari laporan tanpa terlihat — GuestPro
+    // pernah menambah akun baru (6130.10 Biaya THR) setelah COA-nya diekspor,
+    // dan laba sebulan jadi meleset Rp 6.750.000 tanpa ada yang gagal.
+    if (!legacy || !legacy.newCode) {
+      const sebab = legacy
+        ? `belum punya padanan di COA baru`
+        : `tidak ada di daftar akun GuestPro (src/lib/coa-legacy.ts)`;
+      const pesan = `akun ${a.kode} (${legacy?.name ?? a.nama}) ${sebab}`;
+      if (a.nilai !== 0) galat.push(`${pesan} — bernilai ${rupiah(a.nilai)}`);
+      else peringatan.push(`${pesan}, tetapi nilainya nol jadi tidak berpengaruh`);
       continue;
     }
     if (a.nilai === 0) continue;
@@ -152,8 +166,10 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
 
   // Penyeimbang per cabang, supaya tiap cabang balance sendiri tanpa perlu
   // jembatan antar unit.
+  let nettoSeluruh = 0;
   for (const unit of new Set([...pendapatan.keys(), ...beban.keys()])) {
     const netto = round((pendapatan.get(unit) ?? 0) - (beban.get(unit) ?? 0));
+    nettoSeluruh = round(nettoSeluruh + netto);
     if (netto === 0) continue;
     baris.push({
       kodeSumber: o.akunKas,
@@ -165,7 +181,21 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
     });
   }
 
-  return { label, baris, pendapatan, beban, bebanBersama, peringatan };
+  // Pembanding terakhir: laba seluruh cabang harus sama dengan NET PROFIT yang
+  // tercetak di PDF. Ini yang menangkap akun yang tercecer, salah tanda, atau
+  // terhitung dua kali — pemeriksaan per cabang saja tidak akan menyadarinya,
+  // karena jurnal yang kekurangan satu akun tetap bisa balance.
+  const netTercetak = lap.tercetak?.net;
+  if (netTercetak == null) {
+    peringatan.push('NET PROFIT tidak ada di hasil baca, laba tidak bisa dibandingkan '
+      + 'dengan laporan aslinya');
+  } else if (Math.abs(nettoSeluruh - netTercetak) > 0.5) {
+    galat.push(`laba seluruh cabang ${rupiah(nettoSeluruh)} tidak sama dengan `
+      + `NET PROFIT tercetak ${rupiah(netTercetak)}, selisih `
+      + `${rupiah(nettoSeluruh - netTercetak)}`);
+  }
+
+  return { label, baris, pendapatan, beban, bebanBersama, peringatan, galat };
 }
 
 const csvSel = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
@@ -233,6 +263,7 @@ async function main() {
     + 'laba'.padStart(16)));
 
   let adaPeringatan = false;
+  let gagal = false;
   for (const { hasil } of semua) {
     const netto = semuaUnit.map((u) =>
       round((hasil.pendapatan.get(u) ?? 0) - (hasil.beban.get(u) ?? 0)));
@@ -245,10 +276,13 @@ async function main() {
       console.log(C.warn(`    ! ${p}`));
       adaPeringatan = true;
     }
+    for (const g of hasil.galat) {
+      console.log(C.bad(`    x ${g}`));
+      gagal = true;
+    }
   }
 
   // Pemeriksaan: tiap cabang harus balance sendiri, dan seluruh jurnal harus balance.
-  let gagal = false;
   for (const { hasil } of semua) {
     const perUnit = new Map<string, number>();
     for (const b of hasil.baris) {
@@ -262,10 +296,12 @@ async function main() {
     }
   }
   if (gagal) {
-    console.error(C.bad('\nJurnal tidak balance, tidak ada berkas yang ditulis.'));
+    console.error(C.bad('\nAda yang tidak beres di atas, tidak ada berkas yang ditulis. '
+      + 'Angka yang belum cocok dengan laporan aslinya tidak boleh masuk pembukuan.'));
     process.exit(1);
   }
-  console.log(C.ok('\nTiap cabang balance sendiri pada semua bulan.'));
+  console.log(C.ok('\nTiap cabang balance sendiri, dan laba tiap bulan sama dengan '
+    + 'NET PROFIT yang tercetak di laporan.'));
   if (adaPeringatan) console.log(C.warn('Ada peringatan di atas, periksa sebelum mengimpor.'));
 
   const keluar = ambil('keluar');

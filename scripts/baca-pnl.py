@@ -38,15 +38,38 @@ def angka(s):
     return float(s.replace('.', '').replace(',', '.'))
 
 
-def baca(path):
+def baca_berkas(path):
+    """Memecah satu PDF menjadi daftar laporan, satu per periode.
+
+    GuestPro bisa mengeluarkan beberapa bulan dalam satu berkas — laporan
+    Januari sampai Agustus bisa jadi 28 halaman dalam satu PDF, dan urutan
+    bulannya belum tentu berurutan. Tiap laporan dikenali dari halaman yang
+    memuat "Periode:".
+    """
+    with pdfplumber.open(path) as pdf:
+        halaman = [(pg.extract_text() or '', pg.extract_words(keep_blank_chars=False))
+                   for pg in pdf.pages]
+
+    awal = [i for i, (t, _) in enumerate(halaman) if re.search(r'Periode:\s*\d{2}\s+\w{3}', t)]
+    if not awal:
+        raise SystemExit(f'{path}: periode laporan tidak ditemukan. '
+                         'Pastikan berkas ini Profit and Loss Report dari GuestPro.')
+
+    hasil = []
+    for n, mulai in enumerate(awal):
+        henti = awal[n + 1] if n + 1 < len(awal) else len(halaman)
+        hasil.append(baca_satu(path, halaman[mulai:henti]))
+    return hasil
+
+
+def baca_satu(path, halaman):
     """Mengembalikan {bulan, tahun, akun: [{kode, nama, nilai}], tercetak}."""
     baris, teks_all = {}, []
-    with pdfplumber.open(path) as pdf:
+    for i, (halaman_teks, kata) in enumerate(halaman):
+        teks_all.append(halaman_teks)
         # Halaman digabung dengan jarak agar nomor baris tidak bertumpuk.
-        for i, pg in enumerate(pdf.pages):
-            teks_all.append(pg.extract_text() or '')
-            for w in pg.extract_words(keep_blank_chars=False):
-                baris.setdefault(i * 400 + round(w['top'] / 3), []).append(w)
+        for w in kata:
+            baris.setdefault(i * 400 + round(w['top'] / 3), []).append(w)
     teks = '\n'.join(teks_all)
 
     m = re.search(r'Periode:\s*(\d{2})\s+(\w{3})\s+(\d{4})', teks)
@@ -159,23 +182,37 @@ def main(argv):
 
     hasil, gagal = [], []
     for path in berkas:
-        d = baca(path)
-        jumlah, salah = periksa(d)
-        label = f"{NAMA_BULAN[d['bulan']]} {d['tahun']}"
-        print(f"{label:<18} {len(d['akun']):>3} akun   "
-              f"pendapatan {jumlah['income']:>16,.2f}   "
-              f"beban {jumlah['expenses'] + jumlah['cogs'] + jumlah['otherExpenses']:>16,.2f}   "
-              f"laba {jumlah['net']:>16,.2f}   "
-              f"{'COCOK' if not salah else 'TIDAK COCOK'}")
-        for s in salah:
-            print(f"    ! {s}")
-            gagal.append(f'{label}: {s}')
-        hasil.append(d)
+        for d in baca_berkas(path):
+            jumlah, salah = periksa(d)
+            label = f"{NAMA_BULAN[d['bulan']]} {d['tahun']}"
+            print(f"{label:<18} {len(d['akun']):>3} akun   "
+                  f"pendapatan {jumlah['income']:>16,.2f}   "
+                  f"beban {jumlah['expenses'] + jumlah['cogs'] + jumlah['otherExpenses']:>16,.2f}   "
+                  f"laba {jumlah['net']:>16,.2f}   "
+                  f"{'COCOK' if not salah else 'TIDAK COCOK'}")
+            for s in salah:
+                print(f"    ! {s}")
+                gagal.append(f'{label}: {s}')
+            hasil.append(d)
 
     if gagal:
         raise SystemExit('\nPembacaan dihentikan: hasil baca tidak sama dengan '
                          'total yang tercetak di laporan. Angka seperti ini tidak '
                          'boleh masuk ke pembukuan.')
+
+    # Satu periode tidak boleh terbaca dua kali — mis. kalau dua berkas yang
+    # dikirim ternyata memuat bulan yang sama. Kalau dibiarkan, angkanya
+    # tercatat dobel.
+    kembar = {}
+    for d in hasil:
+        kembar.setdefault((d['tahun'], d['bulan']), []).append(d.get('berkas', '?'))
+    ganda = {k: v for k, v in kembar.items() if len(v) > 1}
+    if ganda:
+        for (tahun, bulan), asal in sorted(ganda.items()):
+            print(f"    ! {NAMA_BULAN[bulan]} {tahun} terbaca {len(asal)} kali "
+                  f"(dari {', '.join(sorted(set(asal)))})")
+        raise SystemExit('\nAda periode yang terbaca lebih dari sekali. Pisahkan '
+                         'berkasnya supaya tiap bulan hanya dibaca satu kali.')
 
     hasil.sort(key=lambda d: (d['tahun'], d['bulan']))
     if keluar:

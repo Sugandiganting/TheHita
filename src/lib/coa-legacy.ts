@@ -405,6 +405,7 @@ export const LEGACY_ACCOUNTS: LegacyAccount[] = [
   { code: '7110.01', name: 'Interest Income', newCode: '7110.01', pms: 'PMS2' },
   { code: '8110.01', name: 'Biaya Pajak', newCode: '8110.01', pms: 'PMS2' },
   { code: '8110.02', name: 'Bank Charge Expense', newCode: '8110.02', pms: 'PMS2' },
+  { code: '6130.10', name: 'Biaya THR', newCode: '6130.03', pms: 'PMS2' },
 ];
 
 const BY_KEY = new Map(LEGACY_ACCOUNTS.map((a) => [`${a.pms}|${a.code.trim().toUpperCase()}`, a]));

@@ -3,7 +3,7 @@
 Tabel ini memetakan setiap akun pada dua berkas COA GuestPro ke nomor akun baru.
 Dipakai saat memindahkan saldo awal dan histori transaksi.
 
-- Baris akun pada berkas GuestPro: **376**
+- Baris akun pada berkas GuestPro: **377**
 - Akun pada sistem baru: **182** bisa diposting + 51 akun induk
 - Akun tidak terpetakan: **0**
 
@@ -293,6 +293,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6130.13` | Biaya Service Laundry | TH Legian, Sri Krisna + Play Laundry |
 | `6130.03` | Biaya THR | `613.05` | Biaya THR | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.1` | Biaya THR | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `6130.10` | Biaya THR | TH Legian, Sri Krisna + Play Laundry |
 | `6130.04` | Biaya Bonus Management | `613.06` | Biaya Bonus Management | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.11` | Biaya Bonus Management | TH Legian, Sri Krisna + Play Laundry |
 | `6130.05` | Biaya Marketing | `613.09` | Biaya Marketing | TH Uluwatu + IGYT |
