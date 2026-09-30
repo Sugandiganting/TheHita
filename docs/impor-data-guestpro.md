@@ -30,6 +30,11 @@ pax per bulan, yang dipakai menghitung occupancy dan ARR.
 Tiga tahap. Tahap pertama memakai Python karena laporannya PDF, dua tahap sisanya
 memakai kode yang sama dengan yang dipakai layar Impor Data.
 
+Satu PDF boleh memuat beberapa bulan sekaligus — laporan Januari sampai Agustus
+bisa jadi 28 halaman dalam satu berkas, dengan urutan bulan tidak berurutan.
+Skripnya memecah sendiri per periode, dan menolak kalau ada bulan yang terbaca
+dua kali.
+
 ```bash
 # 1. PDF -> JSON. Berhenti dengan galat kalau hasil baca tidak sama dengan
 #    total yang tercetak di laporan.
@@ -57,6 +62,14 @@ Lihat [pemetaan-coa-guestpro.md](pemetaan-coa-guestpro.md) untuk tabel lengkapny
   terakhir dalam kelompok itu. Keduanya baru ketahuan dari pemeriksaan ini.
 - `pnl-ke-jurnal.ts` memastikan **tiap cabang balance sendiri**, bukan hanya
   keseluruhan jurnal, dan tidak menulis berkas apa pun kalau ada yang tidak balance.
+- `pnl-ke-jurnal.ts` juga membandingkan laba seluruh cabang dengan **NET PROFIT**
+  yang tercetak, dan **berhenti** kalau ada akun bernilai yang tidak punya padanan.
+  Keduanya ada karena ada yang pernah lolos: GuestPro menambah akun
+  `6130.10 Biaya THR` setelah berkas COA-nya diekspor, jadi akun itu tidak ada di
+  tabel padanan, nilainya dibuang diam-diam, dan laba Maret meleset Rp 6.750.000
+  tanpa ada yang gagal. Pemeriksaan balance per cabang tidak menyadarinya — jurnal
+  yang kehilangan satu akun tetap bisa balance. Kalau nanti GuestPro menambah akun
+  baru lagi, prosesnya akan berhenti dan menyebut akunnya.
 - `npm run impor` menolak bukti jurnal yang tidak balance, menolak akun yang tidak
   ada padanannya, dan melewati data yang sudah pernah diimpor.
 
@@ -123,9 +136,15 @@ supplier tidak ada di laporan sumbernya, jadi tidak bisa ikut terbawa. Kalau ner
 pembukanya diperlukan, yang dibutuhkan laporan Trial Balance atau Balance Sheet dari
 GuestPro, bukan laba rugi.
 
-Penyeimbangnya dibuat **satu baris per cabang**, bukan satu baris untuk seluruh
-jurnal. Dengan begitu tiap cabang balance sendiri dan tidak perlu jembatan
+Penyeimbangnya dibuat **per cabang**, bukan satu baris untuk seluruh jurnal.
+Dengan begitu tiap cabang balance sendiri dan tidak perlu jembatan
 `1190.01 Piutang Antar Unit` / `2190.01 Hutang Antar Unit`.
+
+Tiap cabang mendapat **dua** baris kas, bukan satu baris selisihnya: satu kas
+masuk sebesar pendapatan, satu kas keluar sebesar beban. Pengaruhnya pada saldo
+kas sama persis, tetapi menu Peramalan membaca arus kas dari debit dan kredit
+akun kas. Dengan satu baris bersih saja, "rata-rata pemasukan per bulan" terbaca
+sebesar laba — Rp 71 juta, bukan Rp 186 juta — dan angkanya menyesatkan.
 
 ## Statistik dari Sales Summary
 

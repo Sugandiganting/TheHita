@@ -43,12 +43,21 @@ function roundTo(value: number, step = 1000): number {
  */
 const SEASON = [0, 1.12, 0.78, 0.84, 0.95, 1.0, 1.08, 1.32, 1.35, 1.06, 0.88, 0.85, 1.24];
 
+/**
+ * Pembagian PMS mengikuti src/lib/coa-legacy.ts: GuestPro 1 berisi The Hita
+ * Uluwatu dan IGYT, GuestPro 2 berisi The Hita Legian, Sri Krisna, dan Play
+ * Laundry.
+ *
+ * `openingCash` hanya dipakai bersama transaksi contoh. Pada pemasangan
+ * sungguhan (SEED_DEMO=0) saldonya nol, supaya tidak ada uang karangan yang
+ * muncul di layar sebagai kalau-kalau itu saldo betulan.
+ */
 const UNITS = [
-  { code: 'SKR', name: 'Sri Krisna', type: 'HOTEL', rooms: 32, legacyPms: 'GuestPro 1', openingCash: 95_000_000, scale: 1.0 },
-  { code: 'THL', name: 'The Hita Legian', type: 'HOTEL', rooms: 24, legacyPms: 'GuestPro 1', openingCash: 70_000_000, scale: 0.82 },
-  { code: 'THU', name: 'The Hita Uluwatu', type: 'HOTEL', rooms: 20, legacyPms: 'GuestPro 2', openingCash: 60_000_000, scale: 0.74 },
-  { code: 'PLD', name: 'Play Laundry', type: 'LAUNDRY', rooms: 0, legacyPms: 'GuestPro 1', openingCash: 25_000_000, scale: 1.0 },
-  { code: 'IGYT', name: 'IGYT Coffee & Eatery', type: 'CAFE', rooms: 0, legacyPms: 'GuestPro 2', openingCash: 35_000_000, scale: 1.0 },
+  { code: 'SKR', name: 'Sri Krisna', type: 'HOTEL', rooms: 32, legacyPms: 'GuestPro 2', openingCash: 95_000_000, scale: 1.0 },
+  { code: 'THL', name: 'The Hita Legian', type: 'HOTEL', rooms: 24, legacyPms: 'GuestPro 2', openingCash: 70_000_000, scale: 0.82 },
+  { code: 'THU', name: 'The Hita Uluwatu', type: 'HOTEL', rooms: 20, legacyPms: 'GuestPro 1', openingCash: 60_000_000, scale: 0.74 },
+  { code: 'PLD', name: 'Play Laundry', type: 'LAUNDRY', rooms: 0, legacyPms: 'GuestPro 2', openingCash: 25_000_000, scale: 1.0 },
+  { code: 'IGYT', name: 'IGYT Coffee & Eatery', type: 'CAFE', rooms: 0, legacyPms: 'GuestPro 1', openingCash: 35_000_000, scale: 1.0 },
 ];
 
 async function seedMaster() {
@@ -69,7 +78,7 @@ async function seedMaster() {
         groupId: group.id,
         roomCount: u.rooms,
         legacyPms: u.legacyPms,
-        openingCash: u.openingCash,
+        openingCash: WITH_DEMO ? u.openingCash : 0,
       },
     });
   }

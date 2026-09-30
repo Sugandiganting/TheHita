@@ -20,7 +20,8 @@
  *   --kas=KODE         Akun penyeimbang tiap cabang (bawaan 1110.01 Kas Pemasukan)
  *
  * Catatan akuntansi. Laporan laba rugi hanya memuat pendapatan dan beban, jadi
- * jurnal ini menyeimbangkan selisihnya ke satu akun kas per cabang. Hasilnya
+ * jurnal ini menyeimbangkannya ke satu akun kas per cabang: satu baris kas
+ * masuk sebesar pendapatan, satu baris kas keluar sebesar beban. Hasilnya
  * pembukuan berbasis kas: pengaruh tiap bulan terhadap kas sama dengan laba
  * bersih bulan itu. Cukup untuk peramalan arus kas, tetapi bukan pengganti
  * neraca — piutang dan hutang tidak ada di laporan ini.
@@ -166,19 +167,38 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
 
   // Penyeimbang per cabang, supaya tiap cabang balance sendiri tanpa perlu
   // jembatan antar unit.
+  //
+  // Dicatat KOTOR — satu baris kas masuk sebesar pendapatan dan satu baris kas
+  // keluar sebesar beban — bukan satu baris selisihnya saja. Pengaruhnya pada
+  // saldo kas sama persis, tetapi peramalan membaca arus kas dari debit dan
+  // kredit akun kas. Dengan satu baris bersih, "rata-rata pemasukan per bulan"
+  // akan terbaca sebesar laba, bukan sebesar pendapatan, dan angkanya
+  // menyesatkan.
   let nettoSeluruh = 0;
   for (const unit of new Set([...pendapatan.keys(), ...beban.keys()])) {
-    const netto = round((pendapatan.get(unit) ?? 0) - (beban.get(unit) ?? 0));
-    nettoSeluruh = round(nettoSeluruh + netto);
-    if (netto === 0) continue;
-    baris.push({
-      kodeSumber: o.akunKas,
-      namaAkun: 'Penyeimbang laba rugi',
-      unit,
-      debit: netto > 0 ? netto : 0,
-      kredit: netto < 0 ? -netto : 0,
-      keterangan: `Laba rugi bersih ${unit} ${label}`,
-    });
+    const masuk = round(pendapatan.get(unit) ?? 0);
+    const keluar = round(beban.get(unit) ?? 0);
+    nettoSeluruh = round(nettoSeluruh + masuk - keluar);
+    if (masuk !== 0) {
+      baris.push({
+        kodeSumber: o.akunKas,
+        namaAkun: 'Penerimaan kas',
+        unit,
+        debit: masuk,
+        kredit: 0,
+        keterangan: `Penerimaan ${unit} ${label}`,
+      });
+    }
+    if (keluar !== 0) {
+      baris.push({
+        kodeSumber: o.akunKas,
+        namaAkun: 'Pengeluaran kas',
+        unit,
+        debit: 0,
+        kredit: keluar,
+        keterangan: `Pengeluaran ${unit} ${label}`,
+      });
+    }
   }
 
   // Pembanding terakhir: laba seluruh cabang harus sama dengan NET PROFIT yang
