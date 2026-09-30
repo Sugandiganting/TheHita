@@ -190,6 +190,7 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '6130.04', name: 'Biaya Bonus Management', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6130' },
   { code: '6130.05', name: 'Biaya Marketing', type: 'EXPENSE', subtype: 'MARKETING', cashflow: 'OPERATING', parent: '6130' },
   { code: '6130.06', name: 'Biaya Administrasi Bank', type: 'EXPENSE', subtype: 'ADMIN', cashflow: 'OPERATING', parent: '6130' },
+  { code: '6130.07', name: 'Biaya Gaji Management', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6130', description: 'Di GuestPro akun ini bertanda "tidak dipakai" tetapi masih bernilai pada data lama, jadi tetap disediakan.' },
   { code: '6140', name: 'Biaya Linen', type: 'EXPENSE', subtype: 'OPERATIONAL', isHeader: true, parent: '6100' },
   { code: '6140.01', name: 'Biaya Linen', type: 'EXPENSE', subtype: 'OPERATIONAL', cashflow: 'OPERATING', parent: '6140' },
   { code: '6150', name: 'Biaya Operasional', type: 'EXPENSE', subtype: 'OPERATIONAL', isHeader: true, parent: '6100' },

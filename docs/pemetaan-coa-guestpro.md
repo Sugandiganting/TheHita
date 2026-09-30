@@ -4,7 +4,7 @@ Tabel ini memetakan setiap akun pada dua berkas COA GuestPro ke nomor akun baru.
 Dipakai saat memindahkan saldo awal dan histori transaksi.
 
 - Baris akun pada berkas GuestPro: **376**
-- Akun pada sistem baru: **181** bisa diposting + 51 akun induk
+- Akun pada sistem baru: **182** bisa diposting + 51 akun induk
 - Akun tidak terpetakan: **0**
 
 ## Kenapa jumlahnya menyusut
@@ -28,15 +28,6 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 
 | Kode baru | Nama baru | Kode GuestPro | Nama di GuestPro | Berkas asal |
 |---|---|---|---|---|
-| `DIHAPUS` | _(tidak dipakai lagi)_ | `114.06` | Persediaan Perlengkapan Toilet - Tidak dipakai | TH Uluwatu + IGYT |
-| ⤷ |  | `611.07` | Biaya Perlengkapan Toilet - Tidak dipakai | TH Uluwatu + IGYT |
-| ⤷ |  | `613.04` | Biaya Gaji Management - Tidak dipakai | TH Uluwatu + IGYT |
-| ⤷ |  | `1140.06-10` | Persediaan Perlengkapan Toilet TH - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
-| ⤷ |  | `1140.06-30` | Persediaan Perlengkapan Toilet SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
-| ⤷ |  | `6130.02` | Biaya Gaji Management - Tidak Dipakai | TH Legian, Sri Krisna + Play Laundry |
-| ⤷ |  | `6150.05-10` | Biaya Perlengkapan Toilet TH - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
-| ⤷ |  | `6150.05-30` | Biaya Perlengkapan Toilet SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
-| ⤷ |  | `6120.05-30` | Biaya Pemeliharaan & Perbaikan SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `1110.01` | Kas Pemasukan | `111.01` | TH - Kas Pemasukan | TH Uluwatu + IGYT |
 | ⤷ |  | `111.05` | IGYT - Kas Pemasukan | TH Uluwatu + IGYT |
 | ⤷ |  | `1110.01` | SK - Kas Pemasukan | TH Legian, Sri Krisna + Play Laundry |
@@ -103,8 +94,11 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `1140.03-10` | Persediaan Chemicall - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `1140.03-30` | Persediaan Chemicall - SRK | TH Legian, Sri Krisna + Play Laundry |
 | `1140.04` | Persediaan Perlengkapan Room | `114.05` | Persediaan Perlengkapan Room | TH Uluwatu + IGYT |
+| ⤷ |  | `114.06` | Persediaan Perlengkapan Toilet - Tidak dipakai | TH Uluwatu + IGYT |
 | ⤷ |  | `1140.05-10` | Persediaan Perlengkapan Room - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `1140.05-30` | Persediaan Perlengkapan Room - SRK | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `1140.06-10` | Persediaan Perlengkapan Toilet TH - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `1140.06-30` | Persediaan Perlengkapan Toilet SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `1140.05` | Persediaan Room Supplies | `114.11` | Persediaan Room Supplies | TH Uluwatu + IGYT |
 | ⤷ |  | `1140.07-10` | Persediaan Room Supplies - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `1140.07-30` | Persediaan Room Supplies - SRK | TH Legian, Sri Krisna + Play Laundry |
@@ -305,6 +299,8 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6130.14` | Biaya Marketing | TH Legian, Sri Krisna + Play Laundry |
 | `6130.06` | Biaya Administrasi Bank | `613.03` | Biaya Administrasi Bank | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.07` | Biaya Administrasi Bank | TH Legian, Sri Krisna + Play Laundry |
+| `6130.07` | Biaya Gaji Management | `613.04` | Biaya Gaji Management - Tidak dipakai | TH Uluwatu + IGYT |
+| ⤷ |  | `6130.02` | Biaya Gaji Management - Tidak Dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `6140.01` | Biaya Linen | `6140.01-10` | Biaya Linen - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6140.01-30` | Biaya Linen - SRK | TH Legian, Sri Krisna + Play Laundry |
 | `6150.01` | Biaya Peralatan Kitchen | `611.22` | Biaya Peralatan Kitchen Room | TH Uluwatu + IGYT |
@@ -318,8 +314,11 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6150.03-10` | Biaya Chemicall - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6150.03-30` | Biaya Chemicall - SRK | TH Legian, Sri Krisna + Play Laundry |
 | `6150.04` | Biaya Perlengkapan Room | `611.06` | Biaya Perlengkapan Room | TH Uluwatu + IGYT |
+| ⤷ |  | `611.07` | Biaya Perlengkapan Toilet - Tidak dipakai | TH Uluwatu + IGYT |
 | ⤷ |  | `6150.04-10` | Biaya Perlengkapan Room - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6150.04-30` | Biaya Perlengkapan Room - SRK | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `6150.05-10` | Biaya Perlengkapan Toilet TH - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `6150.05-30` | Biaya Perlengkapan Toilet SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `6150.05` | Biaya Room Supplies | `611.12` | Biaya Room Supplies | TH Uluwatu + IGYT |
 | ⤷ |  | `6150.07-10` | Biaya Room Supplies - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6150.07-30` | Biaya Room Supplies - SRK | TH Legian, Sri Krisna + Play Laundry |
@@ -380,6 +379,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | `6180.11` | Biaya Pemeliharaan Kitchen | `617.01` | Biaya Pemeliharaan Kitchen | TH Uluwatu + IGYT |
 | `6180.12` | Biaya Pemeliharaan Kasir dan Bar | `617.02` | Biaya Pemeliharaan Kasir dan Bar | TH Uluwatu + IGYT |
 | `6180.13` | Biaya Pemeliharaan Bangunan dan Fasilitas | `617.03` | Biaya Pemeliharaan Bangungan dan Fasilitas IGYT | TH Uluwatu + IGYT |
+| ⤷ |  | `6120.05-30` | Biaya Pemeliharaan & Perbaikan SRK - Tidak dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `6181.01` | Biaya Rekrutmen | `618.01` | Biaya Rekrutmen | TH Uluwatu + IGYT |
 | ⤷ |  | `6181.01` | Biaya Rekrutmen | TH Legian, Sri Krisna + Play Laundry |
 | `6181.02` | Biaya Development Staff | `618.02` | Biaya Development Staff | TH Uluwatu + IGYT |
