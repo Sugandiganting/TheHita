@@ -84,6 +84,41 @@ export function round(value: number): number {
 }
 
 /**
+ * Membagi satu nominal ke beberapa penerima menurut bobot.
+ *
+ * Dipakai untuk beban bersama yang di GuestPro tidak bertanda cabang — mis. gaji
+ * management atau langganan software yang menanggung Legian dan Sri Krisna
+ * sekaligus. Bobotnya biasanya pendapatan tiap cabang pada bulan itu.
+ *
+ * Sisa pembulatan ditaruh pada penerima berbobot terbesar, tidak dibuang, supaya
+ * jumlah seluruh bagian selalu persis sama dengan nominal aslinya. Tanpa ini
+ * jurnalnya bisa selisih beberapa rupiah dan ditolak saat impor.
+ *
+ * Bobot nol atau negatif diabaikan. Bila tidak ada bobot yang berarti,
+ * hasilnya kosong — pemanggil yang memutuskan apa yang harus dilakukan.
+ */
+export function allocateByWeight(amount: number, weights: Map<string, number>): Map<string, number> {
+  const result = new Map<string, number>();
+  const keys = [...weights.keys()].filter((k) => (weights.get(k) ?? 0) > 0);
+  const totalWeight = keys.reduce((s, k) => s + (weights.get(k) ?? 0), 0);
+  if (keys.length === 0 || totalWeight <= 0) return result;
+
+  let used = 0;
+  for (const k of keys) {
+    const share = round((amount * (weights.get(k) ?? 0)) / totalWeight);
+    result.set(k, share);
+    used = round(used + share);
+  }
+
+  const remainder = round(amount - used);
+  if (remainder !== 0) {
+    const biggest = keys.reduce((a, b) => ((weights.get(b) ?? 0) > (weights.get(a) ?? 0) ? b : a));
+    result.set(biggest, round((result.get(biggest) ?? 0) + remainder));
+  }
+  return result;
+}
+
+/**
  * Membentuk jurnal dari entri cepat.
  *
  * Pemasukan  : debit kas/bank, kredit akun pendapatan.

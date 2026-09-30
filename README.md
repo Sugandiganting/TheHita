@@ -339,6 +339,21 @@ Daftar lengkap ada di [`src/lib/coa-template.ts`](src/lib/coa-template.ts).
 5. **Masukkan histori** minimal 12 bulan bila ingin peramalan langsung memperhitungkan
    pola musiman — ini investasi waktu yang paling berpengaruh pada kualitas ramalan.
 
+Langkah, laporan GuestPro mana yang dipakai, dan keputusan pembagian beban bersama
+antar cabang dijelaskan di [docs/impor-data-guestpro.md](docs/impor-data-guestpro.md).
+Ringkasnya:
+
+```bash
+python3 scripts/baca-pnl.py laporan/PnL-*.pdf --keluar=data/pnl.json
+npx tsx scripts/pnl-ke-jurnal.ts data/pnl.json --keluar=data/jurnal-pnl.csv
+npm run impor -- data/jurnal-pnl.csv --pms=PMS2 --unit=THL --coba
+```
+
+Perhatian: **Profit and Loss Report** dan **Sales Summary** tumpang tindih isinya. Laba
+rugi yang dipakai sebagai sumber angka pembukuan; Sales Summary hanya untuk statistik
+room night dan pax. Mengimpor keduanya untuk bulan yang sama berarti mencatat
+pendapatan dua kali.
+
 ---
 
 ## Catatan teknis
