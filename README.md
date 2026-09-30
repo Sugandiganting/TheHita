@@ -106,6 +106,23 @@ proyek contoh yang dilewati.
 | `npx prisma studio` | Membuka database secara langsung bila perlu koreksi manual |
 | `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
 
+### Mengubah Sales Summary Report (PDF) menjadi jurnal
+
+GuestPro juga bisa mengekspor **Sales Summary Report** sebagai PDF. Laporan itu memuat
+pendapatan per tipe kamar untuk satu bulan, dan mencakup dua properti sekaligus yang
+dibedakan lewat nama tipe kamarnya.
+
+```bash
+pip install pdfplumber
+python3 scripts/baca-sales-summary.py laporan/*.pdf -o jurnal.csv
+npm run impor -- jurnal.csv --pms=PMS2 --unit=THL --kolom=unit:3 --coba
+```
+
+Skrip memecah pendapatan menjadi Pendapatan Kamar, Pendapatan Lain-lain (kolom Extra
+Charge), dan Pendapatan Laundry (kolom POS). Hasil pembacaan selalu dicocokkan dengan
+baris total yang tercetak di laporan; bila tidak cocok skrip berhenti, bukan menghasilkan
+angka yang salah.
+
 ### Impor lewat baris perintah
 
 Untuk memuat banyak berkas sekaligus, mis. dua belas berkas bulanan:
