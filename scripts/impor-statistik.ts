@@ -94,7 +94,7 @@ async function main() {
     const tersedia = kamar * hariDalamBulan(b.periode);
     console.log(`${b.unit.padEnd(6)}${b.periode.padEnd(11)}`
       + String(b.roomNight).padStart(10)
-      + String(b.pax).padStart(9)
+      + (b.pax > 0 ? String(b.pax) : '—').padStart(9)
       + (tersedia > 0 ? String(tersedia) : '—').padStart(11)
       + (tersedia > 0 ? `${((b.roomNight / tersedia) * 100).toFixed(1)}%` : '—').padStart(9));
 
@@ -104,13 +104,20 @@ async function main() {
     if (coba) continue;
 
     const unitId = byCode.get(b.unit)!.id;
+    // Jumlah tamu tidak ada di semua laporan. Room Revenue Report memuat kamar
+    // terjual tetapi tidak memuat pax, jadi kolom pax yang kosong dibiarkan apa
+    // adanya — jangan sampai angka tamu yang sudah benar tertimpa nol.
     await prisma.monthlyStat.upsert({
       where: { unitId_period: { unitId, period: b.periode } },
-      update: { roomsSold: b.roomNight, roomsAvailable: tersedia, guests: b.pax },
+      update: {
+        roomsSold: b.roomNight,
+        roomsAvailable: tersedia,
+        ...(b.pax > 0 ? { guests: b.pax } : {}),
+      },
       create: {
         unitId, period: b.periode, roomsSold: b.roomNight,
         roomsAvailable: tersedia, guests: b.pax,
-        notes: 'Dari Sales Summary GuestPro',
+        notes: 'Dari laporan GuestPro',
       },
     });
     simpan++;

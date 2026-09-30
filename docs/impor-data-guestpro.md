@@ -151,13 +151,32 @@ kas sama persis, tetapi menu Peramalan membaca arus kas dari debit dan kredit
 akun kas. Dengan satu baris bersih saja, "rata-rata pemasukan per bulan" terbaca
 sebesar laba — Rp 71 juta, bukan Rp 186 juta — dan angkanya menyesatkan.
 
-## Statistik hunian dari Sales Summary
+## Statistik hunian
+
+Ada dua laporan yang bisa dipakai. **Room Revenue Report lebih baik**: isinya satu
+baris per transaksi kamar, lengkap dengan tanggal, nomor kamar, dan kode akun
+cabang, sehingga kamar terjual per bulan per cabang maupun jumlah kamar yang
+sebenarnya bisa dihitung langsung. Sales Summary hanya dipakai untuk jumlah tamu,
+yang tidak ada di Room Revenue Report.
 
 ```bash
+# Room Revenue Report (.xls) — kamar terjual + jumlah kamar
+python3 scripts/baca-room-revenue.py laporan/room-revenue.xls \
+    --banding=data/pnl.json --keluar=data/statistik.csv
+
+# Sales Summary (.pdf) — jumlah tamu, dan kamar terjual bila Room Revenue tak ada
 python3 scripts/baca-statistik.py --unit=THU laporan/Sales-Summary-*.pdf --keluar=data/statistik.csv
+
 npx tsx scripts/impor-statistik.ts data/statistik.csv --coba
 npx tsx scripts/impor-statistik.ts data/statistik.csv
 ```
+
+`--banding` membandingkan pendapatan kamar di Room Revenue Report dengan akun
+pendapatan kamar di laba rugi. Keduanya menghitung uang yang sama, jadi selisihnya
+menandakan sesuatu — periode laporan yang salah, atau penyesuaian yang dicatat
+langsung ke akun pendapatan tanpa lewat folio tamu. Perbandingan inilah yang
+menemukan bahwa laba rugi Agustus 2026 dicetak untuk periode **01–30 Agustus**,
+bukan 01–31, sehingga kehilangan satu hari penuh.
 
 Yang diambil hanya angka operasional — kamar terjual, jumlah tamu, dan jumlah kamar.
 Angka uangnya **tidak** diimpor, karena sudah tercakup di laporan laba rugi. Hasilnya
@@ -168,7 +187,11 @@ Beberapa catatan:
 - **Jumlah kamar dihitung dari laporan**, yaitu nomor kamar yang benar-benar muncul,
   diambil yang terbanyak di antara bulan-bulan yang diimpor. Laporan hanya memuat kamar
   yang terisi minimal sekali, jadi memakai angka bulan sepi akan membuat tingkat hunian
-  tampak lebih tinggi daripada yang sebenarnya.
+  tampak lebih tinggi daripada yang sebenarnya. Angka ini juga menggantikan jumlah kamar
+  pada data induk — The Hita Uluwatu tercatat 20 kamar padahal sebenarnya 30, The Hita
+  Legian 24 padahal 16, Sri Krisna 32 padahal 6.
+- **Jumlah tamu tidak ditimpa nol.** Room Revenue Report tidak memuat pax, jadi kolom
+  pax yang kosong dibiarkan apa adanya saat dimuat ulang.
 - **Laporan yang dikelompokkan per tipe kamar tidak memuat nomor kamar**, sehingga
   kapasitasnya tidak bisa disimpulkan. Untuk cabang seperti itu kamar terjual dan jumlah
   tamu tetap masuk, tetapi tingkat huniannya kosong sampai jumlah kamar diisi lewat menu

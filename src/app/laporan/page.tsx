@@ -54,7 +54,7 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
 
       {occupancy.length > 0 && (
         <Card className="card-pad mt-6 min-w-0">
-          <SectionTitle hint="Kamar terjual dan jumlah tamu dari Sales Summary GuestPro. ARR dihitung dari pendapatan kamar yang tercatat di jurnal.">
+          <SectionTitle hint="Kamar terjual dan jumlah tamu dari laporan GuestPro. ARR dihitung dari pendapatan kamar yang tercatat di jurnal, bukan diambil dari ARR yang tercetak di laporan.">
             Statistik hunian
           </SectionTitle>
           <div className="overflow-x-auto">
@@ -80,19 +80,19 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
                     <td className="td num">{o.roomsSold.toLocaleString('id-ID')}</td>
                     <td className="td num">{o.roomsAvailable > 0 ? o.roomsAvailable.toLocaleString('id-ID') : '—'}</td>
                     <td className="td num">{o.occupancy === null ? '—' : formatPercent(o.occupancy * 100)}</td>
-                    <td className="td num">{o.guests.toLocaleString('id-ID')}</td>
+                    <td className="td num">{o.guests > 0 ? o.guests.toLocaleString('id-ID') : '—'}</td>
                     <td className="td num">{o.arr === null ? '—' : formatRupiah(o.arr)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {occupancy.some((o) => o.roomsAvailable === 0) && (
+          {occupancy.some((o) => o.roomsAvailable === 0 || o.guests === 0) && (
             <p className="mt-3 text-xs text-slate-500">
-              Tanda &mdash; pada kolom Tersedia dan Hunian berarti jumlah kamar cabang itu belum diketahui.
-              Sales Summary yang dikelompokkan per tipe kamar tidak memuat nomor kamar, sehingga kapasitasnya
-              tidak bisa dihitung dari laporan. Isi jumlah kamar lewat menu Unit Usaha bila ingin
-              tingkat huniannya muncul.
+              Tanda &mdash; berarti angkanya belum diketahui dari laporan yang sudah dimasukkan, bukan nol.
+              Jumlah tamu hanya ada di Sales Summary; Room Revenue Report memuat kamar terjual tetapi tidak
+              memuat pax. Tingkat hunian kosong bila jumlah kamar cabang itu belum diketahui &mdash; isi lewat
+              menu Unit Usaha, atau masukkan Room Revenue Report yang memuat nomor kamar.
             </p>
           )}
         </Card>
