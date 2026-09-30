@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { prisma } from '@/lib/db';
-import { getAccountBalances, getCashAccountBreakdown, getMonthlyActuals, getProfitLoss } from '@/lib/queries';
+import { getAccountBalances, getCashAccountBreakdown, getMonthlyActuals, getOccupancy, getProfitLoss } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 import { resolveRange, resolveUnit, type SearchParams } from '@/lib/search-params';
@@ -16,12 +16,13 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
   const { from, to } = resolveRange(params, 12);
   const unitIds = resolveUnit(params);
 
-  const [units, pl, balances, cashBreakdown, actuals] = await Promise.all([
+  const [units, pl, balances, cashBreakdown, actuals, occupancy] = await Promise.all([
     prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
     getProfitLoss(from, to, unitIds),
     getAccountBalances(from, to, unitIds),
     getCashAccountBreakdown(to, unitIds),
     getMonthlyActuals(from, to, unitIds),
+    getOccupancy(from, to, unitIds),
   ]);
 
   const totalDebit = balances.reduce((s, b) => s + b.debit, 0);
@@ -50,6 +51,52 @@ export default async function LaporanPage({ searchParams }: { searchParams: Prom
           tone={pl.netProfit < 0 ? 'negative' : 'positive'}
         />
       </div>
+
+      {occupancy.length > 0 && (
+        <Card className="card-pad mt-6 min-w-0">
+          <SectionTitle hint="Kamar terjual dan jumlah tamu dari Sales Summary GuestPro. ARR dihitung dari pendapatan kamar yang tercatat di jurnal.">
+            Statistik hunian
+          </SectionTitle>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem]">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="td">Unit</th>
+                  <th className="td">Bulan</th>
+                  <th className="td num">Kamar terjual</th>
+                  <th className="td num">Tersedia</th>
+                  <th className="td num">Hunian</th>
+                  <th className="td num">Tamu</th>
+                  <th className="td num">ARR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {occupancy.map((o) => (
+                  <tr key={`${o.unitCode}-${o.period}`} className="border-t border-slate-100">
+                    <td className="td">
+                      <span className="text-xs text-slate-400">{o.unitCode}</span> {o.unitName}
+                    </td>
+                    <td className="td">{formatPeriod(o.period)}</td>
+                    <td className="td num">{o.roomsSold.toLocaleString('id-ID')}</td>
+                    <td className="td num">{o.roomsAvailable > 0 ? o.roomsAvailable.toLocaleString('id-ID') : '—'}</td>
+                    <td className="td num">{o.occupancy === null ? '—' : formatPercent(o.occupancy * 100)}</td>
+                    <td className="td num">{o.guests.toLocaleString('id-ID')}</td>
+                    <td className="td num">{o.arr === null ? '—' : formatRupiah(o.arr)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {occupancy.some((o) => o.roomsAvailable === 0) && (
+            <p className="mt-3 text-xs text-slate-500">
+              Tanda &mdash; pada kolom Tersedia dan Hunian berarti jumlah kamar cabang itu belum diketahui.
+              Sales Summary yang dikelompokkan per tipe kamar tidak memuat nomor kamar, sehingga kapasitasnya
+              tidak bisa dihitung dari laporan. Isi jumlah kamar lewat menu Unit Usaha bila ingin
+              tingkat huniannya muncul.
+            </p>
+          )}
+        </Card>
+      )}
 
       <Card className="card-pad mt-6 min-w-0">
         <SectionTitle hint="Perbandingan pendapatan dan beban tiap bulan pada periode terpilih.">

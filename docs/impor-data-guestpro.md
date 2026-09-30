@@ -12,13 +12,18 @@ diketahui:
 | Laporan | Isi | Dipakai untuk |
 |---|---|---|
 | **Profit and Loss Report** | Seluruh pendapatan dan beban per akun, per bulan | **Sumber angka pembukuan** |
-| **Sales Summary** | Room night, reservasi, pax, room charge, extra charge, POS per tipe kamar | Statistik operasional saja |
+| **Sales Summary** | Kamar terjual, reservasi, pax, room charge, extra charge, POS | Statistik hunian saja |
 
 **Kedua laporan ini tidak boleh diimpor bersamaan.** Angkanya tumpang tindih: pada
 Januari 2026, `Pendapatan Kamar - TH Seminyak` di laporan laba rugi bernilai
 `147.288.126,40`, tepat sama dengan jumlah room charge + extra charge The Hita Legian
 di Sales Summary bulan yang sama. Mengimpor keduanya berarti mencatat pendapatan dua
 kali.
+
+Hal yang sama berlaku di GuestPro 1: pada Januari 2026, `Total Room Net` di Sales
+Summary The Hita Uluwatu bernilai `182.521.289,83`, sedangkan `Pendapatan Kamar - TH
+Uluwatu` di laba rugi bernilai `182.921.289,83` — dua laporan yang menghitung uang yang
+sama.
 
 Laporan laba rugi yang dipakai sebagai sumber angka, karena isinya lengkap — memuat
 juga Rental Motor, F&B Minuman FO, Denda, dan seluruh beban, yang tidak ada di Sales
@@ -146,14 +151,33 @@ kas sama persis, tetapi menu Peramalan membaca arus kas dari debit dan kredit
 akun kas. Dengan satu baris bersih saja, "rata-rata pemasukan per bulan" terbaca
 sebesar laba — Rp 71 juta, bukan Rp 186 juta — dan angkanya menyesatkan.
 
-## Statistik dari Sales Summary
+## Statistik hunian dari Sales Summary
 
 ```bash
-python3 scripts/baca-sales-summary.py laporan/Sales-Summary-*.pdf
+python3 scripts/baca-statistik.py --unit=THU laporan/Sales-Summary-*.pdf --keluar=data/statistik.csv
+npx tsx scripts/impor-statistik.ts data/statistik.csv --coba
+npx tsx scripts/impor-statistik.ts data/statistik.csv
 ```
 
-Skrip ini menghasilkan room night, reservasi, pax, dan ARR per tipe kamar per bulan.
-Angka uangnya **tidak** diimpor sebagai jurnal, karena sudah tercakup di laporan laba
-rugi. Kalau ternyata laba rugi suatu bulan tidak tersedia dan hanya ada Sales
-Summary, skrip ini bisa dipakai menerbitkan jurnal pendapatan bulan itu — tetapi
-jangan sampai bulan yang sama diimpor dari kedua laporan.
+Yang diambil hanya angka operasional — kamar terjual, jumlah tamu, dan jumlah kamar.
+Angka uangnya **tidak** diimpor, karena sudah tercakup di laporan laba rugi. Hasilnya
+tampil di menu *Laporan* pada bagian **Statistik hunian**.
+
+Beberapa catatan:
+
+- **Jumlah kamar dihitung dari laporan**, yaitu nomor kamar yang benar-benar muncul,
+  diambil yang terbanyak di antara bulan-bulan yang diimpor. Laporan hanya memuat kamar
+  yang terisi minimal sekali, jadi memakai angka bulan sepi akan membuat tingkat hunian
+  tampak lebih tinggi daripada yang sebenarnya.
+- **Laporan yang dikelompokkan per tipe kamar tidak memuat nomor kamar**, sehingga
+  kapasitasnya tidak bisa disimpulkan. Untuk cabang seperti itu kamar terjual dan jumlah
+  tamu tetap masuk, tetapi tingkat huniannya kosong sampai jumlah kamar diisi lewat menu
+  *Unit Usaha*.
+- **ARR tidak diambil dari laporan.** ARR yang tercetak GuestPro tidak selalu sepadan
+  dengan angkanya sendiri — pada April dan Juni 2026 di The Hita Uluwatu, ARR dikali
+  kamar terjual meleset dari Total Room Net yang tercetak di laporan yang sama. Di
+  sistem ini ARR dihitung ulang dari pendapatan kamar yang sudah tercatat di jurnal.
+
+`scripts/baca-sales-summary.py` yang lama masih ada. Skrip itu menerbitkan **jurnal**
+pendapatan dari Sales Summary, dan hanya dipakai bila laba rugi suatu bulan benar-benar
+tidak tersedia. Jangan sampai bulan yang sama diimpor dari kedua laporan.

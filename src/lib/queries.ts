@@ -371,3 +371,81 @@ export async function getRecentCashEntries(sources: string[], take = 12) {
     },
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Statistik hunian                                                    */
+/* ------------------------------------------------------------------ */
+
+export type OccupancyRow = {
+  period: Period;
+  unitCode: string;
+  unitName: string;
+  roomsSold: number;
+  /** Nol berarti jumlah kamar belum diketahui, jadi hunian tidak dihitung. */
+  roomsAvailable: number;
+  guests: number;
+  occupancy: number | null;
+  /** Pendapatan kamar bulan itu, dari jurnal — bukan dari laporan Sales Summary. */
+  roomRevenue: number;
+  /** Average Room Rate: pendapatan kamar dibagi kamar terjual. */
+  arr: number | null;
+};
+
+/**
+ * Statistik hunian per unit per bulan.
+ *
+ * Kamar terjual dan jumlah tamu berasal dari Sales Summary GuestPro. ARR
+ * sengaja dihitung ulang di sini dari pendapatan kamar yang sudah tercatat di
+ * jurnal, bukan diambil dari ARR yang tercetak di Sales Summary: pada beberapa
+ * bulan, ARR cetak GuestPro tidak sepadan dengan Total Room Net-nya sendiri.
+ */
+export async function getOccupancy(from: Period, to: Period, unitIds: UnitFilter): Promise<OccupancyRow[]> {
+  const periods = periodsBetween(from, to);
+  const awal = periods[0];
+  const akhir = periods[periods.length - 1];
+
+  const [stats, lines] = await Promise.all([
+    prisma.monthlyStat.findMany({
+      where: {
+        ...(unitIds && unitIds.length > 0 ? { unitId: { in: unitIds } } : {}),
+        period: { gte: awal, lte: akhir },
+      },
+      include: { unit: { select: { code: true, name: true } } },
+    }),
+    prisma.journalLine.findMany({
+      where: {
+        ...unitWhere(unitIds),
+        entry: { date: { gte: periodStart(from), lt: periodEndExclusive(to) } },
+        account: { code: { startsWith: '4110.' } },
+      },
+      select: {
+        debit: true, credit: true,
+        unit: { select: { code: true } },
+        entry: { select: { date: true } },
+      },
+    }),
+  ]);
+
+  const revenue = new Map<string, number>();
+  for (const l of lines) {
+    const key = `${l.unit.code}|${toPeriod(l.entry.date)}`;
+    revenue.set(key, (revenue.get(key) ?? 0) + l.credit - l.debit);
+  }
+
+  return stats
+    .map((s) => {
+      const roomRevenue = revenue.get(`${s.unit.code}|${s.period}`) ?? 0;
+      return {
+        period: s.period as Period,
+        unitCode: s.unit.code,
+        unitName: s.unit.name,
+        roomsSold: s.roomsSold,
+        roomsAvailable: s.roomsAvailable,
+        guests: s.guests,
+        occupancy: s.roomsAvailable > 0 ? s.roomsSold / s.roomsAvailable : null,
+        roomRevenue,
+        arr: s.roomsSold > 0 ? roomRevenue / s.roomsSold : null,
+      };
+    })
+    .sort((a, b) => a.unitCode.localeCompare(b.unitCode) || a.period.localeCompare(b.period));
+}
