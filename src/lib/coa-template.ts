@@ -239,6 +239,7 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '6181.03', name: 'Biaya Kompensasi', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6181' },
   { code: '6181.04', name: 'Biaya Konsumsi', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6181' },
   { code: '6181.05', name: 'Biaya Perlengkapan Staf', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6181' },
+  { code: '6181.06', name: 'Biaya HR Lain-lain', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6181', description: 'Penampung biaya HR yang tidak masuk salah satu akun di atas.' },
   { code: '6190', name: 'Biaya F&B / Cafe', type: 'EXPENSE', subtype: 'FNB', isHeader: true, parent: '6100' },
   { code: '6190.01', name: 'Biaya Bahan Makanan', type: 'EXPENSE', subtype: 'FNB', cashflow: 'OPERATING', parent: '6190' },
   { code: '6190.02', name: 'Biaya Bahan Minuman', type: 'EXPENSE', subtype: 'FNB', cashflow: 'OPERATING', parent: '6190' },

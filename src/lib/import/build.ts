@@ -286,7 +286,10 @@ export function buildImportPlan(rows: string[][], options: ImportOptions): Impor
     }
 
     // Terjemahkan nomor akun GuestPro; bila sudah memakai nomor baru, pakai apa adanya.
-    const legacy = resolveLegacyAccount(rawCode, pms);
+    // Nama akun ikut disertakan karena beberapa nomor GuestPro dipakai untuk
+    // dua akun berbeda, dan hanya namanya yang membedakan.
+    const rawName = cell(r, c.accountName);
+    const legacy = resolveLegacyAccount(rawCode, pms, rawName || undefined);
     let code = legacy ? legacy.newCode : rawCode.trim();
 
     if (legacy && !legacy.newCode) {

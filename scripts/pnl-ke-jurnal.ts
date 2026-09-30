@@ -64,6 +64,24 @@ const NAMA_BULAN = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
 
 const rupiah = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
+/**
+ * Apakah nama akun di laporan dan di tabel padanan merujuk akun yang sama.
+ *
+ * Longgar terhadap perbedaan tanda baca, spasi, dan keterangan "tidak dipakai",
+ * karena GuestPro menulis nama yang sama dengan tanda hubung yang berpindah-
+ * pindah. Ketat terhadap perbedaan kata, karena itulah tanda kode dipakai ulang.
+ */
+export function namaSepadan(laporan: string, padanan: string): boolean {
+  const norm = (s: string) => s.toLowerCase()
+    .replace(/tidak di(pakai|gunakan)/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const a = norm(laporan);
+  const b = norm(padanan);
+  if (!a || !b) return true;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 /** Tanggal akhir bulan — laporan laba rugi adalah rekap sebulan penuh. */
 function akhirBulan(tahun: number, bulan: number) {
   const hari = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate();
@@ -94,7 +112,7 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
   const bersama: Akun[] = [];
 
   for (const a of lap.akun) {
-    const legacy = resolveLegacyAccount(a.kode, o.pms);
+    const legacy = resolveLegacyAccount(a.kode, o.pms, a.nama);
     // Akun tanpa padanan yang masih bernilai tidak boleh sekadar diperingatkan.
     // Melewatinya berarti membuang uang dari laporan tanpa terlihat — GuestPro
     // pernah menambah akun baru (6130.10 Biaya THR) setelah COA-nya diekspor,
@@ -106,6 +124,15 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
       const pesan = `akun ${a.kode} (${legacy?.name ?? a.nama}) ${sebab}`;
       if (a.nilai !== 0) galat.push(`${pesan} — bernilai ${rupiah(a.nilai)}`);
       else peringatan.push(`${pesan}, tetapi nilainya nol jadi tidak berpengaruh`);
+      continue;
+    }
+    // Kode akun saja tidak cukup untuk dipercaya. GuestPro pernah memakai ulang
+    // kode 411.13 — dulu "Pendapatan Upgrade Room", pada laporan 2026 menjadi
+    // "Pendapatan Online Delivery Makanan". Tanpa mencocokkan namanya, uangnya
+    // masuk ke akun yang sama sekali lain dan jurnalnya tetap balance.
+    if (!namaSepadan(a.nama, legacy.name)) {
+      galat.push(`akun ${a.kode} di laporan bernama "${a.nama}" tetapi di daftar padanan `
+        + `bernama "${legacy.name}" — kodenya kemungkinan dipakai ulang oleh GuestPro`);
       continue;
     }
     if (a.nilai === 0) continue;
@@ -149,7 +176,7 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
         + `dicatat ke ${o.unitBawaan}`);
     }
     for (const a of bersama) {
-      const legacy = resolveLegacyAccount(a.kode, o.pms)!;
+      const legacy = resolveLegacyAccount(a.kode, o.pms, a.nama)!;
       for (const [unit, nilai] of allocateByWeight(a.nilai, bobot)) {
         if (nilai === 0) continue;
         beban.set(unit, round((beban.get(unit) ?? 0) + nilai));
@@ -333,7 +360,10 @@ async function main() {
   const larik: string[] = ['Tanggal,No Bukti,Kode Akun,Nama Akun,Unit,Keterangan,Debit,Kredit'];
   let jumlahBaris = 0;
   for (const { lap, hasil } of semua) {
-    const bukti = `PL-${String(lap.tahun).slice(2)}${String(lap.bulan).padStart(2, '0')}`;
+    // Nomor PMS ikut masuk ke nomor bukti. Tanpa itu, laba rugi Januari dari
+    // kedua PMS sama-sama bernomor PL-2601 dan tidak bisa dibedakan di layar.
+    const bukti = `PL${pms.slice(-1)}-${String(lap.tahun).slice(2)}`
+      + `${String(lap.bulan).padStart(2, '0')}`;
     const tanggal = akhirBulan(lap.tahun, lap.bulan);
     for (const b of hasil.baris) {
       larik.push([

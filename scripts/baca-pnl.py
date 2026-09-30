@@ -18,10 +18,15 @@ import re
 import sys
 import pdfplumber
 
-# Nominal bergaya Indonesia: 1.234.567,89
-MONEY = re.compile(r'^\d{1,3}(?:\.\d{3})*,\d{2}$')
-# Kode akun GuestPro: 4110.01, 6160.01-, 6120.05-30
-KODE = re.compile(r'^\d{4}(?:\.\d{2})?(?:-\d{2})?-?$')
+# Nominal bergaya Indonesia: 1.234.567,89 — boleh negatif, dan GuestPro menulis
+# tanda minusnya menempel di depan angka.
+MONEY = re.compile(r'^-?\d{1,3}(?:\.\d{3})*,\d{2}$')
+# Kode akun GuestPro. Dua PMS memakai penomoran berbeda:
+#   GuestPro 2 (Legian, Sri Krisna, Laundry) : 4110.01, 6160.01-, 6120.05-30
+#   GuestPro 1 (Uluwatu, IGYT)               : 411.01, 511.02, 611.02
+KODE = re.compile(r'^(?:\d{4}(?:\.\d{2})?|\d{3}\.\d{2})(?:-\d{2})?-?$')
+# Kode judul kelompok, yang rata kiri: 4110-10, 4.1.01, 6.1.03
+GRUP = re.compile(r'^(?:\d(?:\.\d{1,2}){1,2}|\d{4}(?:[.-]\d{2})?)$')
 BULAN = {'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Mei': 5, 'Jun': 6,
          'Jul': 7, 'Aug': 8, 'Agu': 8, 'Sep': 9, 'Oct': 10, 'Okt': 10,
          'Nov': 11, 'Des': 12, 'Dec': 12}
@@ -78,19 +83,68 @@ def baca_satu(path, halaman):
                          'Pastikan berkas ini Profit and Loss Report dari GuestPro.')
     bulan, tahun = BULAN[m.group(2)], int(m.group(3))
 
-    # Titik jangkar tiap akun: kode akun yang berada di kolom menjorok.
-    jangkar = []
-    for k in sorted(baris):
-        for w in baris[k]:
+    # Titik jangkar tiap akun: kode akun yang berada di kolom menjorok. Judul
+    # kelompok yang sedang berlaku ikut dicatat, karena pada GuestPro 1 penanda
+    # cabang hanya ada di situ: "411.03 Pendapatan (F&B) - Minuman" tidak
+    # menyebut IGYT sama sekali, yang menyebut adalah kelompoknya,
+    # "4.1.02 - Income IGYT".
+    urut = sorted(baris)
+    jangkar, grup_kini = [], ''
+    for i, k in enumerate(urut):
+        kata_baris = sorted(baris[k], key=lambda w: w['x0'])
+        if not kata_baris:
+            continue
+
+        kiri = kata_baris[0]
+        if kiri['x0'] < X_RATA_KIRI and GRUP.fullmatch(kiri['text']):
+            judul = ' '.join(w['text'] for w in kata_baris)
+            # Judul panjang membungkus ke baris berikutnya, yang juga rata kiri
+            # tetapi tanpa kode dan tanpa nominal.
+            for kk in urut[i + 1:i + 3]:
+                lanjut = sorted(baris.get(kk, []), key=lambda w: w['x0'])
+                if not lanjut or lanjut[0]['x0'] >= X_RATA_KIRI:
+                    break
+                if GRUP.fullmatch(lanjut[0]['text']) or lanjut[0]['text'].lower().startswith('total'):
+                    break
+                if any(MONEY.fullmatch(w['text']) for w in lanjut):
+                    break
+                # Judul kolom yang tercetak ulang di puncak halaman berikutnya
+                # bukan lanjutan judul kelompok.
+                if lanjut[0]['text'].upper() == 'REMARK':
+                    break
+                judul += ' ' + ' '.join(w['text'] for w in lanjut)
+            grup_kini = judul
+            continue
+
+        for w in kata_baris:
             if X_AKUN_MIN <= w['x0'] <= X_AKUN_MAKS and KODE.fullmatch(w['text']):
-                jangkar.append((k, w['text']))
+                jangkar.append((k, w['text'], grup_kini))
                 break
 
-    akun = []
-    for i, (k, kode) in enumerate(jangkar):
+    def hanya_uang(kk):
+        """Baris yang isinya murni nominal — tanpa kode akun maupun nama."""
+        isi = baris.get(kk, [])
+        return bool(isi) and all(MONEY.fullmatch(w['text']) or w['text'] == 'Rp' for w in isi)
+
+    akun, terpakai = [], set()
+    for i, (k, kode, grup) in enumerate(jangkar):
         batas = jangkar[i + 1][0] if i + 1 < len(jangkar) else k + 10
+        batas_bawah = jangkar[i - 1][0] if i > 0 else -1
         nama, uang = [], []
-        for kk in range(k, min(batas, k + 8)):
+
+        # Nominal tidak selalu sebaris dengan kode akunnya. Pada nama akun yang
+        # membungkus, GuestPro menaruhnya di tengah, dan pembulatan baris bisa
+        # menempatkannya satu baris DI ATAS kodenya. Tanpa menengok ke atas,
+        # akun seperti "611.24 Biaya Air Isi Ulang HK" terlewat diam-diam.
+        # Hanya baris yang isinya murni nominal dan belum diambil akun sebelumnya
+        # yang boleh diambil, supaya tidak mencuri angka milik akun lain.
+        sebelum = []
+        for kk in range(k - 1, max(k - 3, batas_bawah), -1):
+            if kk in terpakai or not hanya_uang(kk):
+                break
+            sebelum.append(kk)
+
+        for kk in sebelum + list(range(k, min(batas, k + 8))):
             baris_ini = baris.get(kk, [])
             # Baris "Total ..." rata kiri adalah jumlah kelompok, bukan milik
             # akun ini. Tanpa penghentian ini, akun terakhir dalam sebuah
@@ -98,6 +152,7 @@ def baca_satu(path, halaman):
             if any(w['x0'] < X_RATA_KIRI and w['text'].lower().startswith('total')
                    for w in baris_ini):
                 break
+            terpakai.add(kk)
             for w in baris_ini:
                 if MONEY.fullmatch(w['text']):
                     uang.append((w['x0'], angka(w['text'])))
@@ -112,13 +167,15 @@ def baca_satu(path, halaman):
         akun.append({
             'kode': kode,
             'nama': ' '.join(t for _, _, t in sorted(nama)),
+            'grup': grup,
             'nilai': uang[0][1],
         })
 
     satu_baris = teks.replace('\n', ' ')
 
     def tercetak(pola):
-        m = re.search(pola + r'\s*Rp\s*([\d.,]+)', satu_baris)
+        # Bulan yang merugi dicetak "NET PROFIT Rp -72.759.806,72".
+        m = re.search(pola + r'\s*Rp\s*(-?[\d.,]+)', satu_baris)
         return angka(m.group(1)) if m else None
 
     return {

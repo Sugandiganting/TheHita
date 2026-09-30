@@ -3,8 +3,8 @@
 Tabel ini memetakan setiap akun pada dua berkas COA GuestPro ke nomor akun baru.
 Dipakai saat memindahkan saldo awal dan histori transaksi.
 
-- Baris akun pada berkas GuestPro: **377**
-- Akun pada sistem baru: **182** bisa diposting + 51 akun induk
+- Baris akun pada berkas GuestPro: **388**
+- Akun pada sistem baru: **183** bisa diposting + 51 akun induk
 - Akun tidak terpetakan: **0**
 
 ## Kenapa jumlahnya menyusut
@@ -177,8 +177,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | `4110.01` | Pendapatan Kamar | `411.01` | Pendapatan Kamar TH Uluwatu | TH Uluwatu + IGYT |
 | ⤷ |  | `4110.01-10` | Pendapatan Kamar - TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `4110.01-30` | Pendapatan Kamar - Sri Krisna | TH Legian, Sri Krisna + Play Laundry |
-| `4110.02` | Pendapatan Upgrade Room | `411.13` | Pendapatan Upgrade Room | TH Uluwatu + IGYT |
-| ⤷ |  | `4110.10-10` | Pendapatan Upgrade Room - TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
+| `4110.02` | Pendapatan Upgrade Room | `4110.10-10` | Pendapatan Upgrade Room - TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `4110.09-30` | Pendapatan Upgrade Room - Sri Krisna | TH Legian, Sri Krisna + Play Laundry |
 | `4110.03` | Pendapatan Early CI / Late CO | `411.07` | Pendapatan Early CI/ Late CO | TH Uluwatu + IGYT |
 | ⤷ |  | `4110.06-10` | Pendapatan Early CI / Late CO - TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
@@ -202,11 +201,16 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `4110.08-10` | Pendapatan Lain-lain - TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `4110.07-30` | Pendapatan Lain-lain - Sri Krisna | TH Legian, Sri Krisna + Play Laundry |
 | `4111.01` | Pendapatan (F&B) - Makanan | `412.02` | Pendapatan (F&B) - Makanan | TH Uluwatu + IGYT |
+| ⤷ |  | `411.10` | Pendapatan (F&B) - Makanan | TH Uluwatu + IGYT |
 | `4111.02` | Pendapatan (F&B) - Minuman | `412.01` | Pendapatan (F&B) - Minuman | TH Uluwatu + IGYT |
+| ⤷ |  | `411.03` | Pendapatan (F&B) - Minuman | TH Uluwatu + IGYT |
 | `4111.03` | Pendapatan (F&B) - Breakfast | `412.03` | Pendapatan (F&B) - Breakfast | TH Uluwatu + IGYT |
+| ⤷ |  | `411.09` | Pendapatan (F&B) - Breakfast | TH Uluwatu + IGYT |
 | `4111.04` | Pendapatan (F&B) Minuman FO | `4110.03-10` | Pendapatan (F&B) Minuman FO -TH Seminyak | TH Legian, Sri Krisna + Play Laundry |
-| `4111.05` | Pendapatan Online Delivery - Makanan | `412.04` | Pendapatan Online Delivery - Makanan | TH Uluwatu + IGYT |
+| `4111.05` | Pendapatan Online Delivery - Makanan | `411.13` | Pendapatan Online Delivery - Makanan | TH Uluwatu + IGYT |
+| ⤷ |  | `412.04` | Pendapatan Online Delivery - Makanan | TH Uluwatu + IGYT |
 | `4111.06` | Pendapatan Online Delivery - Minuman | `412.05` | Pendapatan Online Delivery - Minuman | TH Uluwatu + IGYT |
+| ⤷ |  | `411.14` | Pendapatan Online Delivery - Minuman | TH Uluwatu + IGYT |
 | `4112.01` | Pendapatan Laundry Kiloan | `4111.01` | Pendapatan laundry kiloan | TH Legian, Sri Krisna + Play Laundry |
 | `4112.02` | Pendapatan Laundry Satuan | `4111.02` | Pendapatan laundry Satuan | TH Legian, Sri Krisna + Play Laundry |
 | `4112.03` | Pendapatan Standart Laundry | `411.11` | Pendapatan Standart Laundry | TH Uluwatu + IGYT |
@@ -228,6 +232,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | `6110.02` | Biaya Layanan Booking.com | `614.1` | Biaya Layanan Booking.com | TH Uluwatu + IGYT |
 | ⤷ |  | `6110.01-10` | Biaya Layanan Booking.com - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6110.01-30` | Biaya Layanan Booking.com - SRK | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `614.10` | Biaya Layanan Booking.com | TH Uluwatu + IGYT |
 | `6110.03` | Komisi - Agoda Home | `614.02` | Komisi - Agoda Home | TH Uluwatu + IGYT |
 | ⤷ |  | `6110.02-10` | Komisi Agoda Home - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6110.02-30` | Komisi Agoda Home - SRK | TH Legian, Sri Krisna + Play Laundry |
@@ -280,6 +285,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | `6120.08` | Biaya Refund dan Kompensasi Tamu | `611.1` | Biaya Refund dan Kompensasi Tamu | TH Uluwatu + IGYT |
 | ⤷ |  | `6120.02-10` | Biaya Refund dan Kompensasi Tamu - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6120.02-30` | Biaya Refund dan Kompensasi Tamu - SRK | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `611.10` | Biaya Refund dan Kompensasi Tamu | TH Uluwatu + IGYT |
 | `6120.09` | Biaya Lain-lain | `612.08` | Biaya Lain-lain | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.05` | Biaya lain-lain | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6170.06` | Biaya Lain-lain Laundry | TH Legian, Sri Krisna + Play Laundry |
@@ -287,6 +293,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `616.1` | Biaya Gaji IGYT | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.01` | Biaya Gaji Karyawan | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6130.12` | Biaya Gaji Laundry | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `616.10` | Biaya Gaji IGYT | TH Uluwatu + IGYT |
 | `6130.02` | Biaya Service Karyawan | `613.02` | Biaya Service Karyawan | TH Uluwatu + IGYT |
 | ⤷ |  | `616.12` | Biaya Service IGYT | TH Uluwatu + IGYT |
 | ⤷ |  | `6130.03` | Biaya Service Karyawan | TH Legian, Sri Krisna + Play Laundry |
@@ -304,6 +311,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6130.02` | Biaya Gaji Management - Tidak Dipakai | TH Legian, Sri Krisna + Play Laundry |
 | `6140.01` | Biaya Linen | `6140.01-10` | Biaya Linen - TH | TH Legian, Sri Krisna + Play Laundry |
 | ⤷ |  | `6140.01-30` | Biaya Linen - SRK | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `615.01` | Biaya Linen | TH Uluwatu + IGYT |
 | `6150.01` | Biaya Peralatan Kitchen | `611.22` | Biaya Peralatan Kitchen Room | TH Uluwatu + IGYT |
 | ⤷ |  | `616.01` | Biaya Peralatan dan Perlengkapan Kitchen IGYT | TH Uluwatu + IGYT |
 | ⤷ |  | `6150.01-10` | Biaya Peralatan Kitchen - TH | TH Legian, Sri Krisna + Play Laundry |
@@ -335,10 +343,12 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6150.11` | Biaya Peralatan dan Perlengkapan HK | TH Legian, Sri Krisna + Play Laundry |
 | `6150.10` | Biaya Peralatan dan Perlengkapan FO | `611.3` | Biaya Peralatan dan Perlengkapan FO | TH Uluwatu + IGYT |
 | ⤷ |  | `6150.12-10` | Biaya Peralatan dan Perlengkapan FO - TH | TH Legian, Sri Krisna + Play Laundry |
+| ⤷ |  | `611.30` | Biaya Peralatan dan Perlengkapan FO | TH Uluwatu + IGYT |
 | `6150.11` | Biaya Renovasi & Penambahan Fasilitas | `611.31` | Biaya Renovasi & Penambahan Fasilitas | TH Uluwatu + IGYT |
 | `6150.12` | Biaya Laundry | `611.03` | Biaya Laundry | TH Uluwatu + IGYT |
 | `6150.13` | Biaya Laundry Linen | `6150.09-30` | Biaya Laundry Linen | TH Legian, Sri Krisna + Play Laundry |
 | `6160.01` | Biaya Gas HK | `611.2` | Biaya Gas HK | TH Uluwatu + IGYT |
+| ⤷ |  | `611.20` | Biaya Gas HK | TH Uluwatu + IGYT |
 | `6160.02` | Biaya Gas Kitchen | `616.02` | Biaya Gas Kitchen | TH Uluwatu + IGYT |
 | `6160.03` | Biaya Galon HK | `611.09` | Biaya Galon HK | TH Uluwatu + IGYT |
 | ⤷ |  | `6160.02-` | Biaya Galon | TH Legian, Sri Krisna + Play Laundry |
@@ -391,6 +401,7 @@ dan laporannya tetap bisa dipisah maupun dikonsolidasi.
 | ⤷ |  | `6181.04` | Biaya Konsumsi | TH Legian, Sri Krisna + Play Laundry |
 | `6181.05` | Biaya Perlengkapan Staf | `618.05` | Biaya Perlengkapan Staf | TH Uluwatu + IGYT |
 | ⤷ |  | `6181.05` | Biaya Perlengkapan Staf | TH Legian, Sri Krisna + Play Laundry |
+| `6181.06` | Biaya HR Lain-lain | `612.10` | Biaya HR | TH Uluwatu + IGYT |
 | `6190.01` | Biaya Bahan Makanan | `616.03` | Biaya Bahan Makanan | TH Uluwatu + IGYT |
 | `6190.02` | Biaya Bahan Minuman | `616.04` | Biaya Bahan Minuman | TH Uluwatu + IGYT |
 | `6190.03` | Biaya Perlengkapan F&B | `616.08` | Biaya Perlengkapan F&B | TH Uluwatu + IGYT |
