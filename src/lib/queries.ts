@@ -15,6 +15,14 @@ function unitWhere(unitIds: UnitFilter) {
   return unitIds && unitIds.length > 0 ? { unitId: { in: unitIds } } : {};
 }
 
+/**
+ * Bukti penyesuaian saldo, mis. saat saldo kas pembukuan disamakan dengan saldo
+ * kas yang sebenarnya. Nilainya besar tetapi BUKAN arus kas yang benar-benar
+ * terjadi pada bulan itu — hanya koreksi posisi. Kalau ikut dihitung sebagai
+ * uang masuk atau keluar, rata-rata bulanan di peramalan jadi melenceng jauh.
+ */
+const SOURCE_PENYESUAIAN = 'ADJUSTMENT';
+
 /** Baris jurnal mentah dalam rentang periode, sudah termasuk data akun. */
 async function linesInRange(from: Period, to: Period, unitIds: UnitFilter) {
   return prisma.journalLine.findMany({
@@ -26,7 +34,7 @@ async function linesInRange(from: Period, to: Period, unitIds: UnitFilter) {
       debit: true,
       credit: true,
       unitId: true,
-      entry: { select: { date: true } },
+      entry: { select: { date: true, source: true } },
       account: { select: { id: true, code: true, name: true, type: true, subtype: true, isCash: true, cashflowCategory: true } },
     },
   });
@@ -56,7 +64,9 @@ export async function getMonthlyActuals(
     const { type, isCash } = line.account;
     if (type === 'REVENUE') bucket.revenue += line.credit - line.debit;
     if (type === 'COGS' || type === 'EXPENSE') bucket.expense += line.debit - line.credit;
-    if (isCash) {
+    // Penyesuaian saldo tetap mengubah saldo kas, tetapi tidak dihitung sebagai
+    // uang masuk atau keluar bulan itu.
+    if (isCash && line.entry.source !== SOURCE_PENYESUAIAN) {
       bucket.cashIn += line.debit;
       bucket.cashOut += line.credit;
     }

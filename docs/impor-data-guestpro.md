@@ -204,3 +204,38 @@ Beberapa catatan:
 `scripts/baca-sales-summary.py` yang lama masih ada. Skrip itu menerbitkan **jurnal**
 pendapatan dari Sales Summary, dan hanya dipakai bila laba rugi suatu bulan benar-benar
 tidak tersedia. Jangan sampai bulan yang sama diimpor dari kedua laporan.
+
+## Menyamakan saldo kas dengan kenyataan
+
+Laporan laba rugi tidak memuat seluruh pergerakan kas. Angsuran pokok utang bank,
+prive pemilik, belanja modal yang dibayar tunai, dan saldo kas pada awal periode
+tidak ada di sana. Akibatnya "saldo kas" hasil impor sebenarnya sama dengan
+akumulasi laba, bukan uang yang betul-betul ada di rekening.
+
+Pada 30 September 2026 selisihnya besar: pembukuan menunjukkan Rp 680.137.445
+sedangkan kas sebenarnya Rp 167.192.901. Sebagian besar selisih itu angsuran utang
+bank, yang pada proyeksi arus kas tercatat sekitar Rp 75,6 juta per bulan.
+
+```bash
+npx tsx scripts/setel-saldo-kas.ts --tanggal=30/09/2026 --saldo=167192901 --coba
+npx tsx scripts/setel-saldo-kas.ts --tanggal=30/09/2026 --saldo=167192901
+```
+
+Skrip ini membuat satu bukti jurnal penyesuaian bernomor `KAS-YYMM` yang menggeser
+saldo kas ke angka sebenarnya, dengan lawan `3101.02 Opening Balance Equity`.
+Dijalankan ulang, bukti lamanya diganti — bukan ditumpuk.
+
+Beberapa hal yang perlu diketahui:
+
+- **Pasang di tiap tanggal yang saldo sebenarnya diketahui.** Bukti berikutnya
+  dihitung dari saldo setelah bukti sebelumnya, jadi memasang Juli, Agustus, dan
+  September berturut-turut membuat garis kasnya cocok di ketiga titik itu.
+- **Peramalan mengabaikan bukti penyesuaian.** Nilainya besar tetapi bukan arus kas
+  yang benar-benar terjadi pada bulan itu. Kalau ikut dihitung, rata-rata pemasukan
+  dan pengeluaran bulanan melenceng jauh — pernah terbaca Rp 482 juta per bulan
+  padahal beban tertinggi sebulan hanya Rp 336 juta.
+- **Pembagian per cabang adalah asumsi** bila hanya total yang diketahui. Saldo buku
+  tiap cabang dikalikan satu faktor yang sama, sehingga tanda dan urutan tiap cabang
+  tetap. Sebutkan `--per-unit=THL:N,SKR:N,...` bila saldo tiap cabang diketahui.
+- **Peramalan masih belum memperhitungkan angsuran utang bank.** Selama angsuran itu
+  belum dicatat sebagai pengeluaran rutin, ramalannya akan terlalu optimis.
