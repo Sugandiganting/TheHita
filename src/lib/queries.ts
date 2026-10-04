@@ -5,7 +5,8 @@
  */
 
 import { prisma } from './db';
-import { isProfitLoss, signedBalance } from './accounting';
+import { isProfitLoss, round, signedBalance } from './accounting';
+import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
 import { addMonths, currentPeriod, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 
@@ -474,4 +475,154 @@ export async function getOccupancy(from: Period, to: Period, unitIds: UnitFilter
       };
     })
     .sort((a, b) => a.unitCode.localeCompare(b.unitCode) || a.period.localeCompare(b.period));
+}
+
+/* ------------------------------------------------------------------ */
+/* Rencana Anggaran Biaya                                              */
+/* ------------------------------------------------------------------ */
+
+
+export type RabRingkas = {
+  id: string;
+  scope: string;
+  period: Period;
+  status: string;
+  bersama: boolean;
+  jumlahBaris: number;
+  totalAnggaran: number;
+  totalRealisasi: number;
+};
+
+/** Daftar RAB beserta total anggaran dan realisasinya. */
+export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
+  const budgets = await prisma.budget.findMany({
+    where: period ? { period } : {},
+    include: { lines: true },
+    orderBy: [{ period: 'desc' }, { scope: 'asc' }],
+  });
+  if (budgets.length === 0) return [];
+
+  const periods = [...new Set(budgets.map((b) => b.period))].sort();
+  const realisasi = await realisasiPerScope(periods[0] as Period, periods[periods.length - 1] as Period);
+
+  return budgets.map((b) => {
+    const kunciRealisasi = realisasi.get(`${b.scope}|${b.period}`) ?? new Map<string, number>();
+    return {
+      id: b.id,
+      scope: b.scope,
+      period: b.period as Period,
+      status: b.status,
+      bersama: scopeBersamaKah(b.scope),
+      jumlahBaris: b.lines.length,
+      totalAnggaran: b.lines.reduce((s, l) => s + l.amount, 0),
+      totalRealisasi: [...kunciRealisasi.values()].reduce((s, v) => s + v, 0),
+    };
+  });
+}
+
+/**
+ * Realisasi beban per scope per periode, dikelompokkan per akun.
+ *
+ * Kuncinya `"<scope>|<period>"`, isinya peta accountId -> nominal. Biaya
+ * bersama dihitung ke kelompok penanggungnya, bukan ke cabang — lihat
+ * src/lib/rab.ts.
+ */
+async function realisasiPerScope(from: Period, to: Period) {
+  const lines = await prisma.journalLine.findMany({
+    where: {
+      account: { type: { in: ['EXPENSE', 'COGS'] } },
+      entry: { date: { gte: periodStart(from), lt: periodEndExclusive(to) } },
+    },
+    select: {
+      accountId: true, debit: true, credit: true, sharedGroup: true,
+      unit: { select: { code: true } },
+      entry: { select: { date: true } },
+    },
+  });
+
+  const hasil = new Map<string, Map<string, number>>();
+  for (const l of lines) {
+    const scope = l.sharedGroup ?? l.unit.code;
+    const kunci = `${scope}|${toPeriod(l.entry.date)}`;
+    const per = hasil.get(kunci) ?? new Map<string, number>();
+    per.set(l.accountId, (per.get(l.accountId) ?? 0) + l.debit - l.credit);
+    hasil.set(kunci, per);
+  }
+  return hasil;
+}
+
+export type RabRinci = {
+  id: string;
+  scope: string;
+  period: Period;
+  status: string;
+  notes: string | null;
+  bersama: boolean;
+  /** Cabang yang tercakup scope ini. */
+  cabang: string[];
+  ringkasan: RingkasanRab;
+};
+
+/** Satu RAB lengkap dengan realisasinya, siap ditampilkan. */
+export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
+  const budget = await prisma.budget.findUnique({
+    where: { id },
+    include: { lines: { include: { account: true } } },
+  });
+  if (!budget) return null;
+
+  const lines = await prisma.journalLine.findMany({
+    where: {
+      account: { type: { in: ['EXPENSE', 'COGS'] } },
+      entry: {
+        date: {
+          gte: periodStart(budget.period as Period),
+          lt: periodEndExclusive(budget.period as Period),
+        },
+      },
+    },
+    select: {
+      accountId: true, debit: true, credit: true, sharedGroup: true,
+      account: { select: { code: true, name: true } },
+      unit: { select: { code: true } },
+    },
+  });
+
+  const realisasi = new Map<string, { nilai: number; code: string; name: string }>();
+  for (const l of lines) {
+    if (!barisMasukScope(
+      { accountId: l.accountId, unitCode: l.unit.code, sharedGroup: l.sharedGroup, debit: l.debit, credit: l.credit },
+      budget.scope,
+    )) continue;
+    const cur = realisasi.get(l.accountId) ?? { nilai: 0, code: l.account.code, name: l.account.name };
+    cur.nilai += l.debit - l.credit;
+    realisasi.set(l.accountId, cur);
+  }
+
+  const baris: BarisRab[] = budget.lines.map((l) => ({
+    accountId: l.accountId,
+    accountCode: l.account.code,
+    accountName: l.account.name,
+    anggaran: l.amount,
+    realisasi: realisasi.get(l.accountId)?.nilai ?? 0,
+  }));
+
+  // Akun yang terpakai tetapi tidak pernah dianggarkan tetap ditampilkan.
+  const dianggarkan = new Set(budget.lines.map((l) => l.accountId));
+  for (const [accountId, r] of realisasi) {
+    if (dianggarkan.has(accountId) || r.nilai === 0) continue;
+    baris.push({ accountId, accountCode: r.code, accountName: r.name, anggaran: 0, realisasi: r.nilai });
+  }
+  baris.sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+
+  return {
+    id: budget.id,
+    scope: budget.scope,
+    period: budget.period as Period,
+    status: budget.status,
+    notes: budget.notes,
+    bersama: scopeBersamaKah(budget.scope),
+    cabang: cabangDalamScope(budget.scope),
+    ringkasan: ringkasRab(baris, round),
+  };
 }

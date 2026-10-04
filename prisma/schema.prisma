@@ -39,7 +39,7 @@ model BusinessUnit {
   openingCash Float   @default(0)
   active      Boolean @default(true)
 
-  group    BusinessGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group    BusinessGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   lines    JournalLine[]
   entries  JournalEntry[]
   projects Project[]
@@ -71,10 +71,11 @@ model Account {
   description      String?
   active           Boolean @default(true)
 
-  parent    Account?          @relation("AccountTree", fields: [parentId], references: [id])
-  children  Account[]         @relation("AccountTree")
-  lines     JournalLine[]
-  costItems ProjectCostItem[]
+  parent      Account?          @relation("AccountTree", fields: [parentId], references: [id])
+  children    Account[]         @relation("AccountTree")
+  lines       JournalLine[]
+  costItems   ProjectCostItem[]
+  budgetLines BudgetLine[]
 
   createdAt DateTime @default(now())
 
@@ -233,4 +234,42 @@ model ForecastScenario {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Rencana Anggaran Biaya untuk satu bulan.
+model Budget {
+  id String @id @default(cuid())
+  /// Siapa yang menganggarkan. Bisa kode cabang ("THL") atau nama kelompok
+  /// penanggung ("THL+SKR") untuk biaya yang ditanggung beberapa cabang
+  /// bersama — bentuknya sama persis dengan JournalLine.sharedGroup, supaya
+  /// anggaran dan realisasinya dibandingkan dengan dasar yang sama.
+  scope  String
+  /// Format YYYY-MM
+  period String
+  /// DRAFT | ACTIVE — hanya yang ACTIVE ikut dihitung di laporan dan peramalan.
+  status String  @default("DRAFT")
+  notes  String?
+
+  lines BudgetLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, period])
+  @@index([period])
+}
+
+model BudgetLine {
+  id        String  @id @default(cuid())
+  budgetId  String
+  accountId String
+  amount    Float   @default(0)
+  notes     String?
+
+  budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([budgetId, accountId])
+  @@index([budgetId])
+  @@index([accountId])
 }

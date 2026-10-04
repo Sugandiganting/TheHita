@@ -3,6 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
+import { COA_TEMPLATE } from '@/lib/coa-template';
+import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
+import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
+import { periodeBerikutnya } from '@/lib/rab';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -710,4 +714,151 @@ export async function createReceiveMoney(_prev: ActionState, formData: FormData)
 
 export async function createPayMoney(_prev: ActionState, formData: FormData): Promise<ActionState> {
   return saveMoneyEntry('PAY', formData);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rencana Anggaran Biaya                                              */
+/* ------------------------------------------------------------------ */
+
+function segarkanRab() {
+  revalidatePath('/rab');
+  revalidatePath('/rab/laporan');
+}
+
+/** Scope yang boleh dipakai: kode cabang aktif, atau kelompok penanggung yang ada. */
+async function scopeSah(): Promise<Set<string>> {
+  const units = await prisma.businessUnit.findMany({ where: { active: true }, select: { code: true } });
+  const sah = new Set(units.map((u) => u.code));
+  for (const pms of Object.keys(PMS_SOURCES) as PmsSource[]) {
+    for (const code of new Set(COA_TEMPLATE.filter((a) => !a.isHeader).map((a) => a.code))) {
+      const nama = namaPenanggung(penanggungBeban(code, pms));
+      if (nama) sah.add(nama);
+    }
+  }
+  return sah;
+}
+
+export async function saveBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const scope = String(formData.get('scope') ?? '').trim().toUpperCase();
+  const period = String(formData.get('period') ?? '').trim();
+  const notes = String(formData.get('notes') ?? '').trim();
+
+  if (!/^\d{4}-\d{2}$/.test(period)) return fail('Bulan wajib diisi.');
+  if (!scope) return fail('Pemilik RAB wajib dipilih.');
+  if (!(await scopeSah()).has(scope)) return fail(`Pemilik RAB "${scope}" tidak dikenal.`);
+
+  const kembar = await prisma.budget.findUnique({ where: { scope_period: { scope, period } }, select: { id: true } });
+  if (kembar && kembar.id !== id) {
+    return fail(`RAB ${scope} untuk ${period} sudah ada. Buka yang itu, jangan dibuat dua kali.`);
+  }
+
+  if (id) {
+    await prisma.budget.update({ where: { id }, data: { scope, period, notes: notes || null } });
+  } else {
+    await prisma.budget.create({ data: { scope, period, notes: notes || null } });
+  }
+  segarkanRab();
+  return ok(id ? 'RAB diperbarui.' : 'RAB dibuat. Lanjutkan dengan mengisi rinciannya.');
+}
+
+export async function setBudgetStatus(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const status = String(formData.get('status') ?? '');
+  if (!['DRAFT', 'ACTIVE'].includes(status)) return fail('Status tidak dikenal.');
+
+  const budget = await prisma.budget.findUnique({ where: { id }, include: { lines: true } });
+  if (!budget) return fail('RAB tidak ditemukan.');
+  if (status === 'ACTIVE' && budget.lines.length === 0) {
+    return fail('RAB kosong tidak bisa disahkan. Isi rinciannya dulu.');
+  }
+
+  await prisma.budget.update({ where: { id }, data: { status } });
+  segarkanRab();
+  return ok(status === 'ACTIVE' ? 'RAB disahkan.' : 'RAB dikembalikan ke draf.');
+}
+
+export async function deleteBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const budget = await prisma.budget.findUnique({ where: { id }, select: { status: true, scope: true, period: true } });
+  if (!budget) return fail('RAB tidak ditemukan.');
+  if (budget.status === 'ACTIVE') {
+    return fail('RAB yang sudah disahkan tidak bisa dihapus. Kembalikan ke draf dulu.');
+  }
+  await prisma.budget.delete({ where: { id } });
+  segarkanRab();
+  return ok(`RAB ${budget.scope} ${budget.period} dihapus.`);
+}
+
+export async function saveBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const budgetId = String(formData.get('budgetId') ?? '');
+  const accountId = String(formData.get('accountId') ?? '');
+  const notes = String(formData.get('notes') ?? '').trim();
+  const amount = round(Number(String(formData.get('amount') ?? '').replace(/[^\d.-]/g, '')));
+
+  if (!accountId) return fail('Akun wajib dipilih.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal anggaran harus lebih dari nol.');
+
+  const [budget, account] = await Promise.all([
+    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true } }),
+    prisma.account.findUnique({ where: { id: accountId }, select: { type: true, isHeader: true, name: true } }),
+  ]);
+  if (!budget) return fail('RAB tidak ditemukan.');
+  if (budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
+  if (!account) return fail('Akun tidak ditemukan.');
+  if (account.isHeader) return fail('Akun induk tidak bisa dianggarkan, pilih akun rinciannya.');
+  if (!['EXPENSE', 'COGS'].includes(account.type)) {
+    return fail(`${account.name} bukan akun beban. RAB hanya untuk biaya.`);
+  }
+
+  await prisma.budgetLine.upsert({
+    where: { budgetId_accountId: { budgetId, accountId } },
+    update: { amount, notes: notes || null },
+    create: { budgetId, accountId, amount, notes: notes || null },
+  });
+  segarkanRab();
+  return ok('Anggaran disimpan.');
+}
+
+export async function deleteBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const line = await prisma.budgetLine.findUnique({ where: { id }, include: { budget: { select: { status: true } } } });
+  if (!line) return fail('Baris anggaran tidak ditemukan.');
+  if (line.budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
+
+  await prisma.budgetLine.delete({ where: { id } });
+  segarkanRab();
+  return ok('Baris anggaran dihapus.');
+}
+
+/**
+ * Menyalin RAB ke bulan berikutnya.
+ *
+ * Nominalnya disalin apa adanya, bukan diambil dari realisasi bulan lalu —
+ * yang menyusun anggaran tetap orangnya. Hasil salinan selalu berstatus draf.
+ */
+export async function duplicateBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const budget = await prisma.budget.findUnique({ where: { id }, include: { lines: true } });
+  if (!budget) return fail('RAB tidak ditemukan.');
+  if (budget.lines.length === 0) return fail('RAB kosong, tidak ada yang bisa disalin.');
+
+  const period = periodeBerikutnya(budget.period);
+  const sudahAda = await prisma.budget.findUnique({
+    where: { scope_period: { scope: budget.scope, period } },
+    select: { id: true },
+  });
+  if (sudahAda) return fail(`RAB ${budget.scope} untuk ${period} sudah ada.`);
+
+  await prisma.budget.create({
+    data: {
+      scope: budget.scope,
+      period,
+      status: 'DRAFT',
+      notes: budget.notes,
+      lines: { create: budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes })) },
+    },
+  });
+  segarkanRab();
+  return ok(`Disalin ke ${period} sebagai draf, ${budget.lines.length} baris.`);
 }

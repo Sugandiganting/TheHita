@@ -29,6 +29,7 @@ const ICON = {
   project: I(<><path d="M3 7h6l2 2h10v10H3z" /><path d="M7 13h8" /></>),
   coa: I(<><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="8" cy="5" r="1.4" /><circle cx="14" cy="12" r="1.4" /><circle cx="10" cy="19" r="1.4" /></>),
   unit: I(<><path d="M3 21V8l6-4 6 4v13" /><path d="M15 21V12h6v9" /><path d="M7 12h2M7 16h2" /></>),
+  budget: I(<><path d="M4 4h16v16H4z" /><path d="M8 9h8M8 13h8M8 17h4" /></>),
 };
 
 const MENU: Entry[] = [
@@ -49,6 +50,15 @@ const MENU: Entry[] = [
   { href: '/laporan', label: 'Laporan', icon: ICON.report },
   { href: '/peramalan', label: 'Peramalan', icon: ICON.forecast },
   { href: '/proyek', label: 'Proyek', icon: ICON.project },
+  {
+    key: 'rab',
+    label: 'RAB',
+    icon: ICON.budget,
+    items: [
+      { href: '/rab', label: 'Input RAB', icon: ICON.budget, desc: 'Susun anggaran per bulan' },
+      { href: '/rab/laporan', label: 'Laporan RAB', icon: ICON.report, desc: 'Anggaran vs realisasi' },
+    ],
+  },
   { href: '/coa', label: 'Chart of Account', icon: ICON.coa },
   { href: '/unit', label: 'Unit Usaha', icon: ICON.unit },
 ];

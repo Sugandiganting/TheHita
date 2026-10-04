@@ -208,6 +208,29 @@ Rencana belanja modal beserta jadwal pembayaran per item, sumber dana (kas sendi
 pinjaman bank, atau setoran modal), dan perkiraan tambahan pendapatan setelah proyek
 beroperasi. Jadwal inilah yang disuntikkan ke proyeksi arus kas.
 
+### RAB
+Rencana Anggaran Biaya bulanan, dipisah menjadi dua menu: **Input RAB** untuk menyusun
+anggaran, **Laporan RAB** untuk melihat anggaran, realisasi, dan sisanya.
+
+Satu RAB dimiliki satu **pemilik anggaran**, yang bisa berupa satu cabang (`THL`) atau satu
+kelompok cabang (`THL+SKR`) untuk biaya yang ditanggung bersama. Bentuknya sama persis
+dengan penanda pada baris jurnal, sehingga anggaran dan realisasi selalu diukur dengan
+dasar yang sama — lihat [Siapa menanggung apa](#siapa-menanggung-apa).
+
+Beberapa hal yang menentukan laporannya bisa dipercaya:
+
+- **Biaya bersama tidak dihitung sebagai realisasi cabang.** Gaji staf yang bekerja di
+  Legian dan Sri Krisna bukan sesuatu yang bisa dikendalikan Legian sendiri; menagihkannya
+  ke RAB Legian membuat selisihnya tidak bermakna. Biaya seperti itu punya RAB tersendiri
+  atas nama kelompok penanggungnya.
+- **Akun yang terpakai tanpa pernah dianggarkan tetap ditampilkan**, ditandai tersendiri.
+  Menyembunyikannya akan membuat total realisasi di laporan tidak sama dengan beban yang
+  benar-benar terjadi.
+- **RAB yang sudah disahkan terkunci.** Untuk mengubahnya, kembalikan dulu ke draf —
+  anggaran tidak berubah diam-diam setelah disepakati.
+- **Salin ke bulan berikutnya** menyalin nominalnya apa adanya dan selalu menghasilkan
+  draf. Yang menyusun anggaran tetap orangnya, bukan sistem.
+
 ### COA
 Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di Indonesia).
 Bisa ditambah, diubah, atau dinonaktifkan. Akun bertanda **kas** adalah akun yang saldonya
@@ -342,6 +365,30 @@ dipertanggungjawabkan.
 | `6110` | Komisi OTA | Komisi Booking.com, Agoda, Traveloka, Klook, Trip.com |
 | `6120` – `6191` | Beban operasional | Biaya Listrik, Gaji Karyawan, Pemeliharaan AC, Biaya Laundry |
 | `7110` / `8110` | Non operasional | Interest Income, Bank Charge Expense |
+
+<a id="siapa-menanggung-apa"></a>
+
+### Siapa menanggung apa
+
+Sebagian biaya di GuestPro tidak menyebut cabangnya. Siapa yang menanggungnya ditetapkan
+di [`src/lib/beban-bersama.ts`](src/lib/beban-bersama.ts), bukan diterka dari pendapatan:
+
+| | GuestPro 1 (Uluwatu + IGYT) | GuestPro 2 (Legian + Sri Krisna + Laundry) |
+|---|---|---|
+| Listrik | **Uluwatu + IGYT** — satu meteran | sudah bertanda cabang |
+| Software & Langganan | Uluwatu | **Legian** |
+| Gaji & Service Karyawan | Uluwatu | **Legian + Sri Krisna** — stafnya orang yang sama, berpindah lokasi |
+| Bonus & Gaji Management | Uluwatu | **Legian + Sri Krisna** |
+| Lainnya | Uluwatu | Legian + Sri Krisna |
+
+Biaya yang penanggungnya satu cabang dicatat sebagai biaya langsung cabang itu. Yang
+ditanggung beberapa cabang tetap dibagi supaya pembukuan tiap cabang balance, tetapi
+barisnya diberi penanda kelompok (`JournalLine.sharedGroup`) sehingga laporan bisa
+menyajikannya kembali sebagai satu beban bersama — bukan sebagai biaya yang bisa
+dikendalikan cabangnya. Ini sejalan dengan USALI, yang menempatkan *undistributed
+operating expenses* di bawah departmental profit.
+
+---
 
 Struktur ini diambil langsung dari COA GuestPro yang sedang dipakai, dengan akun yang
 digandakan per cabang digabung menjadi satu. Padanan nomor lama ke nomor baru ada di
