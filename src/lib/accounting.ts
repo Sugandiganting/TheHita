@@ -60,6 +60,11 @@ export type DraftLine = {
   debit: number;
   credit: number;
   memo?: string | null;
+  /**
+   * Kelompok penanggung bila biaya ini ditanggung beberapa cabang bersama,
+   * mis. "THL+SKR". Lihat src/lib/beban-bersama.ts.
+   */
+  sharedGroup?: string | null;
 };
 
 export type BalanceCheck = {

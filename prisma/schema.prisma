@@ -118,6 +118,13 @@ model JournalLine {
   debit     Float   @default(0)
   credit    Float   @default(0)
   memo      String?
+  /// Diisi bila baris ini bagian dari biaya yang ditanggung beberapa cabang
+  /// bersama-sama, mis. "THL+SKR" untuk gaji staf yang bekerja di kedua lokasi,
+  /// atau "IGYT+THU" untuk listrik satu meteran. Nilainya tetap dibagi ke tiap
+  /// cabang supaya pembukuan tiap cabang balance, tetapi penanda ini membuat
+  /// laporan bisa menyajikannya kembali sebagai satu beban bersama — bukan
+  /// sebagai biaya yang bisa dikendalikan cabangnya.
+  sharedGroup String?
 
   entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   account Account      @relation(fields: [accountId], references: [id])
@@ -126,6 +133,7 @@ model JournalLine {
   @@index([entryId])
   @@index([accountId])
   @@index([unitId])
+  @@index([sharedGroup])
 }
 
 /// Rencana proyek / belanja modal (mis. menambah kamar baru).

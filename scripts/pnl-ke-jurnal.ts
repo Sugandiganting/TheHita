@@ -13,10 +13,6 @@
  *   --keluar=BERKAS    Tempat menyimpan jurnal (bila tidak diisi, hanya ringkasan)
  *   --pms=PMS1|PMS2    PMS asal laporan (bawaan PMS2)
  *   --unit=KODE        Cabang untuk pendapatan tanpa penanda cabang (bawaan THL)
- *   --alokasi=CARA     Cara membagi beban bersama antar cabang:
- *                        pendapatan  sebanding pendapatan tiap cabang (bawaan)
- *                        rata        dibagi rata ke cabang yang berpendapatan
- *                        <KODE>      seluruhnya ke satu cabang, mis. --alokasi=THL
  *   --kas=KODE         Akun penyeimbang tiap cabang (bawaan 1110.01 Kas Pemasukan)
  *
  * Catatan akuntansi. Laporan laba rugi hanya memuat pendapatan dan beban, jadi
@@ -30,6 +26,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { allocateByWeight, round } from '../src/lib/accounting';
 import { PMS_SOURCES, resolveLegacyAccount, type PmsSource } from '../src/lib/coa-legacy';
+import { namaPenanggung, penanggungBeban } from '../src/lib/beban-bersama';
 import { COA_TEMPLATE } from '../src/lib/coa-template';
 
 type Akun = { kode: string; nama: string; nilai: number };
@@ -49,6 +46,11 @@ type Baris = {
   debit: number;
   kredit: number;
   keterangan: string;
+  /**
+   * Diisi bila baris ini bagian dari biaya yang ditanggung beberapa cabang,
+   * mis. "THL+SKR". Kosong berarti biaya itu murni milik cabangnya sendiri.
+   */
+  kelompokBersama?: string;
 };
 
 const C = {
@@ -88,7 +90,7 @@ function akhirBulan(tahun: number, bulan: number) {
   return `${String(hari).padStart(2, '0')}/${String(bulan).padStart(2, '0')}/${tahun}`;
 }
 
-type Opsi = { pms: PmsSource; unitBawaan: string; alokasi: string; akunKas: string };
+type Opsi = { pms: PmsSource; unitBawaan: string; akunKas: string };
 
 type HasilBulan = {
   label: string;
@@ -159,36 +161,46 @@ function susunBulan(lap: Laporan, o: Opsi): HasilBulan {
     }
   }
 
-  // Beban bersama: tidak ada penanda cabang di GuestPro, jadi harus dibagi.
+  // Biaya tanpa penanda cabang. Penanggungnya diambil dari src/lib/beban-bersama.ts,
+  // bukan disebar ke semua cabang — lihat berkas itu untuk alasannya.
+  //
+  // Bila penanggungnya satu cabang, biaya itu memang milik cabang tersebut dan
+  // dicatat sebagai biaya langsung. Bila lebih dari satu, nilainya tetap dibagi
+  // supaya tiap cabang balance sendiri, TETAPI barisnya diberi penanda kelompok
+  // penanggung sehingga laporan bisa menampilkannya kembali sebagai satu beban
+  // bersama, bukan sebagai biaya cabang.
   const bebanBersama = round(bersama.reduce((s, a) => s + a.nilai, 0));
-  if (bersama.length > 0) {
-    let bobot: Map<string, number>;
-    if (o.alokasi === 'pendapatan') {
-      bobot = new Map(pendapatan);
-    } else if (o.alokasi === 'rata') {
-      bobot = new Map([...pendapatan.keys()].map((u) => [u, 1]));
-    } else {
-      bobot = new Map([[o.alokasi, 1]]);
+  for (const a of bersama) {
+    const legacy = resolveLegacyAccount(a.kode, o.pms, a.nama)!;
+    const penanggung = penanggungBeban(legacy.newCode, o.pms);
+    const kelompok = namaPenanggung(penanggung);
+
+    if (!kelompok) {
+      const unit = penanggung[0];
+      beban.set(unit, round((beban.get(unit) ?? 0) + a.nilai));
+      baris.push({ kodeSumber: a.kode, namaAkun: legacy.name, unit, debit: a.nilai, kredit: 0, keterangan });
+      continue;
     }
-    if (bobot.size === 0) {
-      bobot = new Map([[o.unitBawaan, 1]]);
-      peringatan.push(`tidak ada pendapatan pada bulan ini, beban bersama ${rupiah(bebanBersama)} `
-        + `dicatat ke ${o.unitBawaan}`);
+
+    // Dibagi di antara penanggungnya saja, sebanding pendapatan mereka. Cabang
+    // yang belum berpendapatan pada bulan itu dibagi rata, supaya nilainya tidak
+    // jatuh seluruhnya ke satu cabang hanya karena yang lain baru mulai.
+    let bobot = new Map(penanggung.map((u) => [u, pendapatan.get(u) ?? 0]));
+    if ([...bobot.values()].every((v) => v <= 0)) {
+      bobot = new Map(penanggung.map((u) => [u, 1]));
     }
-    for (const a of bersama) {
-      const legacy = resolveLegacyAccount(a.kode, o.pms, a.nama)!;
-      for (const [unit, nilai] of allocateByWeight(a.nilai, bobot)) {
-        if (nilai === 0) continue;
-        beban.set(unit, round((beban.get(unit) ?? 0) + nilai));
-        baris.push({
-          kodeSumber: a.kode,
-          namaAkun: legacy.name,
-          unit,
-          debit: nilai,
-          kredit: 0,
-          keterangan: `${keterangan} — beban bersama dibagi ke ${unit}`,
-        });
-      }
+    for (const [unit, nilai] of allocateByWeight(a.nilai, bobot)) {
+      if (nilai === 0) continue;
+      beban.set(unit, round((beban.get(unit) ?? 0) + nilai));
+      baris.push({
+        kodeSumber: a.kode,
+        namaAkun: legacy.name,
+        unit,
+        debit: nilai,
+        kredit: 0,
+        keterangan,
+        kelompokBersama: kelompok,
+      });
     }
   }
 
@@ -271,13 +283,9 @@ async function main() {
       + `Pilihan: ${unitTersedia.join(', ')}.`));
     process.exit(1);
   }
-  const alokasiMentah = (ambil('alokasi') ?? 'pendapatan').trim();
-  const alokasi = /^(pendapatan|rata)$/i.test(alokasiMentah)
-    ? alokasiMentah.toLowerCase()
-    : alokasiMentah.toUpperCase();
-  if (alokasi !== 'pendapatan' && alokasi !== 'rata' && !unitTersedia.includes(alokasi)) {
-    console.error(C.bad(`--alokasi=${alokasi} tidak dikenal. `
-      + `Pakai "pendapatan", "rata", atau salah satu cabang: ${unitTersedia.join(', ')}.`));
+  if (argv.some((a) => a.startsWith('--alokasi'))) {
+    console.error(C.bad('--alokasi sudah tidak dipakai. Penanggung tiap biaya bersama '
+      + 'sekarang diatur di src/lib/beban-bersama.ts.'));
     process.exit(1);
   }
   const akunKas = ambil('kas') ?? '1110.01';
@@ -290,15 +298,13 @@ async function main() {
   const laporan: Laporan[] = Array.isArray(isi) ? isi : [isi];
   laporan.sort((a, b) => a.tahun - b.tahun || a.bulan - b.bulan);
 
-  const o: Opsi = { pms, unitBawaan, alokasi, akunKas };
+  const o: Opsi = { pms, unitBawaan, akunKas };
   const semua: { lap: Laporan; hasil: HasilBulan }[] = [];
   for (const lap of laporan) semua.push({ lap, hasil: susunBulan(lap, o) });
 
-  const caraTulis = alokasi === 'pendapatan'
-    ? 'sebanding pendapatan tiap cabang'
-    : alokasi === 'rata' ? 'dibagi rata' : `seluruhnya ke ${alokasi}`;
   console.log(C.bold(`\n${PMS_SOURCES[pms].label}`));
-  console.log(C.dim(`Beban bersama dibagi ${caraTulis}. Penyeimbang: ${akunKas}.\n`));
+  console.log(C.dim('Penanggung biaya tak bertanda cabang diambil dari src/lib/beban-bersama.ts. '
+    + `Penyeimbang: ${akunKas}.\n`));
 
   const semuaUnit = [...new Set(semua.flatMap(({ hasil }) =>
     [...hasil.pendapatan.keys(), ...hasil.beban.keys()]))].sort();
@@ -357,7 +363,7 @@ async function main() {
     return;
   }
 
-  const larik: string[] = ['Tanggal,No Bukti,Kode Akun,Nama Akun,Unit,Keterangan,Debit,Kredit'];
+  const larik: string[] = ['Tanggal,No Bukti,Kode Akun,Nama Akun,Unit,Keterangan,Debit,Kredit,Kelompok Bersama'];
   let jumlahBaris = 0;
   for (const { lap, hasil } of semua) {
     // Nomor PMS ikut masuk ke nomor bukti. Tanpa itu, laba rugi Januari dari
@@ -369,6 +375,7 @@ async function main() {
       larik.push([
         tanggal, bukti, b.kodeSumber, csvSel(b.namaAkun), b.unit,
         csvSel(b.keterangan), csvAngka(b.debit), csvAngka(b.kredit),
+        b.kelompokBersama ?? '',
       ].join(','));
       jumlahBaris++;
     }

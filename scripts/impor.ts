@@ -212,6 +212,7 @@ async function main() {
               debit: l.debit,
               credit: l.credit,
               memo: l.description || null,
+              sharedGroup: l.sharedGroup,
             }));
             lines = balanceUnitsWithInterUnit(lines, interUnit, 'Penyeimbang impor antar cabang');
 

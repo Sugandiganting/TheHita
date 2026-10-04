@@ -142,18 +142,20 @@ export default async function DashboardPage({
       </div>
 
       <Card className="card-pad mt-6 min-w-0">
-        <SectionTitle hint="Semua unit memakai satu COA yang sama; pemisahan terjadi lewat dimensi unit pada setiap baris jurnal.">
+        <SectionTitle hint="Biaya sendiri adalah yang dikendalikan cabang. Porsi bersama adalah bagiannya atas biaya yang ditanggung beberapa cabang — gaji staf yang bekerja di dua lokasi, listrik satu meteran — dan bukan tanggung jawab cabang itu sendiri.">
           Rincian per unit usaha
         </SectionTitle>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px]">
+          <table className="w-full min-w-[900px]">
             <thead className="border-b border-slate-200">
               <tr>
                 <th className="th">Unit</th>
                 <th className="th">Jenis</th>
                 <th className="th num">Pendapatan</th>
-                <th className="th num">Beban</th>
-                <th className="th num">Laba</th>
+                <th className="th num">Biaya sendiri</th>
+                <th className="th num">Laba cabang</th>
+                <th className="th num">Porsi bersama</th>
+                <th className="th num">Laba penuh</th>
                 <th className="th num">Margin</th>
                 <th className="th num">Saldo kas</th>
               </tr>
@@ -171,10 +173,14 @@ export default async function DashboardPage({
                     </Badge>
                   </td>
                   <td className="td num">{formatRupiah(u.revenue)}</td>
-                  <td className="td num">{formatRupiah(u.expense)}</td>
-                  <td className={`td num font-medium ${u.profit < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {formatRupiah(u.profit)}
+                  <td className="td num">{formatRupiah(u.expense - u.sharedExpense)}</td>
+                  <td className={`td num font-medium ${u.profitBeforeShared < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {formatRupiah(u.profitBeforeShared)}
                   </td>
+                  <td className="td num text-slate-500">
+                    {u.sharedExpense > 0 ? formatRupiah(u.sharedExpense) : '—'}
+                  </td>
+                  <td className={`td num ${u.profit < 0 ? 'text-red-600' : ''}`}>{formatRupiah(u.profit)}</td>
                   <td className="td num">{formatPercent(u.marginPct)}</td>
                   <td className="td num">{formatRupiah(u.cash)}</td>
                 </tr>
@@ -186,7 +192,13 @@ export default async function DashboardPage({
                   Total konsolidasi
                 </td>
                 <td className="td num">{formatRupiah(unitPerf.reduce((s, u) => s + u.revenue, 0))}</td>
-                <td className="td num">{formatRupiah(unitPerf.reduce((s, u) => s + u.expense, 0))}</td>
+                <td className="td num">
+                  {formatRupiah(unitPerf.reduce((s, u) => s + u.expense - u.sharedExpense, 0))}
+                </td>
+                <td className="td num">{formatRupiah(unitPerf.reduce((s, u) => s + u.profitBeforeShared, 0))}</td>
+                <td className="td num text-slate-500">
+                  {formatRupiah(unitPerf.reduce((s, u) => s + u.sharedExpense, 0))}
+                </td>
                 <td className="td num">{formatRupiah(unitPerf.reduce((s, u) => s + u.profit, 0))}</td>
                 <td className="td num">—</td>
                 <td className="td num">{formatRupiah(unitPerf.reduce((s, u) => s + u.cash, 0))}</td>

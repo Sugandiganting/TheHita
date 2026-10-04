@@ -34,6 +34,7 @@ async function linesInRange(from: Period, to: Period, unitIds: UnitFilter) {
       debit: true,
       credit: true,
       unitId: true,
+      sharedGroup: true,
       entry: { select: { date: true, source: true } },
       account: { select: { id: true, code: true, name: true, type: true, subtype: true, isCash: true, cashflowCategory: true } },
     },
@@ -209,8 +210,18 @@ export type UnitPerformance = {
   name: string;
   type: string;
   revenue: number;
+  /** Seluruh beban, termasuk porsi beban bersama. */
   expense: number;
+  /**
+   * Porsi beban yang ditanggung bersama cabang lain — gaji staf yang bekerja di
+   * dua lokasi, listrik satu meteran, dan sejenisnya. Cabang tidak bisa
+   * mengendalikannya sendiri, jadi dipisahkan dari biayanya sendiri.
+   */
+  sharedExpense: number;
+  /** Laba setelah seluruh beban, termasuk porsi bersama. */
   profit: number;
+  /** Laba sebelum porsi beban bersama — ini yang benar-benar dikendalikan cabang. */
+  profitBeforeShared: number;
   marginPct: number;
   cash: number;
 };
@@ -225,12 +236,15 @@ export async function getUnitPerformance(
     linesInRange(from, to, null),
   ]);
 
-  const stats = new Map<string, { revenue: number; expense: number }>();
+  const stats = new Map<string, { revenue: number; expense: number; shared: number }>();
   for (const line of lines) {
-    const cur = stats.get(line.unitId) ?? { revenue: 0, expense: 0 };
+    const cur = stats.get(line.unitId) ?? { revenue: 0, expense: 0, shared: 0 };
     const t = line.account.type;
     if (t === 'REVENUE') cur.revenue += line.credit - line.debit;
-    if (t === 'COGS' || t === 'EXPENSE') cur.expense += line.debit - line.credit;
+    if (t === 'COGS' || t === 'EXPENSE') {
+      cur.expense += line.debit - line.credit;
+      if (line.sharedGroup) cur.shared += line.debit - line.credit;
+    }
     stats.set(line.unitId, cur);
   }
 
@@ -242,7 +256,7 @@ export async function getUnitPerformance(
   const cashMap = new Map(cashRows.map((r) => [r.unitId, (r._sum.debit ?? 0) - (r._sum.credit ?? 0)]));
 
   return units.map((u) => {
-    const s = stats.get(u.id) ?? { revenue: 0, expense: 0 };
+    const s = stats.get(u.id) ?? { revenue: 0, expense: 0, shared: 0 };
     const profit = s.revenue - s.expense;
     return {
       unitId: u.id,
@@ -251,7 +265,9 @@ export async function getUnitPerformance(
       type: u.type,
       revenue: s.revenue,
       expense: s.expense,
+      sharedExpense: s.shared,
       profit,
+      profitBeforeShared: s.revenue - (s.expense - s.shared),
       marginPct: s.revenue > 0 ? (profit / s.revenue) * 100 : 0,
       cash: u.openingCash + (cashMap.get(u.id) ?? 0),
     };

@@ -21,11 +21,13 @@ export type ColumnMap = {
   unit: number;
   description: number;
   reference: number;
+  /** Penanda kelompok penanggung untuk biaya yang ditanggung beberapa cabang. */
+  sharedGroup: number;
 };
 
 export const EMPTY_MAP: ColumnMap = {
   date: -1, accountCode: -1, accountName: -1, debit: -1, credit: -1,
-  amount: -1, unit: -1, description: -1, reference: -1,
+  amount: -1, unit: -1, description: -1, reference: -1, sharedGroup: -1,
 };
 
 /** Kata kunci untuk menebak peran kolom dari judulnya. */
@@ -39,6 +41,7 @@ const HINTS: Record<keyof ColumnMap, string[]> = {
   unit: ['unit', 'cabang', 'property', 'properti', 'outlet', 'branch', 'department'],
   description: ['keterangan', 'uraian', 'deskripsi', 'description', 'memo', 'narasi'],
   reference: ['no bukti', 'nomor bukti', 'voucher', 'ref', 'reference', 'no jurnal', 'no transaksi', 'doc no'],
+  sharedGroup: ['kelompok bersama', 'beban bersama', 'shared group', 'penanggung'],
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -198,6 +201,8 @@ export type ImportedLine = {
   credit: number;
   description: string;
   reference: string;
+  /** Kelompok penanggung bila biaya ini ditanggung beberapa cabang bersama. */
+  sharedGroup: string | null;
 };
 
 export type ImportedEntry = {
@@ -332,6 +337,7 @@ export function buildImportPlan(rows: string[][], options: ImportOptions): Impor
       credit,
       description: cell(r, c.description),
       reference: cell(r, c.reference),
+      sharedGroup: cell(r, c.sharedGroup).trim() || null,
     });
   });
 
@@ -394,5 +400,6 @@ export function entryToDraftLines(
     debit: l.debit,
     credit: l.credit,
     memo: l.description || null,
+    sharedGroup: l.sharedGroup,
   }));
 }
