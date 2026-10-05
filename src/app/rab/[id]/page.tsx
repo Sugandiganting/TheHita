@@ -87,7 +87,8 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
 
             {r.baris.length === 0 ? (
               <p className="py-6 text-sm text-slate-500">
-                Belum ada baris. Tambahkan akun beban lewat formulir di samping.
+                Belum ada baris. Isi lewat formulir <strong>Tambah anggaran</strong>: pilih akun
+                beban, isi nominalnya, lalu simpan. Ulangi untuk tiap akun yang dianggarkan.
               </p>
             ) : (
               <div className="overflow-x-auto">

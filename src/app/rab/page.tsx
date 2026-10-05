@@ -61,7 +61,7 @@ export default async function RabPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card className="card-pad min-w-0">
-            <SectionTitle hint="Klik RAB untuk mengisi atau mengubah rinciannya.">
+            <SectionTitle hint="Anggaran diisi per akun di dalam RAB — klik nama pemiliknya untuk membuka.">
               Daftar RAB
             </SectionTitle>
 
@@ -72,7 +72,7 @@ export default async function RabPage() {
               />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
+                <table className="w-full min-w-[720px]">
                   <thead className="border-b border-slate-200">
                     <tr>
                       <th className="th">Pemilik</th>
@@ -81,13 +81,14 @@ export default async function RabPage() {
                       <th className="th num">Baris</th>
                       <th className="th num">Dianggarkan</th>
                       <th className="th num">Realisasi</th>
+                      <th className="th num">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {daftar.map((r) => (
                       <tr key={r.id} className="hover:bg-slate-50">
                         <td className="td">
-                          <Link href={`/rab/${r.id}`} className="font-medium text-slate-900 hover:underline">
+                          <Link href={`/rab/${r.id}`} className="font-medium text-brand-700 hover:underline">
                             {r.scope}
                           </Link>
                           {r.bersama && <span className="ml-2 text-xs text-slate-500">ditanggung bersama</span>}
@@ -101,6 +102,11 @@ export default async function RabPage() {
                         <td className="td num">{r.jumlahBaris}</td>
                         <td className="td num">{formatRupiah(r.totalAnggaran)}</td>
                         <td className="td num">{formatRupiah(r.totalRealisasi)}</td>
+                        <td className="td num">
+                          <Link href={`/rab/${r.id}`} className="text-xs font-medium text-brand-700 hover:underline">
+                            {r.jumlahBaris === 0 ? 'Isi anggaran →' : 'Buka →'}
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

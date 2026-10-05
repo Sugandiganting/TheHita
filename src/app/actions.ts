@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { COA_TEMPLATE } from '@/lib/coa-template';
@@ -755,11 +756,17 @@ export async function saveBudget(_prev: ActionState, formData: FormData): Promis
 
   if (id) {
     await prisma.budget.update({ where: { id }, data: { scope, period, notes: notes || null } });
-  } else {
-    await prisma.budget.create({ data: { scope, period, notes: notes || null } });
+    segarkanRab();
+    return ok('RAB diperbarui.');
   }
+
+  const dibuat = await prisma.budget.create({ data: { scope, period, notes: notes || null } });
   segarkanRab();
-  return ok(id ? 'RAB diperbarui.' : 'RAB dibuat. Lanjutkan dengan mengisi rinciannya.');
+  // RAB yang baru dibuat masih kosong, dan satu-satunya hal yang masuk akal
+  // berikutnya adalah mengisi anggarannya per akun. Daripada meninggalkan
+  // pemakai di daftar sambil menebak di mana tempat mengisinya, antar langsung
+  // ke halaman rinciannya.
+  redirect(`/rab/${dibuat.id}`);
 }
 
 export async function setBudgetStatus(_prev: ActionState, formData: FormData): Promise<ActionState> {
