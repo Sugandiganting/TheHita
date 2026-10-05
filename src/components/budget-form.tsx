@@ -1,9 +1,11 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import { saveBudget, saveBudgetLine, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
+import { SearchableSelect, type PickerOption } from './searchable-select';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -70,7 +72,7 @@ export function BudgetForm({ scopes, defaultPeriod }: { scopes: ScopeOption[]; d
   );
 }
 
-export type AkunOption = { id: string; code: string; name: string };
+export type AkunOption = { id: string; code: string; name: string; type: string };
 
 /** Menambah atau mengubah satu baris anggaran di dalam sebuah RAB. */
 export function BudgetLineForm({
@@ -86,6 +88,17 @@ export function BudgetLineForm({
 }) {
   const [state, formAction] = useActionState(saveBudgetLine, initial);
 
+  const opsiAkun: PickerOption[] = useMemo(
+    () =>
+      accounts.map((a) => ({
+        value: a.id,
+        code: a.code,
+        label: a.name,
+        group: ACCOUNT_TYPE_LABEL[a.type as AccountType] ?? a.type,
+      })),
+    [accounts],
+  );
+
   if (disabled) {
     return (
       <p className="text-sm text-slate-500">
@@ -100,18 +113,15 @@ export function BudgetLineForm({
 
       <div>
         <label className="label" htmlFor="rab-akun">Akun beban</label>
-        <select
+        <SearchableSelect
           id="rab-akun"
           name="accountId"
-          className="input"
-          required
+          options={opsiAkun}
           defaultValue={values?.accountId ?? ''}
-        >
-          <option value="" disabled>Pilih akun…</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-          ))}
-        </select>
+          required
+          placeholder="— Pilih akun —"
+          searchPlaceholder="Ketik nomor atau nama akun…"
+        />
       </div>
 
       <div>

@@ -16,7 +16,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
     prisma.account.findMany({
       where: { isHeader: false, active: true, type: { in: ['EXPENSE', 'COGS'] } },
       orderBy: { code: 'asc' },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, type: true },
     }),
     prisma.budgetLine.findMany({ where: { budgetId: id }, select: { id: true, accountId: true } }),
   ]);
