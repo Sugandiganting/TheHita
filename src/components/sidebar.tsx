@@ -4,7 +4,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 
-type Item = { href: string; label: string; icon: ReactNode; desc?: string };
+type Item = {
+  href: string;
+  label: string;
+  icon?: ReactNode;
+  desc?: string;
+  /** Judul kecil pemisah di dalam grup; baris berurutan dengan judul sama disatukan. */
+  section?: string;
+  /** Halamannya belum ada — ditampilkan sebagai penanda, bukan tautan. */
+  soon?: boolean;
+};
 type Group = { key: string; label: string; icon: ReactNode; items: Item[] };
 type Entry = Item | Group;
 
@@ -30,49 +39,107 @@ const ICON = {
   coa: I(<><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="8" cy="5" r="1.4" /><circle cx="14" cy="12" r="1.4" /><circle cx="10" cy="19" r="1.4" /></>),
   unit: I(<><path d="M3 21V8l6-4 6 4v13" /><path d="M15 21V12h6v9" /><path d="M7 12h2M7 16h2" /></>),
   budget: I(<><path d="M4 4h16v16H4z" /><path d="M8 9h8M8 13h8M8 17h4" /></>),
+  logistic: I(<><path d="M3 8l9-4 9 4v8l-9 4-9-4z" /><path d="M3 8l9 4 9-4M12 12v8" /></>),
+  master: I(<><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>),
 };
 
+/**
+ * Menu disusun menurut pekerjaan yang dilakukan, bukan menurut urutan
+ * pembuatannya. Lima kelompok tetap: Akuntansi mencatat yang sudah terjadi,
+ * Logistik mengurus barang, Anggaran & Rencana melihat ke depan, Laporan
+ * membaca hasilnya, Master Data menyimpan yang jarang berubah.
+ *
+ * Yang belum dibangun tetap didaftarkan dengan tanda "segera" supaya tempatnya
+ * sudah jelas sejak sekarang dan tidak ada menu yang terlihat bisa diklik
+ * padahal halamannya belum ada.
+ */
 const MENU: Entry[] = [
   { href: '/', label: 'Dashboard', icon: ICON.dashboard },
   {
-    key: 'kas',
-    label: 'Cash and Bank',
-    icon: ICON.cash,
+    key: 'akuntansi',
+    label: 'Akuntansi',
+    icon: ICON.journal,
     items: [
-      { href: '/kas', label: 'Ringkasan Saldo', icon: ICON.cash, desc: 'Posisi kas & bank tiap cabang' },
-      { href: '/kas/transfer', label: 'Transfer Money', icon: ICON.transfer, desc: 'Pindah uang antar rekening' },
-      { href: '/kas/terima', label: 'Receive Money', icon: ICON.receive, desc: 'Catat uang masuk' },
-      { href: '/kas/bayar', label: 'Pay Money', icon: ICON.pay, desc: 'Catat uang keluar' },
+      { href: '/kas', label: 'Ringkasan Saldo', desc: 'Posisi kas & bank tiap cabang', section: 'Kas & Bank' },
+      { href: '/kas/transfer', label: 'Transfer Money', desc: 'Pindah uang antar rekening', section: 'Kas & Bank' },
+      { href: '/kas/terima', label: 'Receive Money', desc: 'Catat uang masuk', section: 'Kas & Bank' },
+      { href: '/kas/bayar', label: 'Pay Money', desc: 'Catat uang keluar', section: 'Kas & Bank' },
+      { href: '/transaksi', label: 'Jurnal Transaksi', desc: 'Entri cepat & jurnal manual', section: 'Jurnal' },
+      { href: '/impor', label: 'Impor Data', desc: 'Tarik dari ekspor GuestPro', section: 'Jurnal' },
     ],
   },
-  { href: '/transaksi', label: 'Jurnal Transaksi', icon: ICON.journal },
-  { href: '/impor', label: 'Impor Data', icon: ICON.receive },
-  { href: '/laporan', label: 'Laporan', icon: ICON.report },
-  { href: '/peramalan', label: 'Peramalan', icon: ICON.forecast },
-  { href: '/proyek', label: 'Proyek', icon: ICON.project },
   {
-    key: 'rab',
-    label: 'RAB',
+    key: 'logistik',
+    label: 'Logistik',
+    icon: ICON.logistic,
+    items: [
+      { href: '/logistik/receiving', label: 'Receiving', desc: 'Barang masuk dari pemasok', soon: true },
+      { href: '/logistik/issuing', label: 'Issuing', desc: 'Barang keluar ke departemen', soon: true },
+      { href: '/logistik/barang', label: 'Master Barang', desc: 'Daftar item & satuan', soon: true },
+    ],
+  },
+  {
+    key: 'rencana',
+    label: 'Anggaran & Rencana',
     icon: ICON.budget,
     items: [
-      { href: '/rab', label: 'Input RAB', icon: ICON.budget, desc: 'Susun anggaran per bulan' },
-      { href: '/rab/laporan', label: 'Laporan RAB', icon: ICON.report, desc: 'Anggaran vs realisasi' },
+      { href: '/rab', label: 'Input RAB', desc: 'Susun anggaran per bulan' },
+      { href: '/peramalan', label: 'Peramalan', desc: 'Proyeksi kas & kemampuan beli' },
+      { href: '/proyek', label: 'Proyek', desc: 'Rencana belanja besar' },
     ],
   },
-  { href: '/coa', label: 'Chart of Account', icon: ICON.coa },
-  { href: '/unit', label: 'Unit Usaha', icon: ICON.unit },
+  {
+    key: 'laporan',
+    label: 'Laporan',
+    icon: ICON.report,
+    items: [
+      { href: '/laporan', label: 'Laporan Keuangan', desc: 'Laba rugi, neraca, arus kas' },
+      { href: '/rab/laporan', label: 'Laporan RAB', desc: 'Anggaran vs realisasi' },
+      { href: '/logistik/laporan', label: 'Laporan Logistik', desc: 'Pemakaian & kenaikan harga', soon: true },
+    ],
+  },
+  {
+    key: 'master',
+    label: 'Master Data',
+    icon: ICON.master,
+    items: [
+      { href: '/coa', label: 'Chart of Account', desc: 'Daftar akun' },
+      { href: '/unit', label: 'Unit Usaha', desc: 'Cabang & jenis usaha' },
+    ],
+  },
 ];
 
 const STORAGE_KEY = 'hita.sidebar.collapsed';
 const GROUP_KEY = 'hita.sidebar.groups';
 
+const SEMUA_HREF = MENU.flatMap((e) =>
+  isGroup(e) ? e.items.filter((i) => !i.soon).map((i) => i.href) : [e.href],
+);
+
 const cocok = (href: string, pathname: string) =>
   href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');
 
+/**
+ * Href terpanjang yang cocok dengan alamat sekarang, bukan yang pertama ketemu.
+ * "/rab" dan "/rab/laporan" kini berada di kelompok yang berbeda, dan tanpa
+ * aturan ini membuka Laporan RAB akan ikut menyalakan Input RAB sekaligus
+ * membuka kelompok Anggaran & Rencana. Hal yang sama berlaku untuk "/kas"
+ * terhadap "/kas/transfer".
+ */
+function hrefAktif(pathname: string): string | null {
+  let terbaik: string | null = null;
+  for (const href of SEMUA_HREF) {
+    if (cocok(href, pathname) && (terbaik === null || href.length > terbaik.length)) terbaik = href;
+  }
+  return terbaik;
+}
+
 /** Grup yang memuat halaman yang sedang dibuka, bila ada. */
 function grupHalaman(pathname: string): string | null {
+  const href = hrefAktif(pathname);
+  if (href === null) return null;
   for (const e of MENU) {
-    if (isGroup(e) && e.items.some((i) => cocok(i.href, pathname))) return e.key;
+    if (isGroup(e) && e.items.some((i) => i.href === href)) return e.key;
   }
   return null;
 }
@@ -82,7 +149,7 @@ export function Shell({ children }: { children: ReactNode }) {
   // Di layar lebar sidebar mengecil jadi ikon; di ponsel ia menjadi laci geser.
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<string[]>(['kas']);
+  const [openGroups, setOpenGroups] = useState<string[]>(['akuntansi']);
 
   useEffect(() => {
     try {
@@ -123,7 +190,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // Tutup laci setiap kali pindah halaman.
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  const active = (href: string) => cocok(href, pathname);
+  const aktif = hrefAktif(pathname);
+  const active = (href: string) => href === aktif;
   const groupActive = (g: Group) => g.items.some((i) => active(i.href));
 
   const toggleGroup = (key: string) =>
@@ -228,19 +296,43 @@ export function Shell({ children }: { children: ReactNode }) {
 
                 {open && (
                   <div className={`mt-0.5 space-y-0.5 ${collapsed ? 'lg:hidden' : 'border-l border-slate-200 pl-3 ml-5'}`}>
-                    {entry.items.map((item) => {
+                    {entry.items.map((item, i) => {
                       const on = active(item.href);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={`block rounded-lg px-3 py-1.5 text-sm transition ${
-                            on ? 'bg-brand-50 font-medium text-brand-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                          }`}
-                        >
+                      const judul = item.section && item.section !== entry.items[i - 1]?.section;
+                      const isi = (
+                        <>
                           {item.label}
+                          {item.soon && (
+                            <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                              segera
+                            </span>
+                          )}
                           {item.desc && <span className="block text-[11px] font-normal text-slate-400">{item.desc}</span>}
-                        </Link>
+                        </>
+                      );
+
+                      return (
+                        <div key={item.href}>
+                          {judul && (
+                            <p className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              {item.section}
+                            </p>
+                          )}
+                          {item.soon ? (
+                            <span className="block cursor-default rounded-lg px-3 py-1.5 text-sm text-slate-400">
+                              {isi}
+                            </span>
+                          ) : (
+                            <Link
+                              href={item.href}
+                              className={`block rounded-lg px-3 py-1.5 text-sm transition ${
+                                on ? 'bg-brand-50 font-medium text-brand-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                              }`}
+                            >
+                              {isi}
+                            </Link>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
