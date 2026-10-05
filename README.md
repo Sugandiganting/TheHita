@@ -110,10 +110,16 @@ proyek contoh yang dilewati.
 |---|---|
 | `npm run dev` | Menjalankan untuk pemakaian sehari-hari / pengembangan |
 | `npm run build && npm start` | Menjalankan versi produksi (lebih cepat) |
-| `npm test` | Menjalankan 25 pengujian mesin peramalan & aturan akuntansi |
+| `npm test` | Menjalankan pengujian mesin peramalan & aturan akuntansi |
 | `npm run db:reset` | Mengosongkan database lalu mengisi ulang data awal |
-| `npx prisma studio` | Membuka database secara langsung bila perlu koreksi manual |
+| `npm run db:generate` | Menyusun ulang Prisma Client setelah skema database berubah |
+| `npm run db:studio` | Membuka database secara langsung bila perlu koreksi manual |
 | `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
+
+Jalankan semuanya lewat `npm run`, bukan `npx`. Perintah `npm run` memakai Prisma
+yang terpasang di folder projek ini (versi 5), sedangkan `npx prisma` akan mengunduh
+versi terbaru dari internet bila belum terpasang — paket itu kini alat yang berbeda
+dan akan menolak dengan `No command registered for 'generate'`.
 
 ### Mengubah Sales Summary Report (PDF) menjadi jurnal
 

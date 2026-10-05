@@ -13,6 +13,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "presetup": "node scripts/siapkan-env.mjs",

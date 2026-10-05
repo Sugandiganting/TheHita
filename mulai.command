@@ -58,7 +58,9 @@ if [ ! -f prisma/hita.db ]; then
   echo -e "${HIJAU}[OK]${NORMAL} Database siap"
 else
   echo -e "${HIJAU}[OK]${NORMAL} Database ditemukan — data Anda aman"
-  npx prisma generate > /dev/null 2>&1
+  # Lewat npm run, bukan npx: npx mengunduh paket prisma terbaru dari internet
+  # bila belum terpasang, dan paket itu kini alat lain yang tidak punya generate.
+  npm run db:generate > /dev/null 2>&1
 fi
 
 # --- 4. Jalankan --------------------------------------------------------
