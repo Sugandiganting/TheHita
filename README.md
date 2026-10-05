@@ -71,17 +71,26 @@ cd TheHita
 # 2. Pasang komponen yang dibutuhkan
 npm install
 
-# 3. Siapkan file konfigurasi
-cp .env.example .env
-
-# 4. Buat database + isi COA, unit usaha, dan data contoh 18 bulan
+# 3. Buat database + isi COA, unit usaha, dan data contoh 18 bulan
 npm run setup
 
-# 5. Jalankan
+# 4. Jalankan
 npm run dev
 ```
 
 Buka <http://localhost:3000> di browser.
+
+Berkas `.env` dibuat sendiri dari `.env.example` saat perintah `npm run setup`,
+`npm run dev`, `npm run build`, atau `npm start` pertama kali dijalankan.
+
+### Lewat unduhan ZIP
+
+Kalau tidak memakai git, tombol **Code -> Download ZIP** di halaman GitHub juga
+bisa. Isinya kode lengkap, tetapi dua berkas sengaja tidak ikut karena
+di-*ignore*: `.env` dan database `prisma/hita.db`. Yang pertama dibuat otomatis;
+yang kedua harus disalin sendiri dari folder lama, kalau tidak sistemnya akan
+terbuka dengan data kosong. Setelah itu jalankan `npm install` lalu `npm run dev`
+seperti biasa.
 
 ### Mulai dari data kosong
 

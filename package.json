@@ -4,14 +4,18 @@
   "private": true,
   "description": "Sistem akuntansi multi-unit & peramalan arus kas untuk The Hita Hospitality Group",
   "scripts": {
+    "predev": "node scripts/siapkan-env.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/siapkan-env.mjs",
     "build": "prisma generate && next build",
+    "prestart": "node scripts/siapkan-env.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "presetup": "node scripts/siapkan-env.mjs",
     "setup": "prisma generate && prisma db push && npm run db:seed",
     "test": "node --import tsx --test tests/*.test.ts",
     "impor": "tsx scripts/impor.ts"
