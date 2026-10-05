@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { formatRupiah } from '@/lib/format';
+import { MoneyInput } from './money-input';
 
 export type ForecastControlValues = {
   unit: string;
@@ -184,13 +185,11 @@ export function ForecastControls({
 
       <div>
         <label className="label" htmlFor="f-buffer">Saldo kas minimum yang dijaga</label>
-        <input
+        <MoneyInput
           id="f-buffer"
-          inputMode="numeric"
-          className="input"
           value={draft.buffer === 0 ? '' : String(draft.buffer)}
-          placeholder="300000000"
-          onChange={(e) => setDraft({ ...draft, buffer: Number(e.target.value.replace(/[^\d]/g, '')) || 0 })}
+          placeholder="300.000.000"
+          onChange={(v) => setDraft({ ...draft, buffer: Number(v) || 0 })}
           onBlur={() => apply(draft)}
         />
         <p className="mt-1 text-xs text-slate-500">

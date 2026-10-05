@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { saveUnit, type ActionState } from '@/app/actions';
 import { UNIT_TYPE_LABEL } from '@/lib/accounting';
 import { formatRupiah } from '@/lib/format';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -57,13 +58,11 @@ export function UnitForm() {
 
       <div>
         <label className="label" htmlFor="u-cash">Saldo kas awal</label>
-        <input
+        <MoneyInput
           id="u-cash"
           name="openingCash"
-          inputMode="numeric"
-          className="input"
           value={openingCash}
-          onChange={(e) => setOpeningCash(e.target.value.replace(/[^\d]/g, ''))}
+          onChange={setOpeningCash}
           placeholder="0"
         />
         <p className="mt-1 text-xs text-slate-500">

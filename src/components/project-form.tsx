@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { saveProject, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { monthlyInstallment } from '@/lib/forecast';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -126,13 +127,11 @@ export function ProjectForm({
           </div>
           <div>
             <label className="label" htmlFor="p-famount">Jumlah dana masuk</label>
-            <input
+            <MoneyInput
               id="p-famount"
               name="fundingAmount"
-              inputMode="numeric"
-              className="input"
               value={fundingAmount}
-              onChange={(e) => setFundingAmount(e.target.value.replace(/[^\d]/g, ''))}
+              onChange={setFundingAmount}
               disabled={fundingType === 'NONE'}
             />
             {principal > 0 && <p className="mt-1 text-xs text-slate-500">{formatRupiah(principal)}</p>}
@@ -197,22 +196,18 @@ export function ProjectForm({
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="label" htmlFor="p-urev">Tambahan pendapatan/bulan</label>
-            <input
+            <MoneyInput
               id="p-urev"
               name="upliftRevenueMonthly"
-              inputMode="numeric"
-              className="input"
-              defaultValue={values.upliftRevenueMonthly || ''}
+              defaultValue={String(values.upliftRevenueMonthly || '')}
             />
           </div>
           <div>
             <label className="label" htmlFor="p-uexp">Tambahan biaya/bulan</label>
-            <input
+            <MoneyInput
               id="p-uexp"
               name="upliftExpenseMonthly"
-              inputMode="numeric"
-              className="input"
-              defaultValue={values.upliftExpenseMonthly || ''}
+              defaultValue={String(values.upliftExpenseMonthly || '')}
             />
           </div>
           <div>

@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { addCostItem, type ActionState } from '@/app/actions';
 import { SearchableSelect } from './searchable-select';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -36,7 +37,7 @@ export function CostItemForm({
 
       <div>
         <label className="label" htmlFor="c-amount">Nominal (Rp)</label>
-        <input id="c-amount" name="amount" inputMode="numeric" className="input" placeholder="420000000" required />
+        <MoneyInput id="c-amount" name="amount" placeholder="420.000.000" required />
       </div>
 
       <div>

@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/format';
 import type { CashAccountBalance } from '@/lib/queries';
 import { SearchableSelect, type PickerOption } from './searchable-select';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -185,12 +186,12 @@ export function MoneyForm({
                     </select>
                   </td>
                   <td className="td">
-                    <input
+                    <MoneyInput
                       name="lineAmount"
-                      inputMode="numeric"
                       className="input text-right"
+                      ariaLabel="Nominal"
                       value={row.amount}
-                      onChange={(e) => update(row.key, { amount: e.target.value.replace(/[^\d]/g, '') })}
+                      onChange={(v) => update(row.key, { amount: v })}
                     />
                   </td>
                   <td className="td">

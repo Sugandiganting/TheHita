@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/format';
 import type { AccountOption, UnitOption } from './quick-entry-form';
 import { SearchableSelect, type PickerOption } from './searchable-select';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -124,25 +125,21 @@ export function JournalForm({
                   </select>
                 </td>
                 <td className="td">
-                  <input
+                  <MoneyInput
                     name="lineDebit"
-                    inputMode="numeric"
                     className="input text-right"
+                    ariaLabel="Debit"
                     value={row.debit}
-                    onChange={(e) =>
-                      update(row.key, { debit: e.target.value.replace(/[^\d]/g, ''), credit: '' })
-                    }
+                    onChange={(v) => update(row.key, { debit: v, credit: '' })}
                   />
                 </td>
                 <td className="td">
-                  <input
+                  <MoneyInput
                     name="lineCredit"
-                    inputMode="numeric"
                     className="input text-right"
+                    ariaLabel="Kredit"
                     value={row.credit}
-                    onChange={(e) =>
-                      update(row.key, { credit: e.target.value.replace(/[^\d]/g, ''), debit: '' })
-                    }
+                    onChange={(v) => update(row.key, { credit: v, debit: '' })}
                   />
                 </td>
                 <td className="td">

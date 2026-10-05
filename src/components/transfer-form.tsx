@@ -6,6 +6,7 @@ import { createTransfer, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import type { CashAccountBalance } from '@/lib/queries';
 import { SearchableSelect, type PickerOption } from './searchable-select';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -96,14 +97,13 @@ export function TransferForm({
 
       <div>
         <label className="label" htmlFor="t-amount">Nominal (Rp)</label>
-        <input
+        <MoneyInput
           id="t-amount"
           name="amount"
-          inputMode="numeric"
           className="input sm:max-w-xs"
-          placeholder="25000000"
+          placeholder="25.000.000"
           value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
+          onChange={setAmount}
           required
         />
         {nominal > 0 && <p className="mt-1 text-xs text-slate-500">{formatRupiah(nominal)}</p>}

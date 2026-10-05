@@ -3,9 +3,9 @@
 import { useActionState, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import { saveBudget, saveBudgetLine, type ActionState } from '@/app/actions';
-import { formatRupiah } from '@/lib/format';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 import { SearchableSelect, type PickerOption } from './searchable-select';
+import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -126,17 +126,15 @@ export function BudgetLineForm({
 
       <div>
         <label className="label" htmlFor="rab-amount">Dianggarkan</label>
-        <input
+        <MoneyInput
           id="rab-amount"
           name="amount"
-          inputMode="numeric"
-          className="input"
-          placeholder="5000000"
+          placeholder="5.000.000"
           defaultValue={values ? String(values.amount) : ''}
           required
         />
         <p className="mt-1 text-xs text-slate-500">
-          {values ? formatRupiah(values.amount) : 'Isi dalam rupiah penuh, tanpa titik.'}
+          Titik ribuan muncul sendiri sambil diketik.
         </p>
       </div>
 

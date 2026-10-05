@@ -6,6 +6,7 @@ import { createQuickEntry, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { SearchableSelect, type PickerOption } from './searchable-select';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
+import { MoneyInput } from './money-input';
 
 export type AccountOption = {
   id: string;
@@ -102,14 +103,12 @@ export function QuickEntryForm({
 
       <div>
         <label className="label" htmlFor="q-amount">Nominal (Rp)</label>
-        <input
+        <MoneyInput
           id="q-amount"
           name="amount"
-          inputMode="numeric"
-          className="input"
-          placeholder="1500000"
+          placeholder="1.500.000"
           value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
+          onChange={setAmount}
           required
         />
         {numericAmount > 0 && <p className="mt-1 text-xs text-slate-500">{formatRupiah(numericAmount)}</p>}

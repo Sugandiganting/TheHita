@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { advisePurchase, type PurchaseCadence, type PurchaseContext, type PurchasePlan } from '@/lib/forecast';
 import { formatPeriod, formatRupiah } from '@/lib/format';
+import { MoneyInput } from './money-input';
 
 /**
  * "Uangnya cukup atau tidak?" — pemeriksa kemampuan beli.
@@ -81,13 +82,11 @@ export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="beli-harga">Harga barang</label>
-          <input
+          <MoneyInput
             id="beli-harga"
-            inputMode="numeric"
-            className="input"
-            placeholder="150000000"
+            placeholder="150.000.000"
             value={harga === 0 ? '' : String(harga)}
-            onChange={(e) => setHarga(Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+            onChange={(v) => setHarga(Number(v) || 0)}
           />
           <p className="mt-1 text-xs text-slate-500">
             {harga > 0 ? formatRupiah(harga) : 'Isi harga barang atau proyek yang ingin dibeli.'}
