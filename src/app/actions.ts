@@ -794,7 +794,11 @@ export async function deleteBudget(_prev: ActionState, formData: FormData): Prom
   }
   await prisma.budget.delete({ where: { id } });
   segarkanRab();
-  return ok(`RAB ${budget.scope} ${budget.period} dihapus.`);
+  // Tombol hapus hanya ada di halaman RAB itu sendiri, jadi setelah terhapus
+  // alamat yang sedang dibuka tidak menunjuk apa pun lagi dan Next.js
+  // menjawabnya dengan 404. Antar kembali ke daftar, di mana hilangnya baris
+  // tadi sudah menjadi bukti bahwa penghapusan berhasil.
+  redirect('/rab');
 }
 
 export async function saveBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -857,7 +861,7 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
   });
   if (sudahAda) return fail(`RAB ${budget.scope} untuk ${period} sudah ada.`);
 
-  await prisma.budget.create({
+  const salinan = await prisma.budget.create({
     data: {
       scope: budget.scope,
       period,
@@ -867,5 +871,7 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
     },
   });
   segarkanRab();
-  return ok(`Disalin ke ${period} sebagai draf, ${budget.lines.length} baris.`);
+  // Salinan dibuat untuk disesuaikan, bukan sekadar ada. Buka langsung supaya
+  // judul halamannya sendiri yang memberi tahu bulan mana yang sedang dibuka.
+  redirect(`/rab/${salinan.id}`);
 }
