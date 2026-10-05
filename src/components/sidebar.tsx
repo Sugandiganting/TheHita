@@ -64,6 +64,18 @@ const MENU: Entry[] = [
 ];
 
 const STORAGE_KEY = 'hita.sidebar.collapsed';
+const GROUP_KEY = 'hita.sidebar.groups';
+
+const cocok = (href: string, pathname: string) =>
+  href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');
+
+/** Grup yang memuat halaman yang sedang dibuka, bila ada. */
+function grupHalaman(pathname: string): string | null {
+  for (const e of MENU) {
+    if (isGroup(e) && e.items.some((i) => cocok(i.href, pathname))) return e.key;
+  }
+  return null;
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -75,10 +87,30 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem(STORAGE_KEY) === '1');
+      const tersimpan = localStorage.getItem(GROUP_KEY);
+      if (tersimpan !== null) setOpenGroups(JSON.parse(tersimpan));
     } catch {
       // Penyimpanan browser bisa diblokir — abaikan, pakai nilai bawaan.
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUP_KEY, JSON.stringify(openGroups));
+    } catch {
+      /* diabaikan */
+    }
+  }, [openGroups]);
+
+  /**
+   * Pindah ke halaman di dalam sebuah grup akan membuka grup itu, supaya
+   * pemakai melihat di mana dirinya berada. Hanya saat berpindah — selebihnya
+   * tombolnya yang menentukan, termasuk untuk menutup grup halaman ini sendiri.
+   */
+  useEffect(() => {
+    const key = grupHalaman(pathname);
+    if (key) setOpenGroups((g) => (g.includes(key) ? g : [...g, key]));
+  }, [pathname]);
 
   useEffect(() => {
     try {
@@ -91,7 +123,7 @@ export function Shell({ children }: { children: ReactNode }) {
   // Tutup laci setiap kali pindah halaman.
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  const active = (href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/'));
+  const active = (href: string) => cocok(href, pathname);
   const groupActive = (g: Group) => g.items.some((i) => active(i.href));
 
   const toggleGroup = (key: string) =>
@@ -171,7 +203,7 @@ export function Shell({ children }: { children: ReactNode }) {
               );
             }
 
-            const open = openGroups.includes(entry.key) || groupActive(entry);
+            const open = openGroups.includes(entry.key);
             return (
               <div key={entry.key}>
                 <button
