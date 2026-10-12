@@ -273,3 +273,77 @@ model BudgetLine {
   @@index([budgetId])
   @@index([accountId])
 }
+
+/// Rencana kas satu bulan: proyeksi uang masuk, komitmen yang harus dibayar,
+/// dan pembagian plafon belanja. Diperbarui tiap minggu lewat CashCheckpoint.
+model CashPlan {
+  id     String @id @default(cuid())
+  /// Format YYYY-MM
+  period String @unique
+
+  /// Proyeksi uang masuk sebulan penuh. null = pakai usulan dari riwayat.
+  incomePessimistic Float?
+  incomeNormal      Float?
+  incomeOptimistic  Float?
+
+  notes String?
+
+  commitments CashCommitment[]
+  checkpoints CashCheckpoint[]
+  categories  SpendCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Pengeluaran yang sudah pasti dan tidak boleh dipakai untuk belanja lain —
+/// cicilan bank, gaji, service pegawai.
+model CashCommitment {
+  id     String  @id @default(cuid())
+  planId String
+  label  String
+  amount Float   @default(0)
+  /// Tanggal jatuh tempo dalam bulan, 1–31. null bila belum pasti.
+  dueDay Int?
+  paid   Boolean @default(false)
+  /// Ikut tersalin saat rencana bulan berikutnya dibuat.
+  recurring Boolean @default(true)
+  sort   Int     @default(0)
+
+  plan CashPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+/// Posisi kas yang dilaporkan pada satu tanggal — dasar perhitungan minggu itu.
+model CashCheckpoint {
+  id           String   @id @default(cuid())
+  planId       String
+  date         DateTime
+  /// Saldo seluruh rekening pada tanggal itu, diinput manual.
+  cashOnHand   Float
+  /// Uang masuk kumulatif bulan ini sampai tanggal itu.
+  incomeToDate Float
+  notes        String?
+
+  plan CashPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([planId, date])
+  @@index([planId])
+}
+
+/// Pembagian plafon belanja mingguan, mis. Purchasing dan petty cash.
+model SpendCategory {
+  id     String @id @default(cuid())
+  planId String
+  label  String
+  /// Porsi relatif; dinormalkan terhadap jumlah seluruh kategori.
+  weight Float  @default(1)
+  sort   Int    @default(0)
+
+  plan CashPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}

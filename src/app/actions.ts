@@ -8,6 +8,7 @@ import { COA_TEMPLATE } from '@/lib/coa-template';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import { periodeBerikutnya } from '@/lib/rab';
+import { toPeriod } from '@/lib/period';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -874,4 +875,206 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
   // Salinan dibuat untuk disesuaikan, bukan sekadar ada. Buka langsung supaya
   // judul halamannya sendiri yang memberi tahu bulan mana yang sedang dibuka.
   redirect(`/rab/${salinan.id}`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rencana kas mingguan                                                */
+/* ------------------------------------------------------------------ */
+
+function segarkanRencanaKas() {
+  revalidatePath('/rencana-kas');
+}
+
+/** Dipakai saat bulan pertama kali dibuat dan belum ada bulan sebelumnya. */
+const KATEGORI_BAWAAN = [
+  { label: 'Purchasing', weight: 20, sort: 0 },
+  { label: 'Petty cash & HR', weight: 7, sort: 1 },
+];
+
+function angka(formData: FormData, nama: string): number {
+  return round(Number(String(formData.get(nama) ?? '').replace(/[^\d.-]/g, '')));
+}
+
+/** Kosong berarti "pakai usulan sistem", bukan nol. */
+function angkaAtauNull(formData: FormData, nama: string): number | null {
+  const mentah = String(formData.get(nama) ?? '').replace(/[^\d.-]/g, '');
+  if (mentah === '') return null;
+  const n = round(Number(mentah));
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function createCashPlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const period = String(formData.get('period') ?? '').trim();
+  if (!/^\d{4}-\d{2}$/.test(period)) return fail('Bulan wajib diisi.');
+
+  const kembar = await prisma.cashPlan.findUnique({ where: { period }, select: { id: true } });
+  if (kembar) return fail(`Rencana kas ${period} sudah ada. Buka yang itu.`);
+
+  // Komitmen dan kategori diwarisi dari bulan terakhir yang ada, supaya cicilan
+  // dan gaji tidak perlu diketik ulang tiap bulan.
+  const sebelumnya = await prisma.cashPlan.findFirst({
+    where: { period: { lt: period } },
+    orderBy: { period: 'desc' },
+    include: { commitments: true, categories: true },
+  });
+
+  const komitmen = (sebelumnya?.commitments ?? [])
+    .filter((k) => k.recurring)
+    .map((k) => ({ label: k.label, amount: k.amount, dueDay: k.dueDay, recurring: true, sort: k.sort }));
+  const kategori = sebelumnya?.categories.length
+    ? sebelumnya.categories.map((k) => ({ label: k.label, weight: k.weight, sort: k.sort }))
+    : KATEGORI_BAWAAN;
+
+  await prisma.cashPlan.create({
+    data: {
+      period,
+      commitments: { create: komitmen },
+      categories: { create: kategori },
+    },
+  });
+  segarkanRencanaKas();
+  return ok(
+    sebelumnya
+      ? `Rencana ${period} dibuat, ${komitmen.length} komitmen disalin dari ${sebelumnya.period}.`
+      : `Rencana ${period} dibuat. Isi proyeksi dan komitmennya.`,
+  );
+}
+
+export async function saveCashProjection(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const plan = await prisma.cashPlan.findUnique({ where: { id }, select: { id: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+
+  const nilai = {
+    incomePessimistic: angkaAtauNull(formData, 'pesimis'),
+    incomeNormal: angkaAtauNull(formData, 'normal'),
+    incomeOptimistic: angkaAtauNull(formData, 'optimis'),
+  };
+  const terisi = Object.values(nilai).filter((v) => v !== null) as number[];
+  if (terisi.some((v) => v < 0)) return fail('Proyeksi tidak boleh negatif.');
+  if (nilai.incomePessimistic !== null && nilai.incomeOptimistic !== null
+      && nilai.incomePessimistic > nilai.incomeOptimistic) {
+    return fail('Pesimis tidak boleh lebih besar daripada optimis.');
+  }
+
+  await prisma.cashPlan.update({
+    where: { id },
+    data: { ...nilai, notes: String(formData.get('notes') ?? '').trim() || null },
+  });
+  segarkanRencanaKas();
+  return ok('Proyeksi disimpan.');
+}
+
+export async function saveCheckpoint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const planId = String(formData.get('planId') ?? '');
+  const tanggalTeks = String(formData.get('date') ?? '');
+  const plan = await prisma.cashPlan.findUnique({ where: { id: planId }, select: { period: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalTeks)) return fail('Tanggal wajib diisi.');
+
+  const date = parseDate(tanggalTeks);
+  if (toPeriod(date) !== plan.period) return fail(`Tanggal harus berada di bulan ${plan.period}.`);
+
+  const cashOnHand = angka(formData, 'cashOnHand');
+  const incomeToDate = angka(formData, 'incomeToDate');
+  if (!Number.isFinite(cashOnHand) || cashOnHand < 0) return fail('Saldo kas tidak boleh negatif.');
+  if (!Number.isFinite(incomeToDate) || incomeToDate < 0) return fail('Uang masuk tidak boleh negatif.');
+
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+  // Satu laporan per tanggal; mengirim ulang tanggal yang sama berarti koreksi.
+  await prisma.cashCheckpoint.upsert({
+    where: { planId_date: { planId, date } },
+    update: { cashOnHand, incomeToDate, notes },
+    create: { planId, date, cashOnHand, incomeToDate, notes },
+  });
+  segarkanRencanaKas();
+  return ok('Posisi kas disimpan.');
+}
+
+export async function deleteCheckpoint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.cashCheckpoint.findUnique({ where: { id }, select: { id: true } });
+  if (!ada) return fail('Laporan posisi kas tidak ditemukan.');
+  await prisma.cashCheckpoint.delete({ where: { id } });
+  segarkanRencanaKas();
+  return ok('Laporan posisi kas dihapus.');
+}
+
+export async function saveCommitment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const planId = String(formData.get('planId') ?? '');
+  const id = String(formData.get('id') ?? '');
+  const label = String(formData.get('label') ?? '').trim();
+  const amount = angka(formData, 'amount');
+  const dueDayMentah = String(formData.get('dueDay') ?? '').trim();
+  const dueDay = dueDayMentah === '' ? null : Number(dueDayMentah);
+  const recurring = formData.get('recurring') === 'on';
+
+  if (!label) return fail('Nama komitmen wajib diisi.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal harus lebih dari nol.');
+  if (dueDay !== null && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) {
+    return fail('Tanggal jatuh tempo harus antara 1 dan 31.');
+  }
+
+  if (id) {
+    await prisma.cashCommitment.update({ where: { id }, data: { label, amount, dueDay, recurring } });
+  } else {
+    const plan = await prisma.cashPlan.findUnique({ where: { id: planId }, select: { id: true } });
+    if (!plan) return fail('Rencana kas tidak ditemukan.');
+    const jumlah = await prisma.cashCommitment.count({ where: { planId } });
+    await prisma.cashCommitment.create({ data: { planId, label, amount, dueDay, recurring, sort: jumlah } });
+  }
+  segarkanRencanaKas();
+  return ok(id ? 'Komitmen diperbarui.' : 'Komitmen ditambahkan.');
+}
+
+export async function toggleCommitmentPaid(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const k = await prisma.cashCommitment.findUnique({ where: { id }, select: { paid: true, label: true } });
+  if (!k) return fail('Komitmen tidak ditemukan.');
+  await prisma.cashCommitment.update({ where: { id }, data: { paid: !k.paid } });
+  segarkanRencanaKas();
+  return ok(k.paid ? `${k.label} ditandai belum dibayar.` : `${k.label} ditandai sudah dibayar.`);
+}
+
+export async function deleteCommitment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.cashCommitment.findUnique({ where: { id }, select: { id: true } });
+  if (!ada) return fail('Komitmen tidak ditemukan.');
+  await prisma.cashCommitment.delete({ where: { id } });
+  segarkanRencanaKas();
+  return ok('Komitmen dihapus.');
+}
+
+export async function saveCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const planId = String(formData.get('planId') ?? '');
+  const label = String(formData.get('label') ?? '').trim();
+  const weight = Number(String(formData.get('weight') ?? '').replace(/[^\d.]/g, ''));
+
+  if (!label) return fail('Nama kategori wajib diisi.');
+  if (!Number.isFinite(weight) || weight <= 0) return fail('Porsi harus lebih dari nol.');
+
+  const plan = await prisma.cashPlan.findUnique({ where: { id: planId }, select: { id: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+  const jumlah = await prisma.spendCategory.count({ where: { planId } });
+  await prisma.spendCategory.create({ data: { planId, label, weight, sort: jumlah } });
+  segarkanRencanaKas();
+  return ok('Kategori ditambahkan.');
+}
+
+export async function deleteCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { id: true } });
+  if (!ada) return fail('Kategori tidak ditemukan.');
+  await prisma.spendCategory.delete({ where: { id } });
+  segarkanRencanaKas();
+  return ok('Kategori dihapus.');
+}
+
+export async function deleteCashPlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const plan = await prisma.cashPlan.findUnique({ where: { id }, select: { period: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+  await prisma.cashPlan.delete({ where: { id } });
+  segarkanRencanaKas();
+  redirect('/rencana-kas');
 }

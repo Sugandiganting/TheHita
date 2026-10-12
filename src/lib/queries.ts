@@ -9,6 +9,9 @@ import { isProfitLoss, round, signedBalance } from './accounting';
 import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
 import { addMonths, currentPeriod, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
+import {
+  SKENARIO, hitungRencana, usulkanProyeksi, type Rencana, type Skenario,
+} from './rencana-kas';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -624,5 +627,102 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     bersama: scopeBersamaKah(budget.scope),
     cabang: cabangDalamScope(budget.scope),
     ringkasan: ringkasRab(baris, round),
+  };
+}
+
+export type RencanaKasDetail = {
+  id: string;
+  period: Period;
+  notes: string | null;
+  /** Proyeksi yang tersimpan; null berarti memakai usulan. */
+  tersimpan: Record<Skenario, number | null>;
+  usulan: Record<Skenario, number> | null;
+  /** Yang benar-benar dipakai menghitung: tersimpan bila ada, selain itu usulan. */
+  dipakai: Record<Skenario, number>;
+  riwayatMasuk: { period: Period; cashIn: number }[];
+  komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
+  kategori: { id: string; label: string; weight: number }[];
+  checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
+  terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
+  /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
+  menurutJurnal: { saldoKas: number; masukBulanIni: number };
+  rencana: Rencana | null;
+};
+
+export async function getRencanaKasPeriods(): Promise<Period[]> {
+  const rows = await prisma.cashPlan.findMany({ select: { period: true }, orderBy: { period: 'desc' } });
+  return rows.map((r) => r.period);
+}
+
+/** Uang masuk bulanan, dipakai sebagai dasar usulan tiga skenario. */
+async function riwayatUangMasuk(sebelum: Period, bulan = 6): Promise<{ period: Period; cashIn: number }[]> {
+  const mulai = addMonths(sebelum, -bulan);
+  const selesai = addMonths(sebelum, -1);
+  const actuals = await getMonthlyActuals(mulai, selesai);
+  return actuals.map((a) => ({ period: a.period, cashIn: round(a.cashIn) }));
+}
+
+export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | null> {
+  const plan = await prisma.cashPlan.findUnique({
+    where: { period },
+    include: {
+      commitments: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
+      categories: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
+      checkpoints: { orderBy: { date: 'desc' } },
+    },
+  });
+  if (!plan) return null;
+
+  const riwayat = await riwayatUangMasuk(period);
+  const usulan = usulkanProyeksi(riwayat.map((r) => r.cashIn));
+
+  const tersimpan: Record<Skenario, number | null> = {
+    PESIMIS: plan.incomePessimistic,
+    NORMAL: plan.incomeNormal,
+    OPTIMIS: plan.incomeOptimistic,
+  };
+  // Usulan hanya mengisi yang dikosongkan; angka yang sudah diketik menang.
+  const dipakai = Object.fromEntries(
+    SKENARIO.map((s) => [s, tersimpan[s] ?? usulan?.[s] ?? 0]),
+  ) as Record<Skenario, number>;
+
+  const terakhir = plan.checkpoints[0] ?? null;
+  const [saldoKas, bulanIni] = await Promise.all([
+    getCashBalance(period),
+    getMonthlyActuals(period, period),
+  ]);
+
+  const rencana = terakhir
+    ? hitungRencana({
+        period,
+        tanggal: terakhir.date,
+        saldoKas: terakhir.cashOnHand,
+        masukSampaiKini: terakhir.incomeToDate,
+        proyeksi: dipakai,
+        komitmen: plan.commitments.map((k) => ({
+          label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
+        })),
+        kategori: plan.categories.map((k) => ({ label: k.label, weight: k.weight })),
+      })
+    : null;
+
+  return {
+    id: plan.id,
+    period: plan.period,
+    notes: plan.notes,
+    tersimpan,
+    usulan,
+    dipakai,
+    riwayatMasuk: riwayat,
+    komitmen: plan.commitments.map((k) => ({
+      id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,
+    })),
+    kategori: plan.categories.map((k) => ({ id: k.id, label: k.label, weight: k.weight })),
+    checkpoint: plan.checkpoints.map((c) => ({
+      id: c.id, date: c.date, cashOnHand: c.cashOnHand, incomeToDate: c.incomeToDate, notes: c.notes,
+    })),
+    terakhir: terakhir && { date: terakhir.date, cashOnHand: terakhir.cashOnHand, incomeToDate: terakhir.incomeToDate },
+    menurutJurnal: { saldoKas: round(saldoKas), masukBulanIni: round(bulanIni[0]?.cashIn ?? 0) },
+    rencana,
   };
 }

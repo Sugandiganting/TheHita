@@ -83,6 +83,7 @@ const MENU: Entry[] = [
     label: 'Anggaran & Rencana',
     icon: ICON.budget,
     items: [
+      { href: '/rencana-kas', label: 'Rencana Kas Mingguan', desc: 'Berapa boleh belanja sampai akhir bulan' },
       { href: '/rab', label: 'Input RAB', desc: 'Susun anggaran per bulan' },
       { href: '/peramalan', label: 'Peramalan', desc: 'Proyeksi kas & kemampuan beli' },
       { href: '/proyek', label: 'Proyek', desc: 'Rencana belanja besar' },
