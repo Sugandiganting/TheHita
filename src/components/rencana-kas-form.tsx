@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
   deleteSpend, saveAssumptions, saveCashProjection, saveCategory, saveCheckpoint,
-  saveCommitment, saveSpend, toggleCommitmentPaid, type ActionState,
+  saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryWeight, type ActionState,
 } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { MoneyInput } from './money-input';
@@ -251,14 +251,65 @@ export function CategoryForm({ planId }: { planId: string }) {
   );
 }
 
-export function CategoryDelete({ id }: { id: string }) {
-  const [state, action] = useActionState(deleteCategory, initial);
+/**
+ * Porsi diubah di tempat. Sebelumnya satu-satunya cara adalah menghapus
+ * kategori lalu membuatnya lagi, dan itu ikut membuang seluruh riwayat
+ * belanjanya — harga yang terlalu mahal untuk mengganti satu angka.
+ */
+export function CategoryWeight({ id, weight }: { id: string; weight: number }) {
+  const [state, action] = useActionState(updateCategoryWeight, initial);
+  const [nilai, setNilai] = useState(String(weight));
+  const berubah = nilai.trim() !== String(weight);
+
   return (
-    <form action={action}>
+    <form action={action} className="flex items-center justify-end gap-1.5">
       <input type="hidden" name="id" value={id} />
-      <Tautan label="Hapus" pendingLabel="…" bahaya />
-      {!state.ok && state.message && <span className="ml-2 text-xs text-red-600">{state.message}</span>}
+      <input
+        name="weight"
+        inputMode="numeric"
+        value={nilai}
+        onChange={(e) => setNilai(e.target.value.replace(/[^\d.]/g, ''))}
+        aria-label="Porsi"
+        className="w-14 rounded-md border border-slate-300 px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      />
+      {berubah && <Tautan label="Simpan" pendingLabel="…" />}
+      {!state.ok && state.message && <span className="text-xs text-red-600">{state.message}</span>}
     </form>
+  );
+}
+
+export function CategoryDelete({ id, jumlahBelanja }: { id: string; jumlahBelanja: number }) {
+  const [state, action] = useActionState(deleteCategory, initial);
+  const [konfirmasi, setKonfirmasi] = useState(false);
+
+  if (!konfirmasi) {
+    return (
+      <button
+        type="button"
+        className="text-xs font-medium text-red-600 hover:underline"
+        onClick={() => setKonfirmasi(true)}
+      >
+        Hapus
+      </button>
+    );
+  }
+
+  return (
+    <span className="flex items-center justify-end gap-2">
+      <span className="text-xs text-slate-600">
+        {jumlahBelanja > 0
+          ? `Hapus beserta ${jumlahBelanja} laporan belanjanya?`
+          : 'Hapus kategori ini?'}
+      </span>
+      <form action={action}>
+        <input type="hidden" name="id" value={id} />
+        <Tautan label="Ya" pendingLabel="…" bahaya />
+      </form>
+      <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => setKonfirmasi(false)}>
+        Batal
+      </button>
+      {!state.ok && state.message && <span className="text-xs text-red-600">{state.message}</span>}
+    </span>
   );
 }
 

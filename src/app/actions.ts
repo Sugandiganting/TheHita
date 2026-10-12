@@ -1062,6 +1062,19 @@ export async function saveCategory(_prev: ActionState, formData: FormData): Prom
   return ok('Kategori ditambahkan.');
 }
 
+export async function updateCategoryWeight(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const weight = Number(String(formData.get('weight') ?? '').replace(/[^\d.]/g, ''));
+
+  if (!Number.isFinite(weight) || weight <= 0) return fail('Porsi harus lebih dari nol.');
+  const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { label: true } });
+  if (!ada) return fail('Kategori tidak ditemukan.');
+
+  await prisma.spendCategory.update({ where: { id }, data: { weight } });
+  segarkanRencanaKas();
+  return ok(`Porsi ${ada.label} diubah.`);
+}
+
 export async function deleteCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { id: true } });

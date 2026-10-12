@@ -4,8 +4,8 @@ import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/ren
 import { formatDate, formatPeriod, formatRupiah, toDateInput } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryDelete, CategoryForm, CheckpointDelete, CheckpointForm, CommitmentForm,
-  CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
+  AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
+  CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -336,14 +336,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Terpakai bulan ini mencakup seluruh bulan; hanya kolom sejak posisi kas yang mengurangi jatah, sisanya sudah tercermin di saldo.">
+                  <SectionTitle hint="Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14. Ubah angkanya lalu simpan.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[820px]">
+                    <table className="w-full min-w-[900px]">
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
+                          <th className="th num">Porsi</th>
                           <th className="th num">Terpakai bulan ini</th>
                           <th className="th num">Per minggu</th>
                           <th className="th num">Jatah sisa bulan</th>
@@ -359,9 +360,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           const sisa = k.sisaBulan - terpakai;
                           return (
                             <tr key={k.label}>
-                              <td className="td">
-                                {k.label}
-                                <span className="ml-2 text-xs text-slate-400">porsi {sumber?.weight ?? '—'}</span>
+                              <td className="td">{k.label}</td>
+                              <td className="td num">
+                                {sumber && <CategoryWeight id={sumber.id} weight={sumber.weight} />}
                               </td>
                               <td className="td num">
                                 {(sumber?.terpakaiBulanIni ?? 0) > 0
@@ -374,7 +375,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                               <td className={`td num ${sisa < 0 ? 'font-medium text-red-600' : ''}`}>
                                 {formatRupiah(sisa)}
                               </td>
-                              <td className="td num">{sumber && <CategoryDelete id={sumber.id} />}</td>
+                              <td className="td num">
+                                {sumber && (
+                                  <CategoryDelete
+                                    id={sumber.id}
+                                    jumlahBelanja={data.belanja.filter((e) => e.categoryId === sumber.id).length}
+                                  />
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
