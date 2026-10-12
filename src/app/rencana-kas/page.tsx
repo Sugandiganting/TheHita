@@ -1,7 +1,7 @@
 import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
-import { formatDate, formatPeriod, formatRupiah, toDateInput } from '@/lib/format';
+import { formatDate, formatPeriod, formatPeriodShort, formatRupiah, toDateInput } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
@@ -22,6 +22,17 @@ const TONE: Record<Skenario, 'negative' | 'neutral' | 'positive'> = {
 };
 
 const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+/**
+ * Gaji sebuah bulan dibayar di awalnya, jadi yang harus menutupinya adalah
+ * saldo akhir bulan sebelumnya. Penandanya menyebut bulan gajinya, bukan bulan
+ * saldonya — tanpa itu "kurang untuk gaji" di baris Oktober terbaca seolah gaji
+ * Oktober yang bermasalah, padahal gaji itu sudah lewat.
+ */
+function bulanSesudah(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
 
 /** "10 – 16 Okt": rentang dalam satu bulan tidak perlu menyebut bulannya dua kali. */
 function rentang(mulai: Date, selesai: Date): string {
@@ -165,7 +176,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.runway && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Komitmen yang belum dibayar ikut dihitung di bulan berjalan.">
+                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir sebuah bulan harus menutup gaji yang jatuh tempo awal bulan berikutnya.">
                     Kapan kas habis
                   </SectionTitle>
 
@@ -180,6 +191,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           <p className={`mt-0.5 font-semibold ${w.habisPada ? 'text-red-600' : 'text-emerald-600'}`}>
                             {w.habisPada ? formatPeriod(w.habisPada) : 'Tidak habis'}
                           </p>
+                          {/* Kas yang tidak pernah habis masih bisa tidak menutup gaji di
+                              satu bulan. Tanpa baris ini, kartu hijau menutupi peringatan
+                              kuning yang ada tepat di tabel bawahnya. */}
+                          {w.gajiTerancam && (
+                            <p className="text-xs font-medium text-amber-600">
+                              Gaji {formatPeriodShort(bulanSesudah(w.gajiTerancam))} tidak tertutup
+                            </p>
+                          )}
                           <p className="text-xs text-slate-500">
                             {w.arusBersih < 0
                               ? `Berkurang ${formatRupiah(-w.arusBersih)} tiap bulan`
@@ -194,7 +213,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <table className="w-full min-w-[520px]">
                       <thead className="border-b border-slate-200">
                         <tr>
-                          <th className="th">Saldo akhir</th>
+                          <th className="th">Saldo akhir bulan</th>
                           {SKENARIO.map((sk) => (
                             <th key={sk} className="th num">{NAMA_SKENARIO[sk]}</th>
                           ))}
@@ -225,7 +244,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 >
                                   {!b ? 'habis' : formatRupiah(b.saldoAkhir)}
                                   {b && b.saldoAkhir >= 0 && !b.cukupGaji && (
-                                    <span className="block text-[11px]">kurang untuk gaji</span>
+                                    <span className="block text-[11px]">
+                                      kurang untuk gaji {formatPeriodShort(bulanSesudah(b.period))}
+                                    </span>
                                   )}
                                 </td>
                               ))}
