@@ -36,7 +36,8 @@ function Tautan({ label, pendingLabel, bahaya }: { label: string; pendingLabel: 
 
 function Pesan({ state }: { state: ActionState }) {
   if (!state.message) return null;
-  return <p className={`mt-2 text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>;
+  const warna = !state.ok ? 'text-red-600' : state.warn ? 'text-amber-700' : 'text-emerald-700';
+  return <p className={`mt-2 text-sm ${warna}`}>{state.message}</p>;
 }
 
 /** Membuat rencana bulan baru; komitmen bulan sebelumnya ikut tersalin. */
@@ -121,44 +122,87 @@ export function CheckpointForm({
 }
 
 /** Tiga proyeksi uang masuk sebulan penuh. Dikosongkan = pakai usulan sistem. */
+type TigaSkenario = { PESIMIS: number | null; NORMAL: number | null; OPTIMIS: number | null };
+
 export function ProjectionForm({
-  id, tersimpan, usulan, notes,
+  id, tersimpan, usulan, berikutnya, dipakai, notes,
 }: {
   id: string;
-  tersimpan: { PESIMIS: number | null; NORMAL: number | null; OPTIMIS: number | null };
+  tersimpan: TigaSkenario;
   usulan: { PESIMIS: number; NORMAL: number; OPTIMIS: number } | null;
+  /** Proyeksi bulan-bulan sesudahnya; null berarti mengikuti bulan berjalan. */
+  berikutnya: TigaSkenario;
+  /** Proyeksi bulan berjalan yang benar-benar terpakai, jadi rujukan isian kosong. */
+  dipakai: { PESIMIS: number; NORMAL: number; OPTIMIS: number };
   notes: string | null;
 }) {
   const [state, action] = useActionState(saveCashProjection, initial);
   const baris = [
-    { name: 'pesimis', label: 'Pesimis', nilai: tersimpan.PESIMIS, usul: usulan?.PESIMIS },
-    { name: 'normal', label: 'Normal', nilai: tersimpan.NORMAL, usul: usulan?.NORMAL },
-    { name: 'optimis', label: 'Optimis', nilai: tersimpan.OPTIMIS, usul: usulan?.OPTIMIS },
-  ];
+    { kunci: 'PESIMIS', name: 'pesimis', label: 'Pesimis' },
+    { kunci: 'NORMAL', name: 'normal', label: 'Normal' },
+    { kunci: 'OPTIMIS', name: 'optimis', label: 'Optimis' },
+  ] as const;
 
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="id" value={id} />
-      {baris.map((b) => (
-        <div key={b.name}>
-          <label className="label" htmlFor={`rk-${b.name}`}>{b.label}</label>
-          <MoneyInput
-            id={`rk-${b.name}`}
-            name={b.name}
-            defaultValue={b.nilai === null ? '' : String(b.nilai)}
-            placeholder={b.usul === undefined ? '0' : String(Math.round(b.usul))}
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            {b.nilai === null
-              ? b.usul === undefined
-                ? 'Belum ada riwayat untuk diusulkan.'
-                : `Kosong — memakai usulan ${formatRupiah(b.usul)}`
-              : b.usul === undefined
-                ? 'Angka Anda sendiri.'
-                : `Usulan sistem ${formatRupiah(b.usul)}`}
-          </p>
-        </div>
-      ))}
+
+      {baris.map((b) => {
+        const nilai = tersimpan[b.kunci];
+        const usul = usulan?.[b.kunci];
+        return (
+          <div key={b.name}>
+            <label className="label" htmlFor={`rk-${b.name}`}>{b.label}</label>
+            <MoneyInput
+              id={`rk-${b.name}`}
+              name={b.name}
+              defaultValue={nilai === null ? '' : String(nilai)}
+              placeholder={usul === undefined ? '0' : String(Math.round(usul))}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {nilai === null
+                ? usul === undefined
+                  ? 'Belum ada riwayat untuk diusulkan.'
+                  : `Kosong — memakai usulan ${formatRupiah(usul)}`
+                : usul === undefined
+                  ? 'Angka Anda sendiri.'
+                  : `Usulan sistem ${formatRupiah(usul)}`}
+            </p>
+          </div>
+        );
+      })}
+
+      {/*
+        Musim berganti: Oktober sedang, November-Desember ramai. Satu angka
+        untuk bulan ini sekaligus bulan-bulan sesudahnya pasti meleset di salah
+        satunya, jadi ramalan jangka panjang boleh memakai angkanya sendiri.
+      */}
+      <div className="border-t border-slate-200 pt-4">
+        <p className="text-sm font-medium text-slate-700">Bulan-bulan berikutnya</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Hanya dipakai meramalkan kapan kas habis. Kosongkan bila musimnya tidak berubah.
+        </p>
+      </div>
+
+      {baris.map((b) => {
+        const nilai = berikutnya[b.kunci];
+        return (
+          <div key={`${b.name}-next`}>
+            <label className="label" htmlFor={`rk-${b.name}-next`}>{b.label} bulan berikutnya</label>
+            <MoneyInput
+              id={`rk-${b.name}-next`}
+              name={`${b.name}Berikutnya`}
+              defaultValue={nilai === null ? '' : String(nilai)}
+              placeholder={String(Math.round(dipakai[b.kunci]))}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {nilai === null
+                ? `Kosong — mengikuti bulan berjalan ${formatRupiah(dipakai[b.kunci])}`
+                : 'Angka Anda sendiri.'}
+            </p>
+          </div>
+        );
+      })}
 
       <div>
         <label className="label" htmlFor="rk-notes">Catatan</label>

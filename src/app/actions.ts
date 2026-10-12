@@ -24,7 +24,12 @@ import {
   type MoneyLine,
 } from '@/lib/accounting';
 
-export type ActionState = { ok: boolean; message: string };
+export type ActionState = {
+  ok: boolean;
+  message: string;
+  /** Berhasil, tetapi ada yang perlu diperhatikan — ditampilkan berbeda. */
+  warn?: boolean;
+};
 
 const empty: ActionState = { ok: false, message: '' };
 
@@ -950,20 +955,37 @@ export async function saveCashProjection(_prev: ActionState, formData: FormData)
     incomePessimistic: angkaAtauNull(formData, 'pesimis'),
     incomeNormal: angkaAtauNull(formData, 'normal'),
     incomeOptimistic: angkaAtauNull(formData, 'optimis'),
+    nextPessimistic: angkaAtauNull(formData, 'pesimisBerikutnya'),
+    nextNormal: angkaAtauNull(formData, 'normalBerikutnya'),
+    nextOptimistic: angkaAtauNull(formData, 'optimisBerikutnya'),
   };
   const terisi = Object.values(nilai).filter((v) => v !== null) as number[];
   if (terisi.some((v) => v < 0)) return fail('Proyeksi tidak boleh negatif.');
-  if (nilai.incomePessimistic !== null && nilai.incomeOptimistic !== null
-      && nilai.incomePessimistic > nilai.incomeOptimistic) {
-    return fail('Pesimis tidak boleh lebih besar daripada optimis.');
-  }
+
+  // Pesimis di atas optimis itu janggal, tetapi bukan mustahil: sheet optimis
+  // di workbook bisa tertinggal saat yang lain sudah diperbarui. Menolaknya
+  // akan mengunci seluruh formulir atas angka yang datang dari sana, jadi
+  // disimpan apa adanya dan cukup diingatkan.
+  const janggal = (
+    [
+      [nilai.incomePessimistic, nilai.incomeOptimistic, 'bulan berjalan'],
+      [nilai.nextPessimistic, nilai.nextOptimistic, 'bulan berikutnya'],
+    ] as const
+  ).filter(([p2, o]) => p2 !== null && o !== null && p2 > o).map(([, , nama]) => nama);
 
   await prisma.cashPlan.update({
     where: { id },
     data: { ...nilai, notes: String(formData.get('notes') ?? '').trim() || null },
   });
   segarkanRencanaKas();
-  return ok('Proyeksi disimpan.');
+  return janggal.length > 0
+    ? {
+        ok: true,
+        warn: true,
+        message: `Proyeksi disimpan. Perhatikan: pesimis ${janggal.join(' dan ')} lebih besar `
+          + 'daripada optimisnya, jadi kedua skenario itu tertukar.',
+      }
+    : ok('Proyeksi disimpan.');
 }
 
 export async function saveCheckpoint(_prev: ActionState, formData: FormData): Promise<ActionState> {

@@ -286,6 +286,12 @@ model CashPlan {
   incomeNormal      Float?
   incomeOptimistic  Float?
 
+  /// Proyeksi untuk bulan-bulan sesudahnya, dipakai meramalkan kapan kas habis.
+  /// null = sama dengan proyeksi bulan berjalan.
+  nextPessimistic Float?
+  nextNormal      Float?
+  nextOptimistic  Float?
+
   /// Total uang keluar sebulan bila pola belanja tidak berubah — dipakai
   /// untuk meramalkan kapan kas habis, bukan untuk menghitung plafon.
   monthlyOutflow Float?

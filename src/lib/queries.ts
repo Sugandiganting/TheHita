@@ -640,6 +640,9 @@ export type RencanaKasDetail = {
   usulan: Record<Skenario, number> | null;
   /** Yang benar-benar dipakai menghitung: tersimpan bila ada, selain itu usulan. */
   dipakai: Record<Skenario, number>;
+  /** Proyeksi bulan-bulan berikutnya; null berarti mengikuti bulan berjalan. */
+  tersimpanBerikutnya: Record<Skenario, number | null>;
+  dipakaiBerikutnya: Record<Skenario, number>;
   riwayatMasuk: { period: Period; cashIn: number }[];
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
   kategori: {
@@ -711,6 +714,17 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // Usulan hanya mengisi yang dikosongkan; angka yang sudah diketik menang.
   const dipakai = Object.fromEntries(
     SKENARIO.map((s) => [s, tersimpan[s] ?? usulan?.[s] ?? 0]),
+  ) as Record<Skenario, number>;
+
+  const tersimpanBerikutnya: Record<Skenario, number | null> = {
+    PESIMIS: plan.nextPessimistic,
+    NORMAL: plan.nextNormal,
+    OPTIMIS: plan.nextOptimistic,
+  };
+  // Dikosongkan berarti bulan-bulan berikutnya diperlakukan sama dengan bulan
+  // berjalan — perilaku lama, dan tetap masuk akal bila musimnya tidak berubah.
+  const dipakaiBerikutnya = Object.fromEntries(
+    SKENARIO.map((s) => [s, tersimpanBerikutnya[s] ?? dipakai[s]]),
   ) as Record<Skenario, number>;
 
   const terakhir = plan.checkpoints[0] ?? null;
@@ -787,6 +801,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             saldoKas: terakhir!.cashOnHand,
             sisaMasuk: rencana.skenario[sk].sisaMasuk,
             proyeksiBulanan: dipakai[sk],
+            proyeksiBerikutnya: dipakaiBerikutnya[sk],
             pengeluaranBulanan: outflow,
             komitmenBelumBayar: rencana.komitmenBelumBayar,
             komitmenRutinSebulan: plan.commitments
@@ -809,6 +824,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     tersimpan,
     usulan,
     dipakai,
+    tersimpanBerikutnya,
+    dipakaiBerikutnya,
     riwayatMasuk: riwayat,
     komitmen: plan.commitments.map((k) => ({
       id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,

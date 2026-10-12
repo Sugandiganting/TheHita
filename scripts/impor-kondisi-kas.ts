@@ -180,13 +180,29 @@ async function main() {
 
   /* ---- Proyeksi tiga skenario ---- */
   const proyeksiNormal = nilai(normal, barisMasuk, cariKolom(normal, judul, bulan, false));
-  const skenarioLain = (nama: string) => {
+  const skenarioLain = (nama: string, bln = bulan) => {
     const ws = ambilSheet(wbProyeksi, nama);
     const j = cariBaris(ws, 'Variable');
-    return nilai(ws, cariBaris(ws, 'TOTAL CASHFLOW'), cariKolom(ws, j, bulan, false));
+    return nilai(ws, cariBaris(ws, 'TOTAL CASHFLOW'), cariKolom(ws, j, bln, false));
   };
   const proyeksiPesimis = skenarioLain('Combined Cashflow Pesimistic');
   const proyeksiOptimis = skenarioLain('Combined Cashflow Optimistic');
+
+  // Bulan berikutnya bisa saja belum ada kolomnya — bulan Desember misalnya,
+  // yang menyeberang tahun. Tidak ketemu berarti dikosongkan, dan sistem
+  // memperlakukan bulan-bulan sesudahnya sama dengan bulan berjalan.
+  const bulanDepan = bulan === 12 ? 1 : bulan + 1;
+  const bolehKosong = (f: () => number): number | null => {
+    try {
+      const v = f();
+      return v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  };
+  const depanNormal = bolehKosong(() => nilai(normal, barisMasuk, cariKolom(normal, judul, bulanDepan, false)));
+  const depanPesimis = bolehKosong(() => skenarioLain('Combined Cashflow Pesimistic', bulanDepan));
+  const depanOptimis = bolehKosong(() => skenarioLain('Combined Cashflow Optimistic', bulanDepan));
 
   /* ---- Laporan ---- */
   console.log(C.bold(`\nRencana kas ${period}`));
@@ -198,6 +214,13 @@ async function main() {
   console.log(`    Pesimis            ${rupiah(proyeksiPesimis)}`);
   console.log(`    Normal             ${rupiah(proyeksiNormal)}`);
   console.log(`    Optimis            ${rupiah(proyeksiOptimis)}`);
+  if (depanNormal || depanPesimis || depanOptimis) {
+    console.log(C.dim('\n  Proyeksi bulan berikutnya (untuk ramalan kas habis)'));
+    console.log(`    Pesimis            ${depanPesimis === null ? C.dim('mengikuti bulan ini') : rupiah(depanPesimis)}`);
+    console.log(`    Normal             ${depanNormal === null ? C.dim('mengikuti bulan ini') : rupiah(depanNormal)}`);
+    console.log(`    Optimis            ${depanOptimis === null ? C.dim('mengikuti bulan ini') : rupiah(depanOptimis)}`);
+  }
+
   console.log(`\n  Pengeluaran rutin/bulan      ${rupiah(pengeluaranRutin)} ${C.dim(`(bulan ${bulanLalu}, termasuk cicilan bank)`)}`);
 
   if (proyeksiOptimis < proyeksiNormal) {
@@ -219,6 +242,9 @@ async function main() {
       incomePessimistic: proyeksiPesimis,
       incomeNormal: proyeksiNormal,
       incomeOptimistic: proyeksiOptimis,
+      nextPessimistic: depanPesimis,
+      nextNormal: depanNormal,
+      nextOptimistic: depanOptimis,
       monthlyOutflow: pengeluaranRutin,
     },
     create: {
@@ -226,6 +252,9 @@ async function main() {
       incomePessimistic: proyeksiPesimis,
       incomeNormal: proyeksiNormal,
       incomeOptimistic: proyeksiOptimis,
+      nextPessimistic: depanPesimis,
+      nextNormal: depanNormal,
+      nextOptimistic: depanOptimis,
       monthlyOutflow: pengeluaranRutin,
       categories: { create: KATEGORI.map((label, sort) => ({ label, weight: 1, sort })) },
     },

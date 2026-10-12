@@ -268,6 +268,14 @@ test('yang sudah terpakai mengurangi plafon, bukan jatahnya', () => {
 
 /* ---------------- kapan kas habis ---------------- */
 
+/**
+ * Bulan-bulan berikutnya mengikuti bulan berjalan kecuali disebut lain — itu
+ * perilaku bawaannya, dan membuat pengujian lama tetap menguji hal yang sama.
+ */
+const runway = (
+  o: Omit<Parameters<typeof hitungRunway>[0], 'proyeksiBerikutnya'> & { proyeksiBerikutnya?: number },
+) => hitungRunway({ ...o, proyeksiBerikutnya: o.proyeksiBerikutnya ?? o.proyeksiBulanan });
+
 /** Pola September 2026: masuk Rp351 jt, keluar Rp402,8 jt termasuk cicilan. */
 const runwaySeptember = {
   period: '2026-10',
@@ -282,15 +290,15 @@ const runwaySeptember = {
 };
 
 test('arus bersih bulanan sama dengan hitungan slide 8', () => {
-  const normal = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) });
+  const normal = runway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) });
   assert.equal(keJt(normal.arusBersih), -51.8);
 
-  const pesimis = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(178.3), proyeksiBulanan: jt(333) });
+  const pesimis = runway({ ...runwaySeptember, sisaMasuk: jt(178.3), proyeksiBulanan: jt(333) });
   assert.equal(keJt(pesimis.arusBersih), -69.8);
 });
 
 test('kas yang terus menyusut punya bulan habis', () => {
-  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
+  const r = runway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
   assert.ok(r.habisPada, 'seharusnya habis dalam horizon');
   // Bulan terakhir adalah yang pertama minus; tidak ada bulan sesudahnya.
   assert.equal(r.bulan[r.bulan.length - 1].period, r.habisPada);
@@ -299,29 +307,29 @@ test('kas yang terus menyusut punya bulan habis', () => {
 });
 
 test('gaji terancam lebih dulu daripada kas habis', () => {
-  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
+  const r = runway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
   assert.ok(r.gajiTerancam);
   assert.ok(r.habisPada);
   assert.ok(r.gajiTerancam! <= r.habisPada!);
 });
 
 test('arus bersih positif tidak pernah menghabiskan kas', () => {
-  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500) });
+  const r = runway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500) });
   assert.equal(r.habisPada, null);
   assert.equal(r.bulan.length, 13);
   assert.ok(r.arusBersih > 0);
 });
 
 test('horizon bisa dipersingkat dan tidak pernah tak berujung', () => {
-  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500), horizon: 3 });
+  const r = runway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500), horizon: 3 });
   assert.equal(r.bulan.length, 4);
 });
 
 test('komitmen sekali ini menggerakkan ramalan sebesar nominalnya', () => {
   const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
-  const sebelum = hitungRunway(dasar);
+  const sebelum = runway(dasar);
   // Renovasi Rp 80 jt: menambah yang belum dibayar, tetapi bukan pengeluaran rutin.
-  const sesudah = hitungRunway({ ...dasar, komitmenBelumBayar: jt(260.6 + 80) });
+  const sesudah = runway({ ...dasar, komitmenBelumBayar: jt(260.6 + 80) });
 
   assert.equal(
     keJt(sebelum.bulan[0].saldoAkhir - sesudah.bulan[0].saldoAkhir), 80,
@@ -335,12 +343,12 @@ test('komitmen berulang tidak dihitung dua kali', () => {
   const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
   // Seluruh pengeluaran rutin kebetulan berupa komitmen berulang: tidak ada
   // sisa operasional untuk diprorata, jadi yang dikurangi hanya komitmennya.
-  const r = hitungRunway({ ...dasar, pengeluaranBulanan: jt(260.6) });
+  const r = runway({ ...dasar, pengeluaranBulanan: jt(260.6) });
   assert.equal(keJt(r.bulan[0].saldoAkhir), keJt(jt(134.5) + jt(211.6) - jt(260.6)));
 });
 
 test('pengeluaran rutin lebih kecil daripada komitmennya tidak jadi angka negatif', () => {
-  const r = hitungRunway({
+  const r = runway({
     ...runwaySeptember,
     sisaMasuk: jt(211.6),
     proyeksiBulanan: jt(366.3),
@@ -353,9 +361,9 @@ test('pengeluaran rutin lebih kecil daripada komitmennya tidak jadi angka negati
 
 test('komitmen yang sudah dibayar tidak lagi memukul ramalan', () => {
   const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
-  const lunas = hitungRunway({ ...dasar, komitmenBelumBayar: 0 });
+  const lunas = runway({ ...dasar, komitmenBelumBayar: 0 });
   assert.equal(
-    keJt(lunas.bulan[0].saldoAkhir - hitungRunway(dasar).bulan[0].saldoAkhir), 260.6,
+    keJt(lunas.bulan[0].saldoAkhir - runway(dasar).bulan[0].saldoAkhir), 260.6,
   );
 });
 
@@ -371,4 +379,29 @@ test('kategori yang lewat jatah tidak diberi plafon mingguan negatif', () => {
   assert.ok(r.kategori[0].sisa < 0, 'sisanya memang minus');
   assert.equal(r.kategori[0].perMinggu, 0, 'tetapi plafonnya nol, bukan minus');
   assert.ok(r.kategori[1].perMinggu > 0);
+});
+
+test('bulan berikutnya memakai proyeksinya sendiri, bukan proyeksi bulan ini', () => {
+  const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
+
+  // Oktober musim sedang, November-Desember ramai: lajunya harus ikut berubah.
+  const ramai = hitungRunway({ ...dasar, proyeksiBerikutnya: jt(450) });
+  assert.equal(keJt(ramai.arusBersih), keJt(jt(450) - jt(402.8)));
+
+  const sepi = hitungRunway({ ...dasar, proyeksiBerikutnya: jt(300) });
+  assert.equal(keJt(sepi.arusBersih), keJt(jt(300) - jt(402.8)));
+
+  // Bulan berjalan tidak ikut berubah: ia memakai sisa uang masuknya sendiri.
+  assert.equal(ramai.bulan[0].saldoAkhir, sepi.bulan[0].saldoAkhir);
+});
+
+test('bulan ramai menyelamatkan kas yang akan habis bila dilihat dari bulan sepi', () => {
+  // Saldo awal dibuat cukup supaya bulan berjalan belum minus; yang diuji di
+  // sini adalah arah bulan-bulan sesudahnya, bukan posisi hari ini.
+  const dasar = {
+    ...runwaySeptember, saldoKas: jt(300), sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3),
+  };
+  assert.ok(hitungRunway({ ...dasar, proyeksiBerikutnya: jt(366.3) }).bulan[0].saldoAkhir > 0);
+  assert.ok(hitungRunway({ ...dasar, proyeksiBerikutnya: jt(366.3) }).habisPada, 'laju turun -> habis');
+  assert.equal(hitungRunway({ ...dasar, proyeksiBerikutnya: jt(450) }).habisPada, null, 'laju naik -> tidak habis');
 });

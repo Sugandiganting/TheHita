@@ -619,6 +619,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               id={data.id}
               tersimpan={data.tersimpan}
               usulan={data.usulan}
+              berikutnya={data.tersimpanBerikutnya}
+              dipakai={data.dipakai}
               notes={data.notes}
             />
             {data.riwayatMasuk.length > 0 && (

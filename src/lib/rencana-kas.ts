@@ -324,7 +324,13 @@ export function hitungRunway(opsi: {
   period: Period;
   saldoKas: number;
   sisaMasuk: number;
+  /** Proyeksi uang masuk bulan berjalan — menentukan sisa masuk bulan ini. */
   proyeksiBulanan: number;
+  /**
+   * Proyeksi untuk bulan-bulan sesudahnya. Musim berganti: bulan ramai dan
+   * bulan sepi tidak boleh diramalkan dengan angka yang sama.
+   */
+  proyeksiBerikutnya: number;
   pengeluaranBulanan: number;
   /** Komitmen yang belum dibayar, termasuk yang sekali ini saja. */
   komitmenBelumBayar: number;
@@ -336,12 +342,14 @@ export function hitungRunway(opsi: {
   horizon?: number;
 }): Runway {
   const {
-    period, saldoKas, sisaMasuk, proyeksiBulanan, pengeluaranBulanan,
+    period, saldoKas, sisaMasuk, proyeksiBerikutnya, pengeluaranBulanan,
     komitmenBelumBayar, komitmenRutinSebulan,
     kebutuhanGaji, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
   } = opsi;
 
-  const arusBersih = proyeksiBulanan - pengeluaranBulanan;
+  // Bulan berjalan memakai sisa uang masuknya sendiri; yang berulang tiap bulan
+  // sesudahnya adalah proyeksi bulan berikutnya, bukan proyeksi bulan ini.
+  const arusBersih = proyeksiBerikutnya - pengeluaranBulanan;
   const bulan: BulanRunway[] = [];
 
   // Bulan berjalan dihitung dari daftar komitmen, bukan dari angka rutin yang
