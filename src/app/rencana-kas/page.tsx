@@ -342,45 +342,56 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14. Ubah angkanya lalu simpan.">
+                  <SectionTitle hint="Jatah dikurangi yang sudah dipakai sama dengan sisa. Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px]">
+                    <table className="w-full min-w-[800px]">
+                      {/* Urutannya mengikuti hitungannya: jatah − dipakai = sisa, bersebelahan
+                          dan terbaca dari kiri ke kanan. Belanja yang sudah tercermin di saldo
+                          tidak jadi kolom tersendiri — ia hampir selalu sama dengan kolom
+                          sebelahnya, dan dua angka kembar bersebelahan membuat seluruh tabel
+                          terbaca seperti teka-teki. Tempatnya di baris kecil, hanya saat berbeda. */}
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
                           <th className="th num">Porsi</th>
-                          <th className="th num">Terpakai bulan ini</th>
-                          <th className="th num">Per minggu</th>
-                          <th className="th num">Jatah sisa bulan</th>
-                          <th className="th num">Sejak posisi kas</th>
+                          <th className="th num">Jatah bulan ini</th>
+                          <th className="th num">Sudah dipakai</th>
                           <th className="th num">Sisa</th>
+                          <th className="th num">Plafon/minggu</th>
                           <th className="th num">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {rencana.kategori.map((k, i) => {
                           const sumber = data.kategori[i];
-                          const terpakai = sumber?.terpakai ?? 0;
-                          const sisa = k.sisaBulan - terpakai;
+                          const sisa = k.sisa;
+                          const sudahDiSaldo = (sumber?.terpakaiBulanIni ?? 0) - k.terpakai;
                           return (
-                            <tr key={k.label}>
+                            <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
                               <td className="td">{k.label}</td>
                               <td className="td num">
                                 {sumber && <CategoryWeight id={sumber.id} weight={sumber.weight} />}
                               </td>
+                              <td className="td num">{formatRupiah(k.jatah)}</td>
                               <td className="td num">
-                                {(sumber?.terpakaiBulanIni ?? 0) > 0
-                                  ? formatRupiah(sumber!.terpakaiBulanIni)
-                                  : '—'}
+                                {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
+                                {sudahDiSaldo > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    +{formatRupiah(sudahDiSaldo)} sudah di saldo
+                                  </span>
+                                )}
                               </td>
-                              <td className="td num">{formatRupiah(k.perMinggu)}</td>
-                              <td className="td num">{formatRupiah(k.sisaBulan)}</td>
-                              <td className="td num">{terpakai > 0 ? formatRupiah(terpakai) : '—'}</td>
-                              <td className={`td num ${sisa < 0 ? 'font-medium text-red-600' : ''}`}>
+                              <td className={`td num ${sisa < 0 ? 'font-semibold text-red-600' : ''}`}>
                                 {formatRupiah(sisa)}
+                                {sisa < 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-red-600">
+                                    lewat jatah
+                                  </span>
+                                )}
                               </td>
+                              <td className="td num text-slate-500">{formatRupiah(k.perMinggu)}</td>
                               <td className="td num">
                                 {sumber && (
                                   <CategoryDelete
@@ -393,16 +404,30 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           );
                         })}
                       </tbody>
+                      <tfoot className="border-t-2 border-slate-200 font-semibold">
+                        <tr>
+                          <td className="td" colSpan={2}>Total</td>
+                          <td className="td num">
+                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.jatah, 0))}
+                          </td>
+                          <td className="td num">{formatRupiah(rencana.terpakai)}</td>
+                          <td className="td num">
+                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.sisa, 0))}
+                          </td>
+                          <td className="td num" colSpan={2} />
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    Total terpakai bulan ini{' '}
+                    Seluruh belanja Oktober{' '}
                     <strong>
                       {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
                     </strong>
-                    , yang mengurangi jatah{' '}
-                    <strong>{formatRupiah(rencana.terpakai)}</strong> — selisihnya sudah termasuk
-                    dalam saldo kas yang dilaporkan.
+                    . Yang memotong jatah hanya{' '}
+                    <strong>{formatRupiah(rencana.terpakai)}</strong>, yaitu yang terjadi setelah
+                    tanggal posisi kas; sisanya sudah tercermin pada saldo yang dilaporkan sehingga
+                    tidak dipotong dua kali.
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">

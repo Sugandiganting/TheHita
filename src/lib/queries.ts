@@ -749,8 +749,6 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     terpakai: terpakaiKategori(k.id, true),
     terpakaiBulanIni: terpakaiKategori(k.id, false),
   }));
-  const terpakaiTotal = kategori.reduce((s, k) => s + k.terpakai, 0);
-
   const rencana = terakhir
     ? hitungRencana({
         period,
@@ -758,11 +756,12 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         saldoKas: terakhir.cashOnHand,
         masukSampaiKini: terakhir.incomeToDate,
         proyeksi: dipakai,
-        terpakai: terpakaiTotal,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
-        kategori: plan.categories.map((k) => ({ label: k.label, weight: k.weight })),
+        // Total terpakai diturunkan dari rinciannya, jadi keduanya tidak bisa
+        // berbeda — dan kategori yang terhapus tidak meninggalkan selisih.
+        kategori: kategori.map((k) => ({ label: k.label, weight: k.weight, terpakai: k.terpakai })),
       })
     : null;
 

@@ -126,9 +126,42 @@ test('anggaran yang minus tidak menghasilkan plafon negatif', () => {
 test('porsi kategori mengikuti bobot dan berjumlah sama dengan anggaran normal', () => {
   const r = hitungRencana(rapat9Okt);
   assert.deepEqual(r.kategori.map((k) => k.label), ['Purchasing', 'Petty cash & HR']);
-  assert.equal(r.kategori.reduce((s, k) => s + k.sisaBulan, 0), Math.max(0, r.skenario.NORMAL.bolehBelanja));
+  assert.equal(r.kategori.reduce((s, k) => s + k.jatah, 0), Math.max(0, r.skenario.NORMAL.jatah));
   // 20 : 7 — Purchasing mendapat porsi terbesar.
   assert.ok(r.kategori[0].perMinggu > r.kategori[1].perMinggu * 2);
+});
+
+test('sisa tiap kategori berjumlah sama dengan angka boleh belanja di kartu', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [
+      { label: 'Purchasing', weight: 20, terpakai: jt(30) },
+      { label: 'Petty cash & HR', weight: 7, terpakai: jt(5) },
+    ],
+  });
+  assert.equal(keJt(r.terpakai), 35, 'total diturunkan dari rincian kategori');
+  assert.equal(keJt(r.skenario.NORMAL.jatah), 85.5);
+  assert.equal(keJt(r.skenario.NORMAL.bolehBelanja), 50.5);
+  assert.equal(
+    r.kategori.reduce((s, k) => s + k.sisa, 0), r.skenario.NORMAL.bolehBelanja,
+    'jumlah sisa kategori harus sama dengan boleh belanja, bukan memotong dua kali',
+  );
+});
+
+test('kategori yang lewat jatah bernilai minus, bukan dinolkan', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [
+      { label: 'Purchasing', weight: 20, terpakai: jt(90) },
+      { label: 'Petty cash & HR', weight: 7, terpakai: 0 },
+    ],
+  });
+  // Jatah Purchasing 20/27 x 85,5 = 63,3; terpakai 90 -> minus 26,7.
+  assert.ok(r.kategori[0].sisa < 0);
+  assert.equal(keJt(r.kategori[0].sisa), keJt(r.kategori[0].jatah - jt(90)));
+  assert.ok(r.kategori[1].sisa > 0, 'kategori lain tidak ikut terseret');
 });
 
 test('tanpa kategori, rencana tetap terhitung', () => {
@@ -324,4 +357,18 @@ test('komitmen yang sudah dibayar tidak lagi memukul ramalan', () => {
   assert.equal(
     keJt(lunas.bulan[0].saldoAkhir - hitungRunway(dasar).bulan[0].saldoAkhir), 260.6,
   );
+});
+
+test('kategori yang lewat jatah tidak diberi plafon mingguan negatif', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [
+      { label: 'Purchasing', weight: 20, terpakai: jt(90) },
+      { label: 'Petty cash & HR', weight: 7, terpakai: 0 },
+    ],
+  });
+  assert.ok(r.kategori[0].sisa < 0, 'sisanya memang minus');
+  assert.equal(r.kategori[0].perMinggu, 0, 'tetapi plafonnya nol, bukan minus');
+  assert.ok(r.kategori[1].perMinggu > 0);
 });

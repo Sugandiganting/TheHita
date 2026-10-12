@@ -51,6 +51,8 @@ export type Kategori = {
   label: string;
   /** Porsi relatif; dinormalkan terhadap jumlah seluruh kategori. */
   weight: number;
+  /** Yang sudah dibelanjakan kategori ini setelah tanggal posisi kas. */
+  terpakai?: number;
 };
 
 export type Masukan = {
@@ -66,8 +68,11 @@ export type Masukan = {
    * Yang sudah dibelanjakan SETELAH tanggal posisi kas di atas. Belanja sebelum
    * tanggal itu tidak dihitung di sini karena sudah tercermin pada saldo yang
    * dilaporkan — menghitungnya dua kali akan mengecilkan anggaran tanpa sebab.
+   *
+   * Boleh dikosongkan: jumlah seluruh kategori yang dipakai, dan itu menutup
+   * kemungkinan total dan rinciannya berbeda.
    */
-  terpakai: number;
+  terpakai?: number;
 };
 
 export type Minggu = {
@@ -94,8 +99,13 @@ export type HasilSkenario = {
 
 export type PorsiKategori = {
   label: string;
+  /** Jatah sebulan penuh menurut porsinya, sebelum dikurangi belanja. */
+  jatah: number;
+  terpakai: number;
+  /** jatah − terpakai. Minus berarti kategori ini sudah lewat jatahnya. */
+  sisa: number;
+  /** Sisa dibagi jumlah minggu yang tersisa. */
   perMinggu: number;
-  sisaBulan: number;
 };
 
 export type BulanRunway = {
@@ -217,12 +227,13 @@ export function hitungRencana(m: Masukan): Rencana {
   const { mulai, selesai, hari } = jendela(m.period, m.tanggal);
   const potongan = pecahMinggu(mulai, selesai);
   const komitmenBelumBayar = m.komitmen.filter((k) => !k.paid).reduce((s, k) => s + k.amount, 0);
+  const terpakai = m.terpakai ?? m.kategori.reduce((s, k) => s + (k.terpakai ?? 0), 0);
 
   const skenario = Object.fromEntries(
     SKENARIO.map((s) => [
       s,
       hasilSkenario(
-        s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas, komitmenBelumBayar, m.terpakai, potongan.length,
+        s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas, komitmenBelumBayar, terpakai, potongan.length,
       ),
     ]),
   ) as Record<Skenario, HasilSkenario>;
@@ -256,18 +267,30 @@ export function hitungRencana(m: Masukan): Rencana {
 
   // Pembagian antar kategori memakai skenario normal — angka yang dipakai
   // sehari-hari — sedangkan pesimis dan optimis tetap terlihat di kartu atas.
-  const perMingguNormal = skenario.NORMAL.perMinggu;
-  const sisaNormal = skenario.NORMAL.bolehBelanja;
+  //
+  // Yang dibagi adalah jatah sebelum dikurangi belanja, bukan sesudahnya. Jatah
+  // yang sudah bersih lalu dikurangi belanja kategori sekali lagi akan
+  // memotong uang yang sama dua kali, dan hasilnya tidak menjawab pertanyaan
+  // mana pun: bukan "berapa jatahnya", bukan pula "berapa sisanya". Dengan
+  // membagi yang kotor, jumlah seluruh sisa kategori kembali persis sama dengan
+  // angka boleh belanja di kartu atas.
   const bobotKategori = m.kategori.map((k) => k.weight);
-  const porsiMinggu = bagiProporsional(Math.max(0, perMingguNormal), bobotKategori);
-  const porsiBulan = bagiProporsional(Math.max(0, sisaNormal), bobotKategori);
-  const kategori: PorsiKategori[] = m.kategori.map((k, i) => ({
-    label: k.label,
-    perMinggu: porsiMinggu[i],
-    sisaBulan: porsiBulan[i],
-  }));
+  const bagianJatah = bagiProporsional(Math.max(0, skenario.NORMAL.jatah), bobotKategori);
+  const kategori: PorsiKategori[] = m.kategori.map((k, i) => {
+    const dipakai = k.terpakai ?? 0;
+    const sisa = bagianJatah[i] - dipakai;
+    return {
+      label: k.label,
+      jatah: bagianJatah[i],
+      terpakai: dipakai,
+      sisa,
+      // Dinolkan saat jatahnya sudah terlampaui: "boleh belanja minus tiga
+      // belas juta seminggu" bukan aturan yang bisa dijalankan siapa pun.
+      perMinggu: potongan.length > 0 ? bulatkan(Math.max(0, sisa) / potongan.length) : 0,
+    };
+  });
 
-  return { mulai, selesai, hari, komitmenBelumBayar, terpakai: m.terpakai, skenario, minggu, kategori };
+  return { mulai, selesai, hari, komitmenBelumBayar, terpakai, skenario, minggu, kategori };
 }
 
 /**
