@@ -10,7 +10,8 @@ import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type Ba
 import { addMonths, currentPeriod, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
-  SKENARIO, hitungRencana, usulkanProyeksi, type Rencana, type Skenario,
+  SKENARIO, hitungRencana, hitungRunway, lipatBelanja, usulkanProyeksi,
+  type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
@@ -641,7 +642,26 @@ export type RencanaKasDetail = {
   dipakai: Record<Skenario, number>;
   riwayatMasuk: { period: Period; cashIn: number }[];
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
-  kategori: { id: string; label: string; weight: number }[];
+  kategori: {
+    id: string; label: string; weight: number;
+    /** Terpakai setelah tanggal posisi kas — yang mengurangi plafon. */
+    terpakai: number;
+    /** Terpakai sejak awal bulan, termasuk yang sudah tercermin di saldo. */
+    terpakaiBulanIni: number;
+  }[];
+  belanja: {
+    id: string; categoryId: string; categoryLabel: string; date: Date;
+    amount: number; mode: ModeBelanja; notes: string | null;
+    /** Sudah tercermin pada saldo kas yang dilaporkan, jadi tidak mengurangi plafon. */
+    sebelumPosisi: boolean;
+  }[];
+  asumsi: {
+    monthlyOutflow: number | null;
+    salaryNeed: number | null;
+    usulanOutflow: number | null;
+    usulanGaji: number | null;
+  };
+  runway: Record<Skenario, Runway> | null;
   checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
   terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
   /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
@@ -662,6 +682,12 @@ async function riwayatUangMasuk(sebelum: Period, bulan = 6): Promise<{ period: P
   return actuals.map((a) => ({ period: a.period, cashIn: round(a.cashIn) }));
 }
 
+/** Uang keluar bulanan, dipakai mengusulkan pengeluaran rutin sebulan. */
+async function riwayatUangKeluar(sebelum: Period, bulan = 3): Promise<number[]> {
+  const actuals = await getMonthlyActuals(addMonths(sebelum, -bulan), addMonths(sebelum, -1));
+  return actuals.map((a) => round(a.cashOut)).filter((v) => v > 0);
+}
+
 export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | null> {
   const plan = await prisma.cashPlan.findUnique({
     where: { period },
@@ -669,6 +695,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       commitments: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
       categories: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
       checkpoints: { orderBy: { date: 'desc' } },
+      spends: { orderBy: [{ date: 'asc' }, { createdAt: 'asc' }], include: { category: true } },
     },
   });
   if (!plan) return null;
@@ -692,6 +719,38 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     getMonthlyActuals(period, period),
   ]);
 
+  // Belanja yang sudah tercermin pada saldo yang dilaporkan tidak boleh
+  // mengurangi plafon lagi — kalau ikut dikurangi, uang yang sama dihitung dua
+  // kali dan anggarannya mengecil tanpa sebab.
+  const batas = terakhir?.date ?? null;
+  const belanja = plan.spends.map((e, i) => ({
+    id: e.id,
+    categoryId: e.categoryId,
+    categoryLabel: e.category.label,
+    date: e.date,
+    amount: e.amount,
+    mode: e.mode as ModeBelanja,
+    notes: e.notes,
+    sebelumPosisi: batas !== null && e.date <= batas,
+    urut: i,
+  }));
+
+  const terpakaiKategori = (id: string, hanyaSetelahPosisi: boolean) =>
+    lipatBelanja(
+      belanja
+        .filter((e) => e.categoryId === id && (!hanyaSetelahPosisi || !e.sebelumPosisi))
+        .map((e) => ({ urut: e.urut, date: e.date, amount: e.amount, mode: e.mode })),
+    );
+
+  const kategori = plan.categories.map((k) => ({
+    id: k.id,
+    label: k.label,
+    weight: k.weight,
+    terpakai: terpakaiKategori(k.id, true),
+    terpakaiBulanIni: terpakaiKategori(k.id, false),
+  }));
+  const terpakaiTotal = kategori.reduce((s, k) => s + k.terpakai, 0);
+
   const rencana = terakhir
     ? hitungRencana({
         period,
@@ -699,11 +758,45 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         saldoKas: terakhir.cashOnHand,
         masukSampaiKini: terakhir.incomeToDate,
         proyeksi: dipakai,
+        terpakai: terpakaiTotal,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
         kategori: plan.categories.map((k) => ({ label: k.label, weight: k.weight })),
       })
+    : null;
+
+  // Usulan pengeluaran bulanan dari riwayat; kebutuhan gaji dari komitmen yang
+  // berulang, karena gaji memang didaftarkan di sana.
+  const keluarRiwayat = riwayat.map((r) => r.cashIn).length > 0 ? await riwayatUangKeluar(period) : [];
+  const usulanOutflow = keluarRiwayat.length > 0
+    ? round(keluarRiwayat.reduce((s, v) => s + v, 0) / keluarRiwayat.length)
+    : null;
+  const usulanGaji = plan.commitments
+    .filter((k) => k.recurring && /gaji/i.test(k.label))
+    .reduce((s, k) => s + k.amount, 0) || null;
+
+  const outflow = plan.monthlyOutflow ?? usulanOutflow;
+  const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
+
+  const runway = rencana && outflow !== null
+    ? (Object.fromEntries(
+        SKENARIO.map((sk) => [
+          sk,
+          hitungRunway({
+            period,
+            saldoKas: terakhir!.cashOnHand,
+            sisaMasuk: rencana.skenario[sk].sisaMasuk,
+            proyeksiBulanan: dipakai[sk],
+            pengeluaranBulanan: outflow,
+            kebutuhanGaji: gaji,
+            hariTersisa: rencana.hari,
+            hariSebulan: new Date(Date.UTC(
+              Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
+            )).getUTCDate(),
+          }),
+        ]),
+      ) as Record<Skenario, Runway>)
     : null;
 
   return {
@@ -717,7 +810,15 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     komitmen: plan.commitments.map((k) => ({
       id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,
     })),
-    kategori: plan.categories.map((k) => ({ id: k.id, label: k.label, weight: k.weight })),
+    kategori,
+    belanja: belanja.map(({ urut: _urut, ...b }) => b),
+    asumsi: {
+      monthlyOutflow: plan.monthlyOutflow,
+      salaryNeed: plan.salaryNeed,
+      usulanOutflow,
+      usulanGaji,
+    },
+    runway,
     checkpoint: plan.checkpoints.map((c) => ({
       id: c.id, date: c.date, cashOnHand: c.cashOnHand, incomeToDate: c.incomeToDate, notes: c.notes,
     })),

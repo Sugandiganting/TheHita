@@ -1,11 +1,11 @@
 import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
-import { NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
+import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { formatDate, formatPeriod, formatRupiah, toDateInput } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  CategoryDelete, CategoryForm, CheckpointDelete, CheckpointForm, CommitmentForm, CommitmentRow,
-  PlanDelete, PlanForm, ProjectionForm,
+  AssumptionForm, CategoryDelete, CategoryForm, CheckpointDelete, CheckpointForm, CommitmentForm,
+  CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -92,6 +92,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   }
 
   const { rencana, terakhir } = data;
+  // Lihat komentar di tabel ramalan di bawah.
+  const barisRunway = data.runway
+    ? Math.min(
+        Math.max(...SKENARIO.map((sk) => data.runway![sk].bulan.length)),
+        Math.max(6, ...SKENARIO.filter((sk) => data.runway![sk].habisPada)
+          .map((sk) => data.runway![sk].bulan.length)),
+      )
+    : 0;
   // Hari ini bila bulannya memang sedang berjalan; selain itu hari terakhir
   // bulan itu, karena server menolak tanggal di luar bulan rencananya.
   const hariIni = new Date();
@@ -152,6 +160,101 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </Alert>
               )}
 
+              {data.runway && (
+                <Card className="card-pad min-w-0">
+                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir tiap bulan.">
+                    Kapan kas habis
+                  </SectionTitle>
+
+                  <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                    {SKENARIO.map((sk) => {
+                      const w = data.runway![sk];
+                      return (
+                        <div key={sk} className="rounded-lg border border-slate-200 px-3 py-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            {NAMA_SKENARIO[sk]}
+                          </p>
+                          <p className={`mt-0.5 font-semibold ${w.habisPada ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {w.habisPada ? formatPeriod(w.habisPada) : 'Tidak habis'}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {w.arusBersih < 0
+                              ? `Berkurang ${formatRupiah(-w.arusBersih)} tiap bulan`
+                              : `Bertambah ${formatRupiah(w.arusBersih)} tiap bulan`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px]">
+                      <thead className="border-b border-slate-200">
+                        <tr>
+                          <th className="th">Saldo akhir</th>
+                          {SKENARIO.map((sk) => (
+                            <th key={sk} className="th num">{NAMA_SKENARIO[sk]}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {/* Tiap skenario berhenti di bulan yang berbeda. Mengikuti yang
+                            terpendek akan menyembunyikan bulan-bulan skenario optimis;
+                            mengikuti yang terpanjang menghasilkan belasan baris yang
+                            seluruhnya berbunyi "habis". Jadi: sampai skenario terakhir
+                            yang memang habis, dengan beberapa bulan sebagai lantai. */}
+                        {Array.from({ length: barisRunway }).map((_, i) => {
+                          const kolom = SKENARIO.map((sk) => data.runway![sk].bulan[i] ?? null);
+                          const periode = kolom.find((b) => b)?.period;
+                          if (!periode) return null;
+                          return (
+                            <tr key={periode}>
+                              <td className="td">{formatPeriod(periode)}</td>
+                              {kolom.map((b, j) => (
+                                <td
+                                  key={SKENARIO[j]}
+                                  className={`td num ${
+                                    !b ? 'text-slate-300'
+                                      : b.saldoAkhir < 0 ? 'font-medium text-red-600'
+                                      : !b.cukupGaji ? 'text-amber-600'
+                                      : ''
+                                  }`}
+                                >
+                                  {!b ? 'habis' : formatRupiah(b.saldoAkhir)}
+                                  {b && b.saldoAkhir >= 0 && !b.cukupGaji && (
+                                    <span className="block text-[11px]">kurang untuk gaji</span>
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {SKENARIO.some((sk) => !data.runway![sk].habisPada) && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Skenario yang tidak muncul angka habisnya tetap positif sepanjang{' '}
+                      {HORIZON_BULAN} bulan ke depan.
+                    </p>
+                  )}
+                  <p className="mt-4 text-xs text-slate-500">
+                    Pengeluaran rutin {formatRupiah(data.asumsi.monthlyOutflow ?? data.asumsi.usulanOutflow ?? 0)} per
+                    bulan, kebutuhan gaji {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
+                    bulan. Bulan berjalan memakai uang masuk yang benar-benar tersisa; bulan berikutnya memakai
+                    proyeksi penuh. Ubah asumsinya di panel samping.
+                  </p>
+                </Card>
+              )}
+
+              {!data.runway && (
+                <Alert tone="info">
+                  Isi <strong>pengeluaran rutin per bulan</strong> di panel samping agar sistem bisa menghitung
+                  kapan kas habis.
+                </Alert>
+              )}
+
               <Card className="card-pad min-w-0">
                 <SectionTitle hint="Skenario normal. Angka yang sama bisa dihitung ulang dengan tangan saat rapat.">
                   Cara menghitungnya
@@ -166,6 +269,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <Suku label={k.dueDay ? `${k.label} tgl ${k.dueDay}` : k.label} value={k.amount} />
                     </span>
                   ))}
+                  {rencana.terpakai > 0 && (
+                    <span className="flex items-start gap-4">
+                      <Operator>−</Operator>
+                      <Suku label="Sudah dibelanjakan" value={rencana.terpakai} />
+                    </span>
+                  )}
                   <Operator>=</Operator>
                   <Suku label="Boleh belanja" value={rencana.skenario.NORMAL.bolehBelanja} tebal />
                 </div>
@@ -227,32 +336,42 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Pembagian anggaran skenario normal menurut porsi tiap kategori.">
-                    Plafon per kategori
+                  <SectionTitle hint="Jatah dibagi menurut porsi tiap kategori; yang sudah dipakai diambil dari laporan belanja.">
+                    Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[520px]">
+                    <table className="w-full min-w-[680px]">
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
-                          <th className="th num">Porsi</th>
                           <th className="th num">Per minggu</th>
-                          <th className="th num">Sisa bulan</th>
+                          <th className="th num">Jatah sisa bulan</th>
+                          <th className="th num">Sudah dipakai</th>
+                          <th className="th num">Sisa</th>
                           <th className="th num">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {rencana.kategori.map((k, i) => (
-                          <tr key={k.label}>
-                            <td className="td">{k.label}</td>
-                            <td className="td num text-slate-500">{data.kategori[i]?.weight ?? '—'}</td>
-                            <td className="td num">{formatRupiah(k.perMinggu)}</td>
-                            <td className="td num">{formatRupiah(k.sisaBulan)}</td>
-                            <td className="td num">
-                              {data.kategori[i] && <CategoryDelete id={data.kategori[i].id} />}
-                            </td>
-                          </tr>
-                        ))}
+                        {rencana.kategori.map((k, i) => {
+                          const sumber = data.kategori[i];
+                          const terpakai = sumber?.terpakai ?? 0;
+                          const sisa = k.sisaBulan - terpakai;
+                          return (
+                            <tr key={k.label}>
+                              <td className="td">
+                                {k.label}
+                                <span className="ml-2 text-xs text-slate-400">porsi {sumber?.weight ?? '—'}</span>
+                              </td>
+                              <td className="td num">{formatRupiah(k.perMinggu)}</td>
+                              <td className="td num">{formatRupiah(k.sisaBulan)}</td>
+                              <td className="td num">{terpakai > 0 ? formatRupiah(terpakai) : '—'}</td>
+                              <td className={`td num ${sisa < 0 ? 'font-medium text-red-600' : ''}`}>
+                                {formatRupiah(sisa)}
+                              </td>
+                              <td className="td num">{sumber && <CategoryDelete id={sumber.id} />}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -262,6 +381,55 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </Card>
               )}
             </>
+          )}
+
+          {data.belanja.length > 0 && (
+            <Card className="card-pad min-w-0">
+              <SectionTitle hint="Urut menurut tanggal. SETEL membuang seluruh laporan sebelumnya di kategori itu.">
+                Laporan belanja
+              </SectionTitle>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[680px]">
+                  <thead className="border-b border-slate-200">
+                    <tr>
+                      <th className="th">Tanggal</th>
+                      <th className="th">Kategori</th>
+                      <th className="th">Cara</th>
+                      <th className="th num">Nominal</th>
+                      <th className="th">Catatan</th>
+                      <th className="th num">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.belanja.map((e) => (
+                      <tr key={e.id} className={e.sebelumPosisi ? 'text-slate-400' : ''}>
+                        <td className="td whitespace-nowrap">{formatDate(e.date)}</td>
+                        <td className="td">{e.categoryLabel}</td>
+                        <td className="td">
+                          <Badge tone={e.mode === 'SETEL' ? 'amber' : 'slate'}>
+                            {e.mode === 'SETEL' ? 'Setel ulang' : 'Tambah'}
+                          </Badge>
+                        </td>
+                        <td className="td num">{formatRupiah(e.amount)}</td>
+                        <td className="td text-xs">
+                          {e.sebelumPosisi
+                            ? 'Sudah termasuk di saldo kas yang dilaporkan'
+                            : e.notes ?? '—'}
+                        </td>
+                        <td className="td num"><SpendDelete id={e.id} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-slate-200 font-semibold">
+                    <tr>
+                      <td className="td" colSpan={3}>Terpakai sejak posisi kas terakhir</td>
+                      <td className="td num">{formatRupiah(rencana?.terpakai ?? 0)}</td>
+                      <td className="td" colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </Card>
           )}
 
           <Card className="card-pad min-w-0">
@@ -390,6 +558,24 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </ul>
               </div>
             )}
+          </Card>
+
+          <Card className="card-pad">
+            <SectionTitle hint="Berapa yang sudah dibelanjakan sejak posisi kas terakhir.">
+              Catat belanja
+            </SectionTitle>
+            <SpendForm
+              planId={data.id}
+              kategori={data.kategori.map((k) => ({ id: k.id, label: k.label, terpakai: k.terpakai }))}
+              defaultDate={tanggalBawaan}
+            />
+          </Card>
+
+          <Card className="card-pad">
+            <SectionTitle hint="Hanya dipakai untuk meramalkan kapan kas habis, tidak memengaruhi plafon.">
+              Asumsi bulanan
+            </SectionTitle>
+            <AssumptionForm id={data.id} asumsi={data.asumsi} />
           </Card>
 
           <Card className="card-pad">

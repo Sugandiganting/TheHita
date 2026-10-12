@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
-  bagiProporsional, hitungRencana, jendela, pecahMinggu, usulkanProyeksi,
-  type Masukan,
+  bagiProporsional, hitungRencana, hitungRunway, jendela, lipatBelanja, pecahMinggu,
+  usulkanProyeksi, type EntriBelanja, type Masukan,
 } from '../src/lib/rencana-kas';
 
 const jt = (n: number) => n * 1_000_000;
@@ -29,6 +29,7 @@ const rapat9Okt: Masukan = {
     { label: 'Purchasing', weight: 20 },
     { label: 'Petty cash & HR', weight: 7 },
   ],
+  terpakai: 0,
 };
 
 test('sisa bulan dihitung mulai sehari setelah posisi kas dilaporkan', () => {
@@ -181,4 +182,101 @@ test('plafon mingguan tidak pernah melampaui anggaran normal', () => {
       assert.ok(w.plafonDasar >= 0 && w.tambahan >= 0, 'plafon tidak boleh negatif');
     }
   }
+});
+
+/* ---------------- laporan belanja ---------------- */
+
+const belanja = (n: number, amount: number, mode: 'TAMBAH' | 'SETEL', hari: string): EntriBelanja =>
+  ({ urut: n, date: tgl(hari), amount: jt(amount), mode });
+
+test('TAMBAH menumpuk, SETEL membuang riwayat sebelumnya', () => {
+  assert.equal(lipatBelanja([
+    belanja(0, 5, 'TAMBAH', '2026-10-11'),
+    belanja(1, 3, 'TAMBAH', '2026-10-13'),
+  ]), jt(8));
+
+  assert.equal(lipatBelanja([
+    belanja(0, 5, 'TAMBAH', '2026-10-11'),
+    belanja(1, 3, 'TAMBAH', '2026-10-13'),
+    belanja(2, 14, 'SETEL', '2026-10-14'),
+  ]), jt(14));
+
+  assert.equal(lipatBelanja([
+    belanja(0, 14, 'SETEL', '2026-10-14'),
+    belanja(1, 2, 'TAMBAH', '2026-10-15'),
+  ]), jt(16));
+});
+
+test('urutan ditentukan tanggal, bukan urutan pengisian', () => {
+  assert.equal(lipatBelanja([
+    belanja(0, 2, 'TAMBAH', '2026-10-20'),
+    belanja(1, 14, 'SETEL', '2026-10-14'),
+  ]), jt(16));
+});
+
+test('dua laporan bertanggal sama tetap berurutan stabil', () => {
+  assert.equal(lipatBelanja([
+    belanja(1, 3, 'TAMBAH', '2026-10-14'),
+    belanja(0, 10, 'SETEL', '2026-10-14'),
+  ]), jt(13));
+});
+
+test('tanpa laporan, yang terpakai nol', () => {
+  assert.equal(lipatBelanja([]), 0);
+});
+
+test('yang sudah terpakai mengurangi plafon, bukan jatahnya', () => {
+  const r = hitungRencana({ ...rapat9Okt, terpakai: jt(20) });
+  assert.equal(keJt(r.skenario.NORMAL.jatah), 85.5);
+  assert.equal(keJt(r.skenario.NORMAL.bolehBelanja), 65.5);
+  const total = r.minggu.reduce((s, m) => s + m.plafonDasar + m.tambahan, 0);
+  assert.equal(total, Math.max(0, r.skenario.NORMAL.bolehBelanja));
+});
+
+/* ---------------- kapan kas habis ---------------- */
+
+/** Pola September 2026: masuk Rp351 jt, keluar Rp402,8 jt termasuk cicilan. */
+const runwaySeptember = {
+  period: '2026-10',
+  saldoKas: jt(134.5),
+  pengeluaranBulanan: jt(402.8),
+  kebutuhanGaji: jt(125),
+  hariTersisa: 22,
+  hariSebulan: 31,
+};
+
+test('arus bersih bulanan sama dengan hitungan slide 8', () => {
+  const normal = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) });
+  assert.equal(keJt(normal.arusBersih), -51.8);
+
+  const pesimis = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(178.3), proyeksiBulanan: jt(333) });
+  assert.equal(keJt(pesimis.arusBersih), -69.8);
+});
+
+test('kas yang terus menyusut punya bulan habis', () => {
+  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
+  assert.ok(r.habisPada, 'seharusnya habis dalam horizon');
+  // Bulan terakhir adalah yang pertama minus; tidak ada bulan sesudahnya.
+  assert.equal(r.bulan[r.bulan.length - 1].period, r.habisPada);
+  assert.ok(r.bulan[r.bulan.length - 1].saldoAkhir < 0);
+  for (const b of r.bulan.slice(0, -1)) assert.ok(b.saldoAkhir >= 0);
+});
+
+test('gaji terancam lebih dulu daripada kas habis', () => {
+  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) });
+  assert.ok(r.gajiTerancam);
+  assert.ok(r.habisPada);
+  assert.ok(r.gajiTerancam! <= r.habisPada!);
+});
+
+test('arus bersih positif tidak pernah menghabiskan kas', () => {
+  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500) });
+  assert.equal(r.habisPada, null);
+  assert.equal(r.bulan.length, 13);
+  assert.ok(r.arusBersih > 0);
+});
+
+test('horizon bisa dipersingkat dan tidak pernah tak berujung', () => {
+  const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500), horizon: 3 });
+  assert.equal(r.bulan.length, 4);
 });

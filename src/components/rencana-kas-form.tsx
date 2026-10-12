@@ -4,8 +4,8 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
-  saveCashProjection, saveCategory, saveCheckpoint, saveCommitment, toggleCommitmentPaid,
-  type ActionState,
+  deleteSpend, saveAssumptions, saveCashProjection, saveCategory, saveCheckpoint,
+  saveCommitment, saveSpend, toggleCommitmentPaid, type ActionState,
 } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { MoneyInput } from './money-input';
@@ -296,5 +296,152 @@ export function PlanDelete({ id, period }: { id: string; period: string }) {
       </button>
       {!state.ok && state.message && <span className="text-xs text-red-600">{state.message}</span>}
     </span>
+  );
+}
+
+/**
+ * Laporan belanja. Dua cara mencatat, dan perbedaannya penting: TAMBAH untuk
+ * pengeluaran baru, SETEL bila angka yang dilaporkan adalah total terbaru —
+ * misalnya setelah purchasing merekap ulang, atau setelah posisi kas diperbarui
+ * sehingga hitungan sebelumnya sudah termasuk di saldo.
+ */
+export function SpendForm({
+  planId, kategori, defaultDate,
+}: {
+  planId: string;
+  kategori: { id: string; label: string; terpakai: number }[];
+  defaultDate: string;
+}) {
+  const [state, action] = useActionState(saveSpend, initial);
+  const [mode, setMode] = useState<'TAMBAH' | 'SETEL'>('TAMBAH');
+
+  if (kategori.length === 0) {
+    return <p className="text-sm text-slate-500">Tambahkan kategori terlebih dahulu.</p>;
+  }
+
+  return (
+    <form action={action} className="space-y-4" key={state.ok ? state.message : 'baru'}>
+      <input type="hidden" name="planId" value={planId} />
+      <input type="hidden" name="mode" value={mode} />
+
+      <div>
+        <label className="label" htmlFor="rk-skat">Dibelanjakan oleh</label>
+        <select id="rk-skat" name="categoryId" className="input" required defaultValue="">
+          <option value="" disabled>Pilih kategori…</option>
+          {kategori.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.label} — terpakai {formatRupiah(k.terpakai)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <span className="label">Cara mencatat</span>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            ['TAMBAH', 'Tambah', 'Ditumpuk ke total sebelumnya'],
+            ['SETEL', 'Setel ulang', 'Mengganti total jadi angka ini'],
+          ] as const).map(([nilai, judul, jelas]) => (
+            <button
+              key={nilai}
+              type="button"
+              onClick={() => setMode(nilai)}
+              aria-pressed={mode === nilai}
+              className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                mode === nilai
+                  ? 'border-brand-500 bg-brand-50 text-brand-800'
+                  : 'border-slate-300 text-slate-600 hover:border-slate-400'
+              }`}
+            >
+              <span className="block font-medium">{judul}</span>
+              <span className="block text-[11px] text-slate-500">{jelas}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="label" htmlFor="rk-samount">
+          {mode === 'SETEL' ? 'Total belanja terbaru' : 'Nominal belanja'}
+        </label>
+        <MoneyInput id="rk-samount" name="amount" placeholder="14.000.000" required />
+        {mode === 'SETEL' && (
+          <p className="mt-1 text-xs text-slate-500">Isi 0 untuk mengosongkan hitungan kategori ini.</p>
+        )}
+      </div>
+
+      <div>
+        <label className="label" htmlFor="rk-sdate">Tanggal</label>
+        <input id="rk-sdate" type="date" name="date" className="input" defaultValue={defaultDate} required />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="rk-snote">Catatan</label>
+        <input id="rk-snote" name="notes" className="input" placeholder="Opsional" />
+      </div>
+
+      <Submit label={mode === 'SETEL' ? 'Setel ulang total' : 'Catat belanja'} />
+      <Pesan state={state} />
+    </form>
+  );
+}
+
+export function SpendDelete({ id }: { id: string }) {
+  const [state, action] = useActionState(deleteSpend, initial);
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
+      <Tautan label="Hapus" pendingLabel="…" bahaya />
+      {!state.ok && state.message && <span className="ml-2 text-xs text-red-600">{state.message}</span>}
+    </form>
+  );
+}
+
+/** Dua angka yang hanya dipakai meramalkan kapan kas habis. */
+export function AssumptionForm({
+  id, asumsi,
+}: {
+  id: string;
+  asumsi: {
+    monthlyOutflow: number | null; salaryNeed: number | null;
+    usulanOutflow: number | null; usulanGaji: number | null;
+  };
+}) {
+  const [state, action] = useActionState(saveAssumptions, initial);
+  const baris = [
+    {
+      name: 'monthlyOutflow', label: 'Pengeluaran rutin per bulan',
+      nilai: asumsi.monthlyOutflow, usul: asumsi.usulanOutflow,
+      jelas: 'Seluruh uang keluar sebulan termasuk gaji, service, dan cicilan bank.',
+    },
+    {
+      name: 'salaryNeed', label: 'Kebutuhan gaji per bulan',
+      nilai: asumsi.salaryNeed, usul: asumsi.usulanGaji,
+      jelas: 'Dipakai menandai bulan yang saldonya tidak lagi menutup gaji.',
+    },
+  ];
+
+  return (
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="id" value={id} />
+      {baris.map((b) => (
+        <div key={b.name}>
+          <label className="label" htmlFor={`rk-${b.name}`}>{b.label}</label>
+          <MoneyInput
+            id={`rk-${b.name}`}
+            name={b.name}
+            defaultValue={b.nilai === null ? '' : String(b.nilai)}
+            placeholder={b.usul === null ? '402.800.000' : String(Math.round(b.usul))}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            {b.jelas}
+            {b.nilai === null && b.usul !== null && ` Kosong — memakai ${formatRupiah(b.usul)}.`}
+          </p>
+        </div>
+      ))}
+      <Submit label="Simpan asumsi" />
+      <Pesan state={state} />
+    </form>
   );
 }

@@ -8,7 +8,7 @@
  * dihitung ulang dengan tangan saat rapat.
  */
 
-import { periodEndExclusive, periodStart, type Period } from './period';
+import { addMonths, periodEndExclusive, periodStart, type Period } from './period';
 
 export type Skenario = 'PESIMIS' | 'NORMAL' | 'OPTIMIS';
 export const SKENARIO: readonly Skenario[] = ['PESIMIS', 'NORMAL', 'OPTIMIS'] as const;
@@ -32,6 +32,21 @@ export type Komitmen = {
   paid: boolean;
 };
 
+/**
+ * Cara sebuah laporan belanja diperlakukan terhadap laporan sebelumnya.
+ * TAMBAH untuk pengeluaran baru, SETEL untuk membetulkan angka yang salah atau
+ * memulai hitungan dari nol setelah posisi kas diperbarui.
+ */
+export type ModeBelanja = 'TAMBAH' | 'SETEL';
+
+export type EntriBelanja = {
+  /** Urutan stabil bila dua laporan bertanggal sama. */
+  urut: number;
+  date: Date;
+  amount: number;
+  mode: ModeBelanja;
+};
+
 export type Kategori = {
   label: string;
   /** Porsi relatif; dinormalkan terhadap jumlah seluruh kategori. */
@@ -47,6 +62,12 @@ export type Masukan = {
   proyeksi: Record<Skenario, number>;
   komitmen: Komitmen[];
   kategori: Kategori[];
+  /**
+   * Yang sudah dibelanjakan SETELAH tanggal posisi kas di atas. Belanja sebelum
+   * tanggal itu tidak dihitung di sini karena sudah tercermin pada saldo yang
+   * dilaporkan — menghitungnya dua kali akan mengecilkan anggaran tanpa sebab.
+   */
+  terpakai: number;
 };
 
 export type Minggu = {
@@ -64,6 +85,9 @@ export type HasilSkenario = {
   skenario: Skenario;
   proyeksi: number;
   sisaMasuk: number;
+  /** Jatah seluruh sisa bulan, sebelum dikurangi yang sudah terpakai. */
+  jatah: number;
+  /** Yang masih boleh dibelanjakan: jatah dikurangi yang sudah terpakai. */
   bolehBelanja: number;
   perMinggu: number;
 };
@@ -74,11 +98,29 @@ export type PorsiKategori = {
   sisaBulan: number;
 };
 
+export type BulanRunway = {
+  period: Period;
+  saldoAkhir: number;
+  /** Saldo akhir bulan itu masih menutup satu kali gaji. */
+  cukupGaji: boolean;
+};
+
+export type Runway = {
+  /** Uang masuk sebulan penuh dikurangi pengeluaran rutin sebulan. */
+  arusBersih: number;
+  bulan: BulanRunway[];
+  /** Bulan pertama dengan saldo akhir minus; null bila tidak habis sepanjang horizon. */
+  habisPada: Period | null;
+  /** Bulan pertama yang saldonya tidak lagi menutup gaji. */
+  gajiTerancam: Period | null;
+};
+
 export type Rencana = {
   mulai: Date;
   selesai: Date;
   hari: number;
   komitmenBelumBayar: number;
+  terpakai: number;
   skenario: Record<Skenario, HasilSkenario>;
   minggu: Minggu[];
   kategori: PorsiKategori[];
@@ -152,14 +194,17 @@ function hasilSkenario(
   masukSampaiKini: number,
   saldoKas: number,
   komitmen: number,
+  terpakai: number,
   jumlahMinggu: number,
 ): HasilSkenario {
   const sisaMasuk = Math.max(0, proyeksi - masukSampaiKini);
-  const bolehBelanja = saldoKas + sisaMasuk - komitmen;
+  const jatah = saldoKas + sisaMasuk - komitmen;
+  const bolehBelanja = jatah - terpakai;
   return {
     skenario,
     proyeksi,
     sisaMasuk,
+    jatah,
     bolehBelanja,
     // Dibulatkan: angka ini dibacakan sebagai aturan belanja, bukan hasil
     // pembukuan, dan "Rp 45.733.333 per minggu" tidak lebih berguna daripada
@@ -176,7 +221,9 @@ export function hitungRencana(m: Masukan): Rencana {
   const skenario = Object.fromEntries(
     SKENARIO.map((s) => [
       s,
-      hasilSkenario(s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas, komitmenBelumBayar, potongan.length),
+      hasilSkenario(
+        s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas, komitmenBelumBayar, m.terpakai, potongan.length,
+      ),
     ]),
   ) as Record<Skenario, HasilSkenario>;
 
@@ -220,7 +267,77 @@ export function hitungRencana(m: Masukan): Rencana {
     sisaBulan: porsiBulan[i],
   }));
 
-  return { mulai, selesai, hari, komitmenBelumBayar, skenario, minggu, kategori };
+  return { mulai, selesai, hari, komitmenBelumBayar, terpakai: m.terpakai, skenario, minggu, kategori };
+}
+
+/**
+ * Melipat laporan belanja menjadi satu angka. Dibaca berurutan menurut tanggal:
+ * TAMBAH menumpuk di atas yang sebelumnya, SETEL membuang seluruh riwayat
+ * sebelumnya dan memulai dari angka itu. Dua mode ini yang membedakan
+ * "purchasing belanja Rp3 jt lagi" dari "ternyata totalnya Rp14 jt, bukan 11".
+ */
+export function lipatBelanja(entri: EntriBelanja[]): number {
+  const urut = [...entri].sort(
+    (a, b) => a.date.getTime() - b.date.getTime() || a.urut - b.urut,
+  );
+  let total = 0;
+  for (const e of urut) total = e.mode === 'SETEL' ? e.amount : total + e.amount;
+  return Math.max(0, total);
+}
+
+/** Paling jauh yang masuk akal diramalkan dari satu bulan data. */
+export const HORIZON_BULAN = 12;
+
+/**
+ * Kapan kas habis bila pola belanja tidak berubah.
+ *
+ * Pertanyaan ini sengaja dijawab dengan model yang berbeda dari plafon
+ * mingguan. Plafon menjawab "berapa yang boleh dibelanjakan supaya kas tidak
+ * habis"; bagian ini menjawab "apa yang terjadi kalau plafon itu tidak
+ * diikuti dan belanja berjalan seperti bulan-bulan kemarin". Keduanya memang
+ * harus berbeda — yang satu rencana, yang satu peringatan.
+ */
+export function hitungRunway(opsi: {
+  period: Period;
+  saldoKas: number;
+  sisaMasuk: number;
+  proyeksiBulanan: number;
+  pengeluaranBulanan: number;
+  kebutuhanGaji: number;
+  hariTersisa: number;
+  hariSebulan: number;
+  horizon?: number;
+}): Runway {
+  const {
+    period, saldoKas, sisaMasuk, proyeksiBulanan, pengeluaranBulanan,
+    kebutuhanGaji, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
+  } = opsi;
+
+  const arusBersih = proyeksiBulanan - pengeluaranBulanan;
+  const bulan: BulanRunway[] = [];
+
+  // Bulan berjalan memakai uang masuk yang benar-benar tersisa, bukan proyeksi
+  // sebulan penuh, sedangkan pengeluarannya diprorata menurut hari yang tersisa.
+  const porsi = hariSebulan > 0 ? hariTersisa / hariSebulan : 0;
+  let saldo = saldoKas + sisaMasuk - pengeluaranBulanan * porsi;
+  bulan.push({ period, saldoAkhir: saldo, cukupGaji: saldo >= kebutuhanGaji });
+
+  for (let i = 1; i <= horizon; i += 1) {
+    if (saldo < 0) break;
+    saldo += arusBersih;
+    bulan.push({
+      period: addMonths(period, i),
+      saldoAkhir: saldo,
+      cukupGaji: saldo >= kebutuhanGaji,
+    });
+  }
+
+  return {
+    arusBersih,
+    bulan,
+    habisPada: bulan.find((b) => b.saldoAkhir < 0)?.period ?? null,
+    gajiTerancam: bulan.find((b) => !b.cukupGaji)?.period ?? null,
+  };
 }
 
 /**

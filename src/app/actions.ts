@@ -888,7 +888,8 @@ function segarkanRencanaKas() {
 /** Dipakai saat bulan pertama kali dibuat dan belum ada bulan sebelumnya. */
 const KATEGORI_BAWAAN = [
   { label: 'Purchasing', weight: 20, sort: 0 },
-  { label: 'Petty cash & HR', weight: 7, sort: 1 },
+  { label: 'HR (petty cash)', weight: 7, sort: 1 },
+  { label: 'Bank Perusahaan', weight: 7, sort: 2 },
 ];
 
 function angka(formData: FormData, nama: string): number {
@@ -1077,4 +1078,58 @@ export async function deleteCashPlan(_prev: ActionState, formData: FormData): Pr
   await prisma.cashPlan.delete({ where: { id } });
   segarkanRencanaKas();
   redirect('/rencana-kas');
+}
+
+export async function saveAssumptions(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const plan = await prisma.cashPlan.findUnique({ where: { id }, select: { id: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+
+  const monthlyOutflow = angkaAtauNull(formData, 'monthlyOutflow');
+  const salaryNeed = angkaAtauNull(formData, 'salaryNeed');
+  if ((monthlyOutflow ?? 0) < 0 || (salaryNeed ?? 0) < 0) return fail('Angka tidak boleh negatif.');
+
+  await prisma.cashPlan.update({ where: { id }, data: { monthlyOutflow, salaryNeed } });
+  segarkanRencanaKas();
+  return ok('Asumsi bulanan disimpan.');
+}
+
+export async function saveSpend(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const planId = String(formData.get('planId') ?? '');
+  const categoryId = String(formData.get('categoryId') ?? '');
+  const mode = String(formData.get('mode') ?? 'TAMBAH');
+  const tanggalTeks = String(formData.get('date') ?? '');
+  const amount = angka(formData, 'amount');
+
+  if (!categoryId) return fail('Kategori wajib dipilih.');
+  if (!['TAMBAH', 'SETEL'].includes(mode)) return fail('Cara pencatatan tidak dikenal.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalTeks)) return fail('Tanggal wajib diisi.');
+  // SETEL boleh nol — itulah cara mengosongkan hitungan belanja sebuah kategori.
+  if (!Number.isFinite(amount) || amount < 0) return fail('Nominal tidak boleh negatif.');
+  if (mode === 'TAMBAH' && amount === 0) return fail('Nominal harus lebih dari nol.');
+
+  const [plan, kategori] = await Promise.all([
+    prisma.cashPlan.findUnique({ where: { id: planId }, select: { period: true } }),
+    prisma.spendCategory.findUnique({ where: { id: categoryId }, select: { planId: true } }),
+  ]);
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+  if (!kategori || kategori.planId !== planId) return fail('Kategori bukan milik rencana ini.');
+
+  const date = parseDate(tanggalTeks);
+  if (toPeriod(date) !== plan.period) return fail(`Tanggal harus berada di bulan ${plan.period}.`);
+
+  await prisma.spendEntry.create({
+    data: { planId, categoryId, date, amount, mode, notes: String(formData.get('notes') ?? '').trim() || null },
+  });
+  segarkanRencanaKas();
+  return ok(mode === 'SETEL' ? 'Total belanja disetel ulang.' : 'Belanja ditambahkan.');
+}
+
+export async function deleteSpend(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.spendEntry.findUnique({ where: { id }, select: { id: true } });
+  if (!ada) return fail('Laporan belanja tidak ditemukan.');
+  await prisma.spendEntry.delete({ where: { id } });
+  segarkanRencanaKas();
+  return ok('Laporan belanja dihapus.');
 }
