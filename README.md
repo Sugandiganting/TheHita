@@ -75,13 +75,14 @@ npm install
 npm run setup
 
 # 4. Jalankan
-npm run dev
+npm run mulai
 ```
 
 Buka <http://localhost:3000> di browser.
 
 Berkas `.env` dibuat sendiri dari `.env.example` saat perintah `npm run setup`,
-`npm run dev`, `npm run build`, atau `npm start` pertama kali dijalankan. Perintah
+`npm run mulai`, `npm run dev`, `npm run build`, atau `npm start` pertama kali
+dijalankan. Perintah
 yang sama juga menyamakan struktur database dengan skema bila skemanya berubah,
 sehingga menu baru yang memerlukan tabel baru langsung bisa dipakai.
 
@@ -90,7 +91,7 @@ sehingga menu baru yang memerlukan tabel baru langsung bisa dipakai.
 ```bash
 git pull
 npm install
-npm run dev
+npm run mulai
 ```
 
 Tidak ada langkah database yang perlu diingat: penambahan tabel dijalankan sendiri
@@ -122,8 +123,8 @@ proyek contoh yang dilewati.
 
 | Perintah | Kegunaan |
 |---|---|
-| `npm run dev` | Menjalankan untuk pemakaian sehari-hari / pengembangan |
-| `npm run build && npm start` | Menjalankan versi produksi (lebih cepat) |
+| `npm run mulai` | **Menjalankan untuk pemakaian sehari-hari** — menyusun ulang hanya bila kodenya berubah |
+| `npm run dev` | Mode pengembangan: perubahan kode langsung terlihat, tetapi tiap halaman disusun saat pertama dibuka sehingga terasa lambat |
 | `npm test` | Menjalankan pengujian mesin peramalan & aturan akuntansi |
 | `npm run db:reset` | Mengosongkan database lalu mengisi ulang data awal |
 | `npm run db:generate` | Menyusun ulang Prisma Client setelah skema database berubah |
@@ -135,6 +136,11 @@ Jalankan semuanya lewat `npm run`, bukan `npx`. Perintah `npm run` memakai Prism
 yang terpasang di folder projek ini (versi 5), sedangkan `npx prisma` akan mengunduh
 versi terbaru dari internet bila belum terpasang — paket itu kini alat yang berbeda
 dan akan menolak dengan `No command registered for 'generate'`.
+
+Pakai `npm run mulai`, bukan `npm run dev`, untuk pemakaian sehari-hari. Mode
+pengembangan menyusun tiap halaman saat pertama dibuka: pada mesin pengujian,
+halaman pertama perlu 16 detik dan tiap menu baru 1,5-4,7 detik, sedangkan mode
+produksi siap dalam 0,2 detik dan tiap menu terbuka di bawah 0,1 detik.
 
 ### Memuat posisi kas mingguan dari workbook
 

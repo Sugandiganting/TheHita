@@ -90,4 +90,7 @@ echo -e "  Selesai bekerja? Tekan ${HIJAU}Control + C${NORMAL}, lalu tutup jende
 echo -e "${BIRU}------------------------------------------------${NORMAL}"
 echo ""
 
-npm run dev
+# Mode produksi, bukan mode pengembangan: yang memakai aplikasi ini menunggu
+# halaman terbuka, bukan menunggu kodenya disusun. Penyusunan hanya diulang bila
+# ada kode yang berubah.
+npm run mulai

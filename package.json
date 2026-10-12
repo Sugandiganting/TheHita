@@ -4,6 +4,7 @@
   "private": true,
   "description": "Sistem akuntansi multi-unit & peramalan arus kas untuk The Hita Hospitality Group",
   "scripts": {
+    "mulai": "node scripts/jalankan.mjs",
     "predev": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs",
