@@ -81,7 +81,21 @@ npm run dev
 Buka <http://localhost:3000> di browser.
 
 Berkas `.env` dibuat sendiri dari `.env.example` saat perintah `npm run setup`,
-`npm run dev`, `npm run build`, atau `npm start` pertama kali dijalankan.
+`npm run dev`, `npm run build`, atau `npm start` pertama kali dijalankan. Perintah
+yang sama juga menyamakan struktur database dengan skema bila skemanya berubah,
+sehingga menu baru yang memerlukan tabel baru langsung bisa dipakai.
+
+### Memperbarui
+
+```bash
+git pull
+npm install
+npm run dev
+```
+
+Tidak ada langkah database yang perlu diingat: penambahan tabel dijalankan sendiri
+saat aplikasi dinyalakan, dan data yang sudah ada tidak tersentuh — perubahan yang
+akan menghapus data ditolak, bukan dijalankan diam-diam.
 
 ### Lewat unduhan ZIP
 
