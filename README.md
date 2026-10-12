@@ -149,9 +149,10 @@ npm run impor-kas -- data/Proyeksi.xlsx data/Kondisi_Keuangan.xlsx
 Yang dibaca: baris saldo terakhir pada sheet **Saldo New Format**, lalu kolom bulan
 berjalan pada sheet **Combined Cashflow Normal** untuk uang masuk dan belanja
 Purchasing, HR, dan Bank Perusahaan. Proyeksi tiga skenario diambil dari kolom
-proyeksi bulan itu di ketiga sheet Combined Cashflow — berikut kolom bulan
-sesudahnya, yang dipakai meramalkan kapan kas habis — dan pengeluaran rutin per
-bulan dari total uang keluar bulan lalu ditambah cicilan bank.
+proyeksi bulan itu di ketiga sheet Combined Cashflow, dan pengeluaran rutin per
+bulan dari total uang keluar bulan lalu ditambah cicilan bank. Bulan-bulan
+sesudahnya tidak ikut diimpor: angkanya diturunkan dari **pola musim** di
+Master Data.
 
 Angka belanja dicatat sebagai *setel ulang*, bukan tambah, karena workbook selalu
 menyimpan total sejak awal bulan — jadi berkas yang sama boleh diimpor berkali-kali

@@ -956,9 +956,6 @@ export async function saveCashProjection(_prev: ActionState, formData: FormData)
     incomePessimistic: angkaAtauNull(formData, 'pesimis'),
     incomeNormal: angkaAtauNull(formData, 'normal'),
     incomeOptimistic: angkaAtauNull(formData, 'optimis'),
-    nextPessimistic: angkaAtauNull(formData, 'pesimisBerikutnya'),
-    nextNormal: angkaAtauNull(formData, 'normalBerikutnya'),
-    nextOptimistic: angkaAtauNull(formData, 'optimisBerikutnya'),
   };
   const terisi = Object.values(nilai).filter((v) => v !== null) as number[];
   if (terisi.some((v) => v < 0)) return fail('Proyeksi tidak boleh negatif.');
@@ -967,24 +964,20 @@ export async function saveCashProjection(_prev: ActionState, formData: FormData)
   // di workbook bisa tertinggal saat yang lain sudah diperbarui. Menolaknya
   // akan mengunci seluruh formulir atas angka yang datang dari sana, jadi
   // disimpan apa adanya dan cukup diingatkan.
-  const janggal = (
-    [
-      [nilai.incomePessimistic, nilai.incomeOptimistic, 'bulan berjalan'],
-      [nilai.nextPessimistic, nilai.nextOptimistic, 'bulan berikutnya'],
-    ] as const
-  ).filter(([p2, o]) => p2 !== null && o !== null && p2 > o).map(([, , nama]) => nama);
+  const janggal = nilai.incomePessimistic !== null && nilai.incomeOptimistic !== null
+    && nilai.incomePessimistic > nilai.incomeOptimistic;
 
   await prisma.cashPlan.update({
     where: { id },
     data: { ...nilai, notes: String(formData.get('notes') ?? '').trim() || null },
   });
   segarkanRencanaKas();
-  return janggal.length > 0
+  return janggal
     ? {
         ok: true,
         warn: true,
-        message: `Proyeksi disimpan. Perhatikan: pesimis ${janggal.join(' dan ')} lebih besar `
-          + 'daripada optimisnya, jadi kedua skenario itu tertukar.',
+        message: 'Proyeksi disimpan. Perhatikan: pesimis lebih besar daripada optimis, '
+          + 'jadi kedua skenario itu tertukar.',
       }
     : ok('Proyeksi disimpan.');
 }

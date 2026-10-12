@@ -286,8 +286,10 @@ model CashPlan {
   incomeNormal      Float?
   incomeOptimistic  Float?
 
-  /// Proyeksi untuk bulan-bulan sesudahnya, dipakai meramalkan kapan kas habis.
-  /// null = sama dengan proyeksi bulan berjalan.
+  /// Tidak dipakai lagi: bulan-bulan sesudahnya kini mengikuti pola musim di
+  /// master data. Kolomnya ditinggalkan karena menghapusnya adalah perubahan
+  /// yang menghilangkan data, dan penyamaan struktur otomatis saat aplikasi
+  /// dinyalakan sengaja menolak perubahan semacam itu.
   nextPessimistic Float?
   nextNormal      Float?
   nextOptimistic  Float?

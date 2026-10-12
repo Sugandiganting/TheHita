@@ -125,17 +125,11 @@ export function CheckpointForm({
 type TigaSkenario = { PESIMIS: number | null; NORMAL: number | null; OPTIMIS: number | null };
 
 export function ProjectionForm({
-  id, tersimpan, usulan, berikutnya, dipakai, musimBerikutnya, notes,
+  id, tersimpan, usulan, notes,
 }: {
   id: string;
   tersimpan: TigaSkenario;
   usulan: { PESIMIS: number; NORMAL: number; OPTIMIS: number } | null;
-  /** Proyeksi bulan-bulan sesudahnya; null berarti mengikuti bulan berjalan. */
-  berikutnya: TigaSkenario;
-  /** Yang terpakai untuk bulan tepat sesudah ini — rujukan saat isiannya kosong. */
-  dipakai: { PESIMIS: number; NORMAL: number; OPTIMIS: number };
-  /** Nama musim bulan berikutnya, bila polanya sudah berlaku. */
-  musimBerikutnya: string | null;
   notes: string | null;
 }) {
   const [state, action] = useActionState(saveCashProjection, initial);
@@ -169,43 +163,6 @@ export function ProjectionForm({
                 : usul === undefined
                   ? 'Angka Anda sendiri.'
                   : `Usulan sistem ${formatRupiah(usul)}`}
-            </p>
-          </div>
-        );
-      })}
-
-      {/*
-        Musim berganti: Oktober sedang, November-Desember ramai. Satu angka
-        untuk bulan ini sekaligus bulan-bulan sesudahnya pasti meleset di salah
-        satunya, jadi ramalan jangka panjang boleh memakai angkanya sendiri.
-      */}
-      <div className="border-t border-slate-200 pt-4">
-        <p className="text-sm font-medium text-slate-700">Bulan-bulan berikutnya</p>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Hanya dipakai meramalkan kapan kas habis.{' '}
-          {musimBerikutnya
-            ? 'Kosongkan untuk mengikuti pola musim.'
-            : 'Kosongkan bila musimnya tidak berubah.'}
-        </p>
-      </div>
-
-      {baris.map((b) => {
-        const nilai = berikutnya[b.kunci];
-        return (
-          <div key={`${b.name}-next`}>
-            <label className="label" htmlFor={`rk-${b.name}-next`}>{b.label} bulan berikutnya</label>
-            <MoneyInput
-              id={`rk-${b.name}-next`}
-              name={`${b.name}Berikutnya`}
-              defaultValue={nilai === null ? '' : String(nilai)}
-              placeholder={String(Math.round(dipakai[b.kunci]))}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              {nilai === null
-                ? musimBerikutnya
-                  ? `Kosong — pola musim ${musimBerikutnya}: ${formatRupiah(dipakai[b.kunci])}`
-                  : `Kosong — mengikuti bulan berjalan ${formatRupiah(dipakai[b.kunci])}`
-                : 'Angka Anda sendiri.'}
             </p>
           </div>
         );

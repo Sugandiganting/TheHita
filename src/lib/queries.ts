@@ -643,8 +643,6 @@ export type RencanaKasDetail = {
   usulan: Record<Skenario, number> | null;
   /** Yang benar-benar dipakai menghitung: tersimpan bila ada, selain itu usulan. */
   dipakai: Record<Skenario, number>;
-  /** Proyeksi bulan-bulan berikutnya; null berarti mengikuti pola musim. */
-  tersimpanBerikutnya: Record<Skenario, number | null>;
   /** Yang dipakai untuk bulan tepat sesudah bulan berjalan. */
   dipakaiBerikutnya: Record<Skenario, number>;
   musim: {
@@ -749,16 +747,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     SKENARIO.map((s) => [s, tersimpan[s] ?? usulan?.[s] ?? 0]),
   ) as Record<Skenario, number>;
 
-  const tersimpanBerikutnya: Record<Skenario, number | null> = {
-    PESIMIS: plan.nextPessimistic,
-    NORMAL: plan.nextNormal,
-    OPTIMIS: plan.nextOptimistic,
-  };
-
-  // Tiga lapis, dari yang paling kuat: angka yang diketik sendiri untuk bulan
-  // berikutnya, lalu pola musim, lalu bulan berjalan apa adanya. Yang diketik
-  // menang karena pemakai bisa tahu hal yang tidak diketahui polanya — satu
-  // rombongan besar yang sudah memesan, misalnya.
+  // Bulan-bulan sesudah bulan berjalan mengikuti pola musim; bila polanya belum
+  // disiapkan, angkanya sama dengan bulan berjalan.
   const pola = await polaMusim();
   const musimAktif = polaBervariasi(pola);
   const musimBulanIni = pola.get(monthOf(period)) ?? null;
@@ -767,7 +757,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   ) as Record<Skenario, number | null>;
 
   const proyeksiUntuk = (s: Skenario) => (p: Period) =>
-    tersimpanBerikutnya[s] ?? proyeksiMusim(p, dasar[s], pola) ?? dipakai[s];
+    proyeksiMusim(p, dasar[s], pola) ?? dipakai[s];
 
   const bulanDepan = addMonths(period, 1);
   const dipakaiBerikutnya = Object.fromEntries(
@@ -871,7 +861,6 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     tersimpan,
     usulan,
     dipakai,
-    tersimpanBerikutnya,
     dipakaiBerikutnya,
     musim: {
       aktif: musimAktif,

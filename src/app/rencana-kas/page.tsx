@@ -1,5 +1,6 @@
+import Link from 'next/link';
 import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
-import { currentPeriod } from '@/lib/period';
+import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { formatDate, formatPeriod, formatPeriodShort, formatRupiah, toDateInput } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
@@ -266,11 +267,28 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   <p className="mt-4 text-xs text-slate-500">
                     Pengeluaran rutin {formatRupiah(data.asumsi.monthlyOutflow ?? data.asumsi.usulanOutflow ?? 0)} per
                     bulan, kebutuhan gaji {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
-                    bulan. Bulan berjalan dikurangi komitmen yang belum dibayar{' '}
+                    bulan — ubah di panel samping.{' '}
+                    <strong>Bulan berjalan</strong> dikurangi komitmen yang belum dibayar{' '}
                     {formatRupiah(rencana.komitmenBelumBayar)}
                     {sekaliIni > 0 && <> — di antaranya {formatRupiah(sekaliIni)} sekali ini saja</>}, lalu
-                    belanja operasional sisa bulan. Bulan berikutnya memakai proyeksi penuh dikurangi
-                    pengeluaran rutin. Ubah asumsinya di panel samping.
+                    belanja operasional sisa bulan.{' '}
+                    <strong>Bulan-bulan berikutnya</strong> memakai proyeksinya masing-masing dikurangi
+                    pengeluaran rutin
+                    {data.musim.aktif ? (
+                      <>
+                        , menurut{' '}
+                        <Link href="/musim" className="text-brand-700 hover:underline">pola musim</Link>
+                        {data.musim.bulanDepan && (
+                          <> — {formatPeriod(addMonths(data.period, 1))} {data.musim.bulanDepan.name.toLowerCase()}</>
+                        )}.
+                      </>
+                    ) : (
+                      <>
+                        {' '}— saat ini sama dengan bulan berjalan, karena{' '}
+                        <Link href="/musim" className="text-brand-700 hover:underline">pola musim</Link>{' '}
+                        belum disiapkan.
+                      </>
+                    )}
                   </p>
                 </Card>
               )}
@@ -612,16 +630,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
           </Card>
 
           <Card className="card-pad">
-            <SectionTitle hint="Kosongkan untuk memakai usulan dari riwayat uang masuk.">
+            <SectionTitle hint="Untuk bulan berjalan. Bulan-bulan sesudahnya mengikuti pola musim.">
               Proyeksi uang masuk
             </SectionTitle>
             <ProjectionForm
               id={data.id}
               tersimpan={data.tersimpan}
               usulan={data.usulan}
-              berikutnya={data.tersimpanBerikutnya}
-              dipakai={data.dipakaiBerikutnya}
-              musimBerikutnya={data.musim.aktif ? data.musim.bulanDepan?.name ?? null : null}
               notes={data.notes}
             />
             {data.riwayatMasuk.length > 0 && (
