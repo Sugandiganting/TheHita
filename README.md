@@ -115,11 +115,32 @@ proyek contoh yang dilewati.
 | `npm run db:generate` | Menyusun ulang Prisma Client setelah skema database berubah |
 | `npm run db:studio` | Membuka database secara langsung bila perlu koreksi manual |
 | `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
+| `npm run impor-kas -- <Proyeksi.xlsx> <Kondisi_Keuangan.xlsx>` | Memuat posisi kas mingguan dari workbook kerja ke menu Rencana Kas |
 
 Jalankan semuanya lewat `npm run`, bukan `npx`. Perintah `npm run` memakai Prisma
 yang terpasang di folder projek ini (versi 5), sedangkan `npx prisma` akan mengunduh
 versi terbaru dari internet bila belum terpasang — paket itu kini alat yang berbeda
 dan akan menolak dengan `No command registered for 'generate'`.
+
+### Memuat posisi kas mingguan dari workbook
+
+Menu Rencana Kas bisa diisi dari dua berkas kerja yang sudah dipakai sehari-hari,
+tanpa mengetik ulang angkanya:
+
+```bash
+npm run impor-kas -- data/Proyeksi.xlsx data/Kondisi_Keuangan.xlsx --coba
+npm run impor-kas -- data/Proyeksi.xlsx data/Kondisi_Keuangan.xlsx
+```
+
+Yang dibaca: baris saldo terakhir pada sheet **Saldo New Format**, lalu kolom bulan
+berjalan pada sheet **Combined Cashflow Normal** untuk uang masuk dan belanja
+Purchasing, HR, dan Bank Perusahaan. Proyeksi tiga skenario diambil dari kolom
+proyeksi bulan itu di ketiga sheet Combined Cashflow, dan pengeluaran rutin per
+bulan dari total uang keluar bulan lalu ditambah cicilan bank.
+
+Angka belanja dicatat sebagai *setel ulang*, bukan tambah, karena workbook selalu
+menyimpan total sejak awal bulan — jadi berkas yang sama boleh diimpor berkali-kali
+tanpa menumpuk ganda. Jalankan dengan `--coba` dulu untuk melihat hasil bacaannya.
 
 ### Mengubah Sales Summary Report (PDF) menjadi jurnal
 

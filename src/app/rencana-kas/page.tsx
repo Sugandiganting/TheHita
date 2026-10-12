@@ -336,17 +336,18 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah dibagi menurut porsi tiap kategori; yang sudah dipakai diambil dari laporan belanja.">
+                  <SectionTitle hint="Terpakai bulan ini mencakup seluruh bulan; hanya kolom sejak posisi kas yang mengurangi jatah, sisanya sudah tercermin di saldo.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px]">
+                    <table className="w-full min-w-[820px]">
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
+                          <th className="th num">Terpakai bulan ini</th>
                           <th className="th num">Per minggu</th>
                           <th className="th num">Jatah sisa bulan</th>
-                          <th className="th num">Sudah dipakai</th>
+                          <th className="th num">Sejak posisi kas</th>
                           <th className="th num">Sisa</th>
                           <th className="th num">Aksi</th>
                         </tr>
@@ -362,6 +363,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 {k.label}
                                 <span className="ml-2 text-xs text-slate-400">porsi {sumber?.weight ?? '—'}</span>
                               </td>
+                              <td className="td num">
+                                {(sumber?.terpakaiBulanIni ?? 0) > 0
+                                  ? formatRupiah(sumber!.terpakaiBulanIni)
+                                  : '—'}
+                              </td>
                               <td className="td num">{formatRupiah(k.perMinggu)}</td>
                               <td className="td num">{formatRupiah(k.sisaBulan)}</td>
                               <td className="td num">{terpakai > 0 ? formatRupiah(terpakai) : '—'}</td>
@@ -375,6 +381,16 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       </tbody>
                     </table>
                   </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    Total terpakai bulan ini{' '}
+                    <strong>
+                      {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
+                    </strong>
+                    , yang mengurangi jatah{' '}
+                    <strong>{formatRupiah(rencana.terpakai)}</strong> — selisihnya sudah termasuk
+                    dalam saldo kas yang dilaporkan.
+                  </p>
+
                   <div className="mt-4 border-t border-slate-100 pt-4">
                     <CategoryForm planId={data.id} />
                   </div>
