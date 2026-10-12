@@ -107,6 +107,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
     ? toDateInput(hariIni)
     : toDateInput(new Date(Date.UTC(Number(data.period.slice(0, 4)), Number(data.period.slice(5, 7)), 0)));
   const belumBayar = data.komitmen.filter((k) => !k.paid);
+  // Komitmen sekali ini tidak termasuk dalam pengeluaran rutin bulanan, jadi
+  // hanya yang ini yang betul-betul menambah tekanan di bulan berjalan.
+  const sekaliIni = belumBayar.filter((k) => !k.recurring).reduce((t, k) => t + k.amount, 0);
 
   return (
     <>
@@ -162,7 +165,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.runway && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir tiap bulan.">
+                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Komitmen yang belum dibayar ikut dihitung di bulan berjalan.">
                     Kapan kas habis
                   </SectionTitle>
 
@@ -242,8 +245,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   <p className="mt-4 text-xs text-slate-500">
                     Pengeluaran rutin {formatRupiah(data.asumsi.monthlyOutflow ?? data.asumsi.usulanOutflow ?? 0)} per
                     bulan, kebutuhan gaji {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
-                    bulan. Bulan berjalan memakai uang masuk yang benar-benar tersisa; bulan berikutnya memakai
-                    proyeksi penuh. Ubah asumsinya di panel samping.
+                    bulan. Bulan berjalan dikurangi komitmen yang belum dibayar{' '}
+                    {formatRupiah(rencana.komitmenBelumBayar)}
+                    {sekaliIni > 0 && <> — di antaranya {formatRupiah(sekaliIni)} sekali ini saja</>}, lalu
+                    belanja operasional sisa bulan. Bulan berikutnya memakai proyeksi penuh dikurangi
+                    pengeluaran rutin. Ubah asumsinya di panel samping.
                   </p>
                 </Card>
               )}

@@ -789,6 +789,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             sisaMasuk: rencana.skenario[sk].sisaMasuk,
             proyeksiBulanan: dipakai[sk],
             pengeluaranBulanan: outflow,
+            komitmenBelumBayar: rencana.komitmenBelumBayar,
+            komitmenRutinSebulan: plan.commitments
+              .filter((k) => k.recurring)
+              .reduce((t, k) => t + k.amount, 0),
             kebutuhanGaji: gaji,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(

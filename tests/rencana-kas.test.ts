@@ -240,6 +240,9 @@ const runwaySeptember = {
   period: '2026-10',
   saldoKas: jt(134.5),
   pengeluaranBulanan: jt(402.8),
+  // Gaji, service, dan cicilan: berulang, dan seluruhnya belum dibayar.
+  komitmenBelumBayar: jt(260.6),
+  komitmenRutinSebulan: jt(260.6),
   kebutuhanGaji: jt(125),
   hariTersisa: 22,
   hariSebulan: 31,
@@ -279,4 +282,46 @@ test('arus bersih positif tidak pernah menghabiskan kas', () => {
 test('horizon bisa dipersingkat dan tidak pernah tak berujung', () => {
   const r = hitungRunway({ ...runwaySeptember, sisaMasuk: jt(300), proyeksiBulanan: jt(500), horizon: 3 });
   assert.equal(r.bulan.length, 4);
+});
+
+test('komitmen sekali ini menggerakkan ramalan sebesar nominalnya', () => {
+  const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
+  const sebelum = hitungRunway(dasar);
+  // Renovasi Rp 80 jt: menambah yang belum dibayar, tetapi bukan pengeluaran rutin.
+  const sesudah = hitungRunway({ ...dasar, komitmenBelumBayar: jt(260.6 + 80) });
+
+  assert.equal(
+    keJt(sebelum.bulan[0].saldoAkhir - sesudah.bulan[0].saldoAkhir), 80,
+    'saldo akhir bulan berjalan harus turun persis sebesar komitmennya',
+  );
+  // Hanya bulan berjalan yang terpukul; bulan berikutnya lajunya tetap sama.
+  assert.equal(sebelum.arusBersih, sesudah.arusBersih);
+});
+
+test('komitmen berulang tidak dihitung dua kali', () => {
+  const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
+  // Seluruh pengeluaran rutin kebetulan berupa komitmen berulang: tidak ada
+  // sisa operasional untuk diprorata, jadi yang dikurangi hanya komitmennya.
+  const r = hitungRunway({ ...dasar, pengeluaranBulanan: jt(260.6) });
+  assert.equal(keJt(r.bulan[0].saldoAkhir), keJt(jt(134.5) + jt(211.6) - jt(260.6)));
+});
+
+test('pengeluaran rutin lebih kecil daripada komitmennya tidak jadi angka negatif', () => {
+  const r = hitungRunway({
+    ...runwaySeptember,
+    sisaMasuk: jt(211.6),
+    proyeksiBulanan: jt(366.3),
+    pengeluaranBulanan: jt(100),
+    komitmenRutinSebulan: jt(260.6),
+  });
+  // Operasionalnya dinolkan, bukan dibalik menjadi penambah saldo.
+  assert.equal(keJt(r.bulan[0].saldoAkhir), keJt(jt(134.5) + jt(211.6) - jt(260.6)));
+});
+
+test('komitmen yang sudah dibayar tidak lagi memukul ramalan', () => {
+  const dasar = { ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
+  const lunas = hitungRunway({ ...dasar, komitmenBelumBayar: 0 });
+  assert.equal(
+    keJt(lunas.bulan[0].saldoAkhir - hitungRunway(dasar).bulan[0].saldoAkhir), 260.6,
+  );
 });

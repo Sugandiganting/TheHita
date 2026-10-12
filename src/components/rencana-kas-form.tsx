@@ -190,9 +190,16 @@ export function CommitmentForm({ planId }: { planId: string }) {
           <input id="rk-kdue" name="dueDay" inputMode="numeric" className="input" placeholder="15" />
         </div>
       </div>
-      <label className="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" name="recurring" defaultChecked className="h-4 w-4 rounded border-slate-300" />
-        Berulang tiap bulan
+      <label className="flex items-start gap-2 text-sm text-slate-600">
+        <input type="checkbox" name="recurring" defaultChecked className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300" />
+        <span>
+          Berulang tiap bulan
+          <span className="mt-0.5 block text-[11px] text-slate-500">
+            Hilangkan centang untuk pengeluaran sekali ini seperti renovasi. Yang sekali ini
+            ikut menekan ramalan kas habis; yang berulang sudah termasuk dalam pengeluaran
+            rutin bulanan.
+          </span>
+        </span>
       </label>
       <Submit label="Tambah komitmen" />
       <Pesan state={state} />

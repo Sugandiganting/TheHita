@@ -303,6 +303,10 @@ export function hitungRunway(opsi: {
   sisaMasuk: number;
   proyeksiBulanan: number;
   pengeluaranBulanan: number;
+  /** Komitmen yang belum dibayar, termasuk yang sekali ini saja. */
+  komitmenBelumBayar: number;
+  /** Komitmen yang berulang tiap bulan — bagian dari pengeluaran rutin. */
+  komitmenRutinSebulan: number;
   kebutuhanGaji: number;
   hariTersisa: number;
   hariSebulan: number;
@@ -310,16 +314,26 @@ export function hitungRunway(opsi: {
 }): Runway {
   const {
     period, saldoKas, sisaMasuk, proyeksiBulanan, pengeluaranBulanan,
+    komitmenBelumBayar, komitmenRutinSebulan,
     kebutuhanGaji, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
   } = opsi;
 
   const arusBersih = proyeksiBulanan - pengeluaranBulanan;
   const bulan: BulanRunway[] = [];
 
-  // Bulan berjalan memakai uang masuk yang benar-benar tersisa, bukan proyeksi
-  // sebulan penuh, sedangkan pengeluarannya diprorata menurut hari yang tersisa.
+  // Bulan berjalan dihitung dari daftar komitmen, bukan dari angka rutin yang
+  // dirata-ratakan. Komitmen punya tanggal dan nominal yang pasti, sedangkan
+  // belanja operasional tidak, jadi hanya bagian operasional yang diprorata
+  // menurut sisa hari.
+  //
+  // Komitmen yang berulang dikeluarkan dulu dari pengeluaran rutin: keduanya
+  // menyebut uang yang sama, dan mengurangkan dua-duanya akan menghitung gaji
+  // dan cicilan dua kali. Yang tersisa — renovasi, pembelian sekali ini —
+  // hanya memukul bulan berjalan, dan itu sebabnya ia harus ikut di sini:
+  // tanpa ini, menambah komitmen besar sama sekali tidak menggerakkan ramalan.
+  const operasionalSebulan = Math.max(0, pengeluaranBulanan - komitmenRutinSebulan);
   const porsi = hariSebulan > 0 ? hariTersisa / hariSebulan : 0;
-  let saldo = saldoKas + sisaMasuk - pengeluaranBulanan * porsi;
+  let saldo = saldoKas + sisaMasuk - komitmenBelumBayar - operasionalSebulan * porsi;
   bulan.push({ period, saldoAkhir: saldo, cukupGaji: saldo >= kebutuhanGaji });
 
   for (let i = 1; i <= horizon; i += 1) {
