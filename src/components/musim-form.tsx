@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   deleteSeason, saveSeason, seedSeasons, setSeasonMonth, type ActionState,
@@ -132,6 +132,13 @@ export function SeasonDelete({ id, jumlahBulan }: { id: string; jumlahBulan: num
 /**
  * Pemilih musim untuk satu bulan. Menyimpan begitu pilihannya berubah — satu
  * tombol simpan per bulan berarti dua belas tombol di satu layar.
+ *
+ * Sengaja tanpa <form>. Setelah aksi server selesai, React mengosongkan
+ * formulir seperti formulir biasa; pada <select> yang dikendalikan state,
+ * pengosongan itu mengembalikan DOM ke pilihan pertama tanpa mengubah state
+ * React, sehingga tidak ada render ulang yang membetulkannya — pilihan tersimpan
+ * di database tetapi layar berkeras menampilkan "belum ditentukan". Memanggil
+ * aksinya langsung di dalam transition menghindari pengosongan itu sama sekali.
  */
 export function MonthSeason({
   month, seasonId, seasons,
@@ -140,17 +147,28 @@ export function MonthSeason({
   seasonId: string | null;
   seasons: { id: string; name: string; delta: number }[];
 }) {
-  const [state, action] = useActionState(setSeasonMonth, initial);
-  const { pending } = useFormStatus();
+  const [state, kirim] = useActionState(setSeasonMonth, initial);
+  const [nilai, setNilai] = useState(seasonId ?? '');
+  const [pending, mulaiTransition] = useTransition();
+
+  // Mengikuti kembali keadaan server setelah halaman disegarkan, termasuk bila
+  // perubahannya datang dari tempat lain.
+  useEffect(() => setNilai(seasonId ?? ''), [seasonId]);
+
+  const ubah = (v: string) => {
+    setNilai(v);
+    const data = new FormData();
+    data.set('month', String(month));
+    data.set('seasonId', v);
+    mulaiTransition(() => kirim(data));
+  };
 
   return (
-    <form action={action}>
-      <input type="hidden" name="month" value={month} />
+    <div>
       <select
-        name="seasonId"
-        defaultValue={seasonId ?? ''}
+        value={nilai}
+        onChange={(e) => ubah(e.target.value)}
         disabled={pending}
-        onChange={(e) => e.currentTarget.form?.requestSubmit()}
         aria-label={`Musim bulan ke-${month}`}
         className="input py-1.5 text-sm"
       >
@@ -161,7 +179,10 @@ export function MonthSeason({
           </option>
         ))}
       </select>
-      {!state.ok && state.message && <p className="mt-1 text-xs text-red-600">{state.message}</p>}
-    </form>
+      {pending && <p className="mt-1 text-xs text-slate-500">Menyimpan…</p>}
+      {!pending && !state.ok && state.message && (
+        <p className="mt-1 text-xs text-red-600">{state.message}</p>
+      )}
+    </div>
   );
 }
