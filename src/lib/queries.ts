@@ -7,12 +7,15 @@
 import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
-import { addMonths, currentPeriod, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
+import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
   SKENARIO, hitungRencana, hitungRunway, lipatBelanja, usulkanProyeksi,
   type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
+import {
+  dasarAcuan, polaBervariasi, proyeksiMusim, type Musim, type PolaMusim,
+} from './musim';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -640,9 +643,16 @@ export type RencanaKasDetail = {
   usulan: Record<Skenario, number> | null;
   /** Yang benar-benar dipakai menghitung: tersimpan bila ada, selain itu usulan. */
   dipakai: Record<Skenario, number>;
-  /** Proyeksi bulan-bulan berikutnya; null berarti mengikuti bulan berjalan. */
+  /** Proyeksi bulan-bulan berikutnya; null berarti mengikuti pola musim. */
   tersimpanBerikutnya: Record<Skenario, number | null>;
+  /** Yang dipakai untuk bulan tepat sesudah bulan berjalan. */
   dipakaiBerikutnya: Record<Skenario, number>;
+  musim: {
+    /** Polanya sudah disiapkan dan ada bulan yang berbeda musim. */
+    aktif: boolean;
+    bulanIni: Musim | null;
+    bulanDepan: Musim | null;
+  };
   riwayatMasuk: { period: Period; cashIn: number }[];
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
   kategori: {
@@ -671,6 +681,29 @@ export type RencanaKasDetail = {
   menurutJurnal: { saldoKas: number; masukBulanIni: number };
   rencana: Rencana | null;
 };
+
+export type MusimDetail = Musim & { id: string; sort: number; bulan: number[] };
+
+/** Daftar musim beserta bulan-bulan yang memakainya. */
+export async function getSeasons(): Promise<MusimDetail[]> {
+  const rows = await prisma.season.findMany({
+    orderBy: [{ sort: 'asc' }, { delta: 'asc' }],
+    include: { months: { select: { month: true }, orderBy: { month: 'asc' } } },
+  });
+  return rows.map((r) => ({
+    id: r.id, code: r.code, name: r.name, delta: r.delta, sort: r.sort,
+    bulan: r.months.map((m) => m.month),
+  }));
+}
+
+/** Musim yang berlaku untuk tiap bulan kalender. */
+export async function polaMusim(): Promise<PolaMusim> {
+  const rows = await prisma.seasonMonth.findMany({ include: { season: true } });
+  return new Map(rows.map((r) => [
+    r.month,
+    { code: r.season.code, name: r.season.name, delta: r.season.delta },
+  ]));
+}
 
 export async function getRencanaKasPeriods(): Promise<Period[]> {
   const rows = await prisma.cashPlan.findMany({ select: { period: true }, orderBy: { period: 'desc' } });
@@ -721,10 +754,24 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     NORMAL: plan.nextNormal,
     OPTIMIS: plan.nextOptimistic,
   };
-  // Dikosongkan berarti bulan-bulan berikutnya diperlakukan sama dengan bulan
-  // berjalan — perilaku lama, dan tetap masuk akal bila musimnya tidak berubah.
+
+  // Tiga lapis, dari yang paling kuat: angka yang diketik sendiri untuk bulan
+  // berikutnya, lalu pola musim, lalu bulan berjalan apa adanya. Yang diketik
+  // menang karena pemakai bisa tahu hal yang tidak diketahui polanya — satu
+  // rombongan besar yang sudah memesan, misalnya.
+  const pola = await polaMusim();
+  const musimAktif = polaBervariasi(pola);
+  const musimBulanIni = pola.get(monthOf(period)) ?? null;
+  const dasar = Object.fromEntries(
+    SKENARIO.map((s) => [s, musimAktif ? dasarAcuan(dipakai[s], musimBulanIni ?? undefined) : null]),
+  ) as Record<Skenario, number | null>;
+
+  const proyeksiUntuk = (s: Skenario) => (p: Period) =>
+    tersimpanBerikutnya[s] ?? proyeksiMusim(p, dasar[s], pola) ?? dipakai[s];
+
+  const bulanDepan = addMonths(period, 1);
   const dipakaiBerikutnya = Object.fromEntries(
-    SKENARIO.map((s) => [s, tersimpanBerikutnya[s] ?? dipakai[s]]),
+    SKENARIO.map((s) => [s, proyeksiUntuk(s)(bulanDepan)]),
   ) as Record<Skenario, number>;
 
   const terakhir = plan.checkpoints[0] ?? null;
@@ -801,7 +848,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             saldoKas: terakhir!.cashOnHand,
             sisaMasuk: rencana.skenario[sk].sisaMasuk,
             proyeksiBulanan: dipakai[sk],
-            proyeksiBerikutnya: dipakaiBerikutnya[sk],
+            proyeksiBerikutnya: proyeksiUntuk(sk),
             pengeluaranBulanan: outflow,
             komitmenBelumBayar: rencana.komitmenBelumBayar,
             komitmenRutinSebulan: plan.commitments
@@ -826,6 +873,11 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     dipakai,
     tersimpanBerikutnya,
     dipakaiBerikutnya,
+    musim: {
+      aktif: musimAktif,
+      bulanIni: musimBulanIni,
+      bulanDepan: pola.get(monthOf(bulanDepan)) ?? null,
+    },
     riwayatMasuk: riwayat,
     komitmen: plan.commitments.map((k) => ({
       id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,

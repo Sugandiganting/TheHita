@@ -116,7 +116,7 @@ export type BulanRunway = {
 };
 
 export type Runway = {
-  /** Uang masuk sebulan penuh dikurangi pengeluaran rutin sebulan. */
+  /** Laju bulan berikutnya: uang masuknya dikurangi pengeluaran rutin sebulan. */
   arusBersih: number;
   bulan: BulanRunway[];
   /** Bulan pertama dengan saldo akhir minus; null bila tidak habis sepanjang horizon. */
@@ -327,10 +327,11 @@ export function hitungRunway(opsi: {
   /** Proyeksi uang masuk bulan berjalan — menentukan sisa masuk bulan ini. */
   proyeksiBulanan: number;
   /**
-   * Proyeksi untuk bulan-bulan sesudahnya. Musim berganti: bulan ramai dan
-   * bulan sepi tidak boleh diramalkan dengan angka yang sama.
+   * Proyeksi untuk tiap bulan sesudahnya. Berupa fungsi, bukan satu angka,
+   * karena musim berganti dari bulan ke bulan: bulan ramai dan bulan sepi tidak
+   * boleh diramalkan dengan angka yang sama.
    */
-  proyeksiBerikutnya: number;
+  proyeksiBerikutnya: (period: Period) => number;
   pengeluaranBulanan: number;
   /** Komitmen yang belum dibayar, termasuk yang sekali ini saja. */
   komitmenBelumBayar: number;
@@ -347,9 +348,6 @@ export function hitungRunway(opsi: {
     kebutuhanGaji, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
   } = opsi;
 
-  // Bulan berjalan memakai sisa uang masuknya sendiri; yang berulang tiap bulan
-  // sesudahnya adalah proyeksi bulan berikutnya, bukan proyeksi bulan ini.
-  const arusBersih = proyeksiBerikutnya - pengeluaranBulanan;
   const bulan: BulanRunway[] = [];
 
   // Bulan berjalan dihitung dari daftar komitmen, bukan dari angka rutin yang
@@ -369,13 +367,19 @@ export function hitungRunway(opsi: {
 
   for (let i = 1; i <= horizon; i += 1) {
     if (saldo < 0) break;
-    saldo += arusBersih;
+    const bulanIni = addMonths(period, i);
+    saldo += proyeksiBerikutnya(bulanIni) - pengeluaranBulanan;
     bulan.push({
-      period: addMonths(period, i),
+      period: bulanIni,
       saldoAkhir: saldo,
       cukupGaji: saldo >= kebutuhanGaji,
     });
   }
+
+  // Laju bulan pertama sesudah bulan berjalan, dipakai sebagai ringkasan arah.
+  // Dengan pola musim lajunya berbeda tiap bulan, jadi angka ini mewakili yang
+  // terdekat saja, bukan rata-rata sepanjang ramalan.
+  const arusBersih = proyeksiBerikutnya(addMonths(period, 1)) - pengeluaranBulanan;
 
   return {
     arusBersih,

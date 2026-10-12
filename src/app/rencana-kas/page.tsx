@@ -620,7 +620,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               tersimpan={data.tersimpan}
               usulan={data.usulan}
               berikutnya={data.tersimpanBerikutnya}
-              dipakai={data.dipakai}
+              dipakai={data.dipakaiBerikutnya}
+              musimBerikutnya={data.musim.aktif ? data.musim.bulanDepan?.name ?? null : null}
               notes={data.notes}
             />
             {data.riwayatMasuk.length > 0 && (

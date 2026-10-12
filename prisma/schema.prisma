@@ -381,3 +381,32 @@ model SpendEntry {
   @@index([planId])
   @@index([categoryId])
 }
+
+/// Musim kunjungan, mis. low sampai peak. Dipakai meramalkan pendapatan bulan
+/// yang belum berjalan, dan disediakan sebagai master data karena polanya sama
+/// untuk seluruh cabang dan jarang berubah.
+model Season {
+  id   String @id @default(cuid())
+  /// Kode singkat, mis. LOW atau PEAK.
+  code String @unique
+  name String
+  /// Selisih terhadap musim acuan, dalam persen. Musim acuan bernilai 0.
+  delta Float @default(0)
+  sort  Int   @default(0)
+
+  months SeasonMonth[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Musim yang berlaku untuk satu bulan kalender, berulang tiap tahun.
+model SeasonMonth {
+  /// 1 sampai 12.
+  month    Int    @id
+  seasonId String
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId])
+}

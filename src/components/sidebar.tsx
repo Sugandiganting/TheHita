@@ -106,6 +106,7 @@ const MENU: Entry[] = [
     items: [
       { href: '/coa', label: 'Chart of Account', desc: 'Daftar akun' },
       { href: '/unit', label: 'Unit Usaha', desc: 'Cabang & jenis usaha' },
+      { href: '/musim', label: 'Musim', desc: 'Pola naik turun sepanjang tahun' },
     ],
   },
 ];

@@ -9,6 +9,7 @@ import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import { periodeBerikutnya } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
+import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -1167,4 +1168,94 @@ export async function deleteSpend(_prev: ActionState, formData: FormData): Promi
   await prisma.spendEntry.delete({ where: { id } });
   segarkanRencanaKas();
   return ok('Laporan belanja dihapus.');
+}
+
+/* ------------------------------------------------------------------ */
+/* Musim                                                               */
+/* ------------------------------------------------------------------ */
+
+function segarkanMusim() {
+  revalidatePath('/musim');
+  revalidatePath('/rencana-kas');
+}
+
+/** Mengisi daftar musim pertama kali, agar menunya tidak dibuka dalam keadaan kosong. */
+export async function seedSeasons(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  const ada = await prisma.season.count();
+  if (ada > 0) return fail('Daftar musim sudah terisi.');
+
+  await prisma.season.createMany({
+    data: MUSIM_BAWAAN.map((m) => ({ code: m.code, name: m.name, delta: m.delta, sort: m.sort })),
+  });
+  segarkanMusim();
+  return ok(`${MUSIM_BAWAAN.length} musim bawaan ditambahkan. Sesuaikan persennya, lalu tentukan musim tiap bulan.`);
+}
+
+export async function saveSeason(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const code = String(formData.get('code') ?? '').trim().toUpperCase();
+  const name = String(formData.get('name') ?? '').trim();
+  const delta = Number(String(formData.get('delta') ?? '').replace(/[^\d.-]/g, ''));
+
+  if (!code) return fail('Kode musim wajib diisi.');
+  if (!/^[A-Z0-9_]+$/.test(code)) return fail('Kode hanya boleh huruf, angka, dan garis bawah.');
+  if (!name) return fail('Nama musim wajib diisi.');
+  if (!Number.isFinite(delta)) return fail('Persen harus berupa angka.');
+  if (delta <= -100) return fail('Penurunan 100% atau lebih berarti pendapatan hilang sama sekali.');
+
+  const kembar = await prisma.season.findUnique({ where: { code }, select: { id: true } });
+  if (kembar && kembar.id !== id) return fail(`Kode ${code} sudah dipakai musim lain.`);
+
+  if (id) {
+    await prisma.season.update({ where: { id }, data: { code, name, delta } });
+  } else {
+    const jumlah = await prisma.season.count();
+    await prisma.season.create({ data: { code, name, delta, sort: jumlah } });
+  }
+  segarkanMusim();
+  return ok(id ? `Musim ${name} diperbarui.` : `Musim ${name} ditambahkan.`);
+}
+
+export async function deleteSeason(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const musim = await prisma.season.findUnique({
+    where: { id },
+    select: { name: true, _count: { select: { months: true } } },
+  });
+  if (!musim) return fail('Musim tidak ditemukan.');
+
+  // Bulan yang memakainya ikut terhapus, dan bulan tanpa musim diperlakukan
+  // sebagai acuan — diam-diam mengubah ramalan. Jadi disebutkan di depan.
+  await prisma.season.delete({ where: { id } });
+  segarkanMusim();
+  return ok(
+    musim._count.months > 0
+      ? `Musim ${musim.name} dihapus; ${musim._count.months} bulan kini belum punya musim.`
+      : `Musim ${musim.name} dihapus.`,
+  );
+}
+
+/** Menetapkan musim sebuah bulan kalender. Kosong berarti bulan itu dilepas. */
+export async function setSeasonMonth(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const month = Number(formData.get('month'));
+  const seasonId = String(formData.get('seasonId') ?? '');
+
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
+
+  if (!seasonId) {
+    await prisma.seasonMonth.deleteMany({ where: { month } });
+    segarkanMusim();
+    return ok(`${NAMA_BULAN[month - 1]} dilepas dari musim mana pun.`);
+  }
+
+  const musim = await prisma.season.findUnique({ where: { id: seasonId }, select: { name: true } });
+  if (!musim) return fail('Musim tidak ditemukan.');
+
+  await prisma.seasonMonth.upsert({
+    where: { month },
+    update: { seasonId },
+    create: { month, seasonId },
+  });
+  segarkanMusim();
+  return ok(`${NAMA_BULAN[month - 1]} ditetapkan sebagai ${musim.name}.`);
 }
