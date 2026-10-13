@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState, useTransition } from 'react';
 import { advisePurchase, type PurchaseCadence, type PurchaseContext, type PurchasePlan } from '@/lib/forecast';
 import { formatDate, formatPeriod, formatRupiah } from '@/lib/format';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
+import { NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { deletePurchase, savePurchase, setPurchaseStatus, type ActionState } from '@/app/actions';
 import { MoneyInput } from './money-input';
 
@@ -20,6 +21,16 @@ const initial: ActionState = { ok: false, message: '' };
 const CADENCE_LABEL: Record<PurchaseCadence, string> = {
   WEEKLY: 'mingguan',
   MONTHLY: 'bulanan',
+};
+
+/**
+ * Apa artinya memilih satu skenario di sini: bukan sekadar angka yang berbeda,
+ * melainkan seberapa berani keputusannya.
+ */
+const ARTI_SKENARIO: Record<Skenario, string> = {
+  PESIMIS: 'Paling hati-hati. Pembelian disebut aman hanya bila tetap aman saat uang masuk seret.',
+  NORMAL: 'Memakai perkiraan uang masuk yang wajar — sejalan dengan anggaran mingguan.',
+  OPTIMIS: 'Paling longgar. Hanya aman bila uang masuk benar-benar sebaik perkiraan terbaik.',
 };
 
 /** "sekarang", "2 minggu lagi", "1 bulan lagi" — dibaca dari selisih hari. */
@@ -66,12 +77,17 @@ function JadwalCicilan({ plan }: { plan: PurchasePlan }) {
 }
 
 export function PurchaseCalculator({
-  context, defaultDate,
+  konteks, defaultDate,
 }: {
-  context: PurchaseContext;
+  /** Satu konteks penilaian untuk tiap skenario; yang dipakai dipilih di layar. */
+  konteks: Record<Skenario, PurchaseContext>;
   /** Tanggal cicilan pertama; biasanya hari ini. */
   defaultDate: string;
 }) {
+  // Pesimis sebagai bawaan: keputusan belanja sebaiknya diuji pada keadaan
+  // terburuk dulu, bukan pada keadaan yang diharapkan.
+  const [skenario, setSkenario] = useState<Skenario>('PESIMIS');
+  const context = konteks[skenario];
   const [harga, setHarga] = useState(0);
   const [cicilan, setCicilan] = useState(1);
   const [cadence, setCadence] = useState<PurchaseCadence>('WEEKLY');
@@ -103,6 +119,28 @@ export function PurchaseCalculator({
 
   return (
     <div className="space-y-4">
+      <div>
+        <span className="label">Dinilai dengan skenario</span>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1" role="group">
+          {SKENARIO.map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={s === skenario}
+              onClick={() => setSkenario(s)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                s === skenario
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              {NAMA_SKENARIO[s]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{ARTI_SKENARIO[skenario]}</p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="beli-harga">Harga barang</label>
@@ -151,9 +189,10 @@ export function PurchaseCalculator({
       */}
       {context.maxAffordableNow === 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Kas sudah berada di bawah batas aman bahkan tanpa pembelian apa pun, jadi berapa pun
-          harganya akan dinilai belum aman. Yang perlu dibereskan lebih dulu adalah kasnya sendiri,
-          bukan rencana belanjanya.
+          Pada skenario {NAMA_SKENARIO[skenario].toLowerCase()}, kas sudah berada di bawah batas aman
+          bahkan tanpa pembelian apa pun, jadi berapa pun harganya akan dinilai belum aman. Yang
+          perlu dibereskan lebih dulu adalah kasnya sendiri, bukan rencana belanjanya.
+          {skenario === 'PESIMIS' && ' Coba lihat skenario normal untuk membandingkan.'}
         </div>
       )}
 
@@ -173,7 +212,12 @@ export function PurchaseCalculator({
                 : 'border-amber-200 bg-amber-50'
             }`}
           >
-            <p className={`font-semibold ${rencana.affordable ? 'text-emerald-800' : 'text-amber-900'}`}>
+            <p className={`text-xs font-medium uppercase tracking-wide ${
+              rencana.affordable ? 'text-emerald-700' : 'text-amber-700'
+            }`}>
+              Menurut skenario {NAMA_SKENARIO[skenario].toLowerCase()}
+            </p>
+            <p className={`mt-1 font-semibold ${rencana.affordable ? 'text-emerald-800' : 'text-amber-900'}`}>
               {rencana.affordable
                 ? cicilan === 1
                   ? 'Cukup — bisa dibayar sekaligus sekarang.'

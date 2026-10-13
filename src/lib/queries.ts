@@ -678,8 +678,11 @@ export type RencanaKasDetail = {
   };
   runway: Record<Skenario, Runway> | null;
   rencanaBelanja: RencanaBelanja[];
-  /** Konteks penilaian pembelian baru, memakai skenario pesimis. */
-  konteksBeli: PurchaseContext | null;
+  /**
+   * Konteks penilaian pembelian baru, satu untuk tiap skenario. Yang dipakai
+   * dipilih di layar; pesimis adalah pilihan bawaannya.
+   */
+  konteksBeli: Record<Skenario, PurchaseContext> | null;
   checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
   terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
   /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
@@ -925,7 +928,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     runway,
     rencanaBelanja,
     konteksBeli: runway && terakhir
-      ? konteksPembelian(runway.PESIMIS, terakhir.cashOnHand, gaji)
+      ? (Object.fromEntries(
+          SKENARIO.map((sk) => [sk, konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji)]),
+        ) as Record<Skenario, PurchaseContext>)
       : null,
     checkpoint: plan.checkpoints.map((c) => ({
       id: c.id, date: c.date, cashOnHand: c.cashOnHand, incomeToDate: c.incomeToDate, notes: c.notes,

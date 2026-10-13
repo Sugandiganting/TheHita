@@ -486,7 +486,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
           )}
 
           <Card className="card-pad min-w-0">
-            <SectionTitle hint="Dinilai dengan skenario pesimis dan batas aman satu kali gaji. Hanya rencana yang disetujui yang memotong anggaran.">
+            <SectionTitle hint="Skenario penilaian bisa dipilih; batas amannya satu kali gaji. Hanya rencana yang disetujui yang memotong anggaran.">
               Rencana belanja
             </SectionTitle>
 
@@ -535,7 +535,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
             )}
 
             {data.konteksBeli ? (
-              <PurchaseCalculator context={data.konteksBeli} defaultDate={tanggalBawaan} />
+              <PurchaseCalculator konteks={data.konteksBeli} defaultDate={tanggalBawaan} />
             ) : (
               <Alert tone="info">
                 Isi posisi kas dan pengeluaran rutin dulu — pemeriksa kemampuan beli membutuhkan
