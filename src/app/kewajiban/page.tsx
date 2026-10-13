@@ -2,9 +2,7 @@ import Link from 'next/link';
 import { getKendaraan, getKewajiban } from '@/lib/queries';
 import { labelPengulangan } from '@/lib/kewajiban';
 import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
-import {
-  ObligationActions, ObligationForm, PayObligation,
-} from '@/components/kewajiban-form';
+import { KewajibanAksi, ObligationForm } from '@/components/kewajiban-form';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -108,23 +106,19 @@ export default async function KewajibanPage() {
                           </div>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                          {k.active && k.berikutnya ? (
-                            <PayObligation
-                              id={k.id}
-                              jatuhTempo={k.berikutnya.jatuhTempo}
-                              perkiraan={k.berikutnya.amount}
-                              hariIni={hariIni}
-                            />
-                          ) : (
-                            <span />
-                          )}
-                          <ObligationActions
-                            id={k.id}
-                            active={k.active}
-                            adaPelunasan={k.riwayat.length > 0}
-                          />
-                        </div>
+                        <KewajibanAksi
+                          aktif={k.active}
+                          adaPelunasan={k.riwayat.length > 0}
+                          jatuhTempo={k.berikutnya?.jatuhTempo ?? null}
+                          perkiraan={k.berikutnya?.amount ?? k.amount}
+                          hariIni={hariIni}
+                          kendaraan={kendaraan.map((v) => ({ id: v.id, plate: v.plate, name: v.name }))}
+                          awal={{
+                            id: k.id, label: k.label, amount: k.amount,
+                            dueDate: toDateInput(k.dueDate), repeat: k.repeat,
+                            repeatEvery: k.repeatEvery, vehicleId: k.vehicleId, notes: k.notes,
+                          }}
+                        />
 
                         {k.riwayat.length > 0 && (
                           <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">

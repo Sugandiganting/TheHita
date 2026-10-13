@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { getKendaraan, getUnitPilihan } from '@/lib/queries';
-import { labelPengulangan } from '@/lib/kewajiban';
-import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
-import { TambahJadwal, VehicleDelete, VehicleForm } from '@/components/kewajiban-form';
-import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
+import { toDateInput } from '@/lib/format';
+import {
+  JadwalRow, TambahJadwal, VehicleForm, VehicleHeader,
+} from '@/components/kewajiban-form';
+import { Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,46 +37,49 @@ export default async function KendaraanPage() {
           ) : (
             daftar.map((v) => (
               <Card key={v.id} className="card-pad min-w-0">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-semibold text-slate-800">
-                      {v.plate}
-                      {!v.active && <span className="ml-2"><Badge tone="slate">Nonaktif</Badge></span>}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {v.name} · {NAMA_JENIS[v.kind] ?? v.kind} ·{' '}
-                      {v.unitName ?? 'Semua cabang'}
-                      {v.notes && <> · {v.notes}</>}
-                    </p>
-                  </div>
-                  <VehicleDelete id={v.id} plate={v.plate} jumlahJadwal={v.kewajiban.length} />
-                </div>
+                <VehicleHeader
+                  unit={unit}
+                  jumlahJadwal={v.kewajiban.length}
+                  keterangan={[
+                    v.name,
+                    NAMA_JENIS[v.kind] ?? v.kind,
+                    v.unitName ?? 'Semua cabang',
+                    v.notes,
+                  ].filter(Boolean).join(' · ')}
+                  awal={{
+                    id: v.id, plate: v.plate, name: v.name, kind: v.kind,
+                    unitId: v.unitId, active: v.active, notes: v.notes,
+                  }}
+                />
 
                 {v.kewajiban.length > 0 && (
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full min-w-[520px]">
                       <thead className="border-b border-slate-200">
                         <tr>
-                          <th className="th">Jadwal</th>
-                          <th className="th num">Nominal</th>
-                          <th className="th">Pengulangan</th>
-                          <th className="th">Jatuh tempo berikutnya</th>
+                          {/* Kolom pertama menyerap sisa lebar, sehingga kolom
+                              angka dan tanggal rapat di kanan alih-alih
+                              terlempar berjauhan. */}
+                          <th className="th w-full">Jadwal</th>
+                          <th className="th num whitespace-nowrap">Nominal</th>
+                          <th className="th whitespace-nowrap">Pengulangan</th>
+                          <th className="th whitespace-nowrap">Jatuh tempo</th>
+                          <th className="th num">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {v.kewajiban.map((k) => (
-                          <tr key={k.id} className={k.active ? '' : 'text-slate-400'}>
-                            <td className="td">{k.label}</td>
-                            <td className="td num">{formatRupiah(k.amount)}</td>
-                            <td className="td text-xs">{labelPengulangan(k.repeat, k.repeatEvery)}</td>
-                            <td className="td whitespace-nowrap">
-                              {!k.active
-                                ? 'nonaktif'
-                                : k.berikutnya
-                                  ? formatDate(k.berikutnya.jatuhTempo)
-                                  : 'selesai'}
-                            </td>
-                          </tr>
+                          <JadwalRow
+                            key={k.id}
+                            aktif={k.active}
+                            jatuhTempo={k.berikutnya?.jatuhTempo ?? null}
+                            hariIni={hariIni}
+                            awal={{
+                              id: k.id, label: k.label, amount: k.amount,
+                              dueDate: toDateInput(k.dueDate), repeat: k.repeat,
+                              repeatEvery: k.repeatEvery, vehicleId: v.id, notes: k.notes,
+                            }}
+                          />
                         ))}
                       </tbody>
                     </table>
