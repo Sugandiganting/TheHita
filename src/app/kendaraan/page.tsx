@@ -43,8 +43,8 @@ export default async function KendaraanPage() {
                       {!v.active && <span className="ml-2"><Badge tone="slate">Nonaktif</Badge></span>}
                     </p>
                     <p className="text-sm text-slate-500">
-                      {v.name} · {NAMA_JENIS[v.kind] ?? v.kind}
-                      {v.unitName && <> · {v.unitName}</>}
+                      {v.name} · {NAMA_JENIS[v.kind] ?? v.kind} ·{' '}
+                      {v.unitName ?? 'Semua cabang'}
                       {v.notes && <> · {v.notes}</>}
                     </p>
                   </div>
@@ -106,6 +106,11 @@ export default async function KendaraanPage() {
                   Kewajiban Terjadwal
                 </Link>{' '}
                 bersama PBB dan perizinan.
+              </p>
+              <p className="text-xs text-slate-500">
+                <strong>Semua cabang</strong> adalah pilihan bawaan penanggungnya. Pilih satu cabang
+                hanya bila kendaraannya memang milik cabang itu sendiri; nominal yang keluar dari kas
+                sama saja, yang berbeda hanya siapa yang menanggungnya di laporan.
               </p>
               <p className="text-xs text-slate-500">
                 Menghapus kendaraan ikut menghapus jadwal pajaknya. Kalau kendaraannya cuma dijual

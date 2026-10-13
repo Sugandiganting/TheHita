@@ -314,13 +314,19 @@ export function VehicleForm({ unit }: { unit: { id: string; code: string; name: 
         </select>
       </div>
       <div>
-        <label className="label" htmlFor="kn-unit">Unit pemilik</label>
+        <label className="label" htmlFor="kn-unit">Penanggung</label>
         <select id="kn-unit" name="unitId" className="input" defaultValue="">
-          <option value="">— milik grup —</option>
+          <option value="">Semua cabang (beban bersama)</option>
           {unit.map((u) => (
             <option key={u.id} value={u.id}>{u.code} · {u.name}</option>
           ))}
         </select>
+        <p className="mt-1 text-xs text-slate-500">
+          Pilih satu cabang hanya bila kendaraannya memang milik cabang itu sendiri. Baik beban
+          bersama maupun milik satu cabang, pajaknya tetap keluar dari kas grup dan menekan rencana
+          kas dengan nominal yang sama — pilihan ini menentukan siapa yang menanggungnya di laporan,
+          bukan berapa yang keluar.
+        </p>
       </div>
       <div>
         <label className="label" htmlFor="kn-notes">Catatan</label>
