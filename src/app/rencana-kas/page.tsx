@@ -570,7 +570,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
             )}
 
             {data.konteksBeli ? (
-              <PurchaseCalculator konteks={data.konteksBeli} defaultDate={tanggalBawaan} />
+              <PurchaseCalculator
+                konteks={data.konteksBeli}
+                defaultDate={tanggalBawaan}
+                tanggalPosisi={toDateInput(terakhir!.date)}
+              />
             ) : (
               <Alert tone="info">
                 Isi posisi kas dan pengeluaran rutin dulu — pemeriksa kemampuan beli membutuhkan

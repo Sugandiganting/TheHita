@@ -109,6 +109,12 @@ export function konteksPembelian(
   runway: Runway,
   saldoKas: number,
   kebutuhanGaji: number,
+  /**
+   * Sisa hari bulan berjalan, dihitung dari sehari sesudah posisi kas. Baris
+   * pertama ramalan hanya mencakup sisa itu, bukan sebulan penuh: tanpa ini,
+   * cicilan minggu ketiga dari tanggal 13 akan dikira masih di bulan yang sama.
+   */
+  hariTersisa?: number,
 ): PurchaseContext {
   let sebelumnya = saldoKas;
   const rows = runway.bulan.map((b) => {
@@ -123,5 +129,6 @@ export function konteksPembelian(
     openingCash: saldoKas,
     minCashBuffer: kebutuhanGaji,
     maxAffordableNow: Math.max(0, terendah - kebutuhanGaji),
+    hariBarisPertama: hariTersisa,
   };
 }

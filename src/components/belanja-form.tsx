@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState, useTransition } from 'react';
 import { advisePurchase, type PurchaseCadence, type PurchaseContext, type PurchasePlan } from '@/lib/forecast';
 import { formatDate, formatPeriod, formatRupiah } from '@/lib/format';
-import { MAKS_CICILAN } from '@/lib/rencana-belanja';
+import { MAKS_CICILAN, jadwalCicilan } from '@/lib/rencana-belanja';
 import { NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { deletePurchase, savePurchase, setPurchaseStatus, type ActionState } from '@/app/actions';
 import { MoneyInput } from './money-input';
@@ -33,36 +33,60 @@ const ARTI_SKENARIO: Record<Skenario, string> = {
   OPTIMIS: 'Paling longgar. Hanya aman bila uang masuk benar-benar sebaik perkiraan terbaik.',
 };
 
-/** "sekarang", "2 minggu lagi", "1 bulan lagi" — dibaca dari selisih hari. */
-function kapan(dayOffset: number, cadence: PurchaseCadence): string {
-  if (dayOffset === 0) return 'sekarang';
-  if (cadence === 'WEEKLY') {
-    const minggu = Math.round(dayOffset / 7);
-    return `${minggu} minggu lagi`;
-  }
-  const bulan = Math.max(1, Math.round(dayOffset / 30));
-  return `${bulan} bulan lagi`;
+const HARI = 86_400_000;
+
+const tanggalUtc = (teks: string) => {
+  const [y, m, d] = teks.split('-').map(Number);
+  return new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+};
+
+const selisihHari = (a: Date, b: Date) =>
+  Math.round((Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate())
+    - Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate())) / HARI);
+
+/** "hari ini", "2 minggu lagi", "1 bulan lagi" — dibaca dari selisih hari. */
+function kapan(hari: number, cadence: PurchaseCadence): string {
+  if (hari === 0) return 'hari ini';
+  if (hari < 0) return `${-hari} hari lalu`;
+  if (hari < 7) return `${hari} hari lagi`;
+  if (cadence === 'WEEKLY') return `${Math.round(hari / 7)} minggu lagi`;
+  return `${Math.max(1, Math.round(hari / 30))} bulan lagi`;
 }
 
-function JadwalCicilan({ plan }: { plan: PurchasePlan }) {
+function JadwalCicilan({
+  plan, jadwal, hariIni,
+}: {
+  plan: PurchasePlan;
+  /** Tanggal jatuh tempo tiap cicilan, dihitung dengan aturan yang sama dengan yang disimpan. */
+  jadwal: { jatuhTempo: Date }[];
+  hariIni: Date;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[24rem] text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
             <th className="td">Cicilan</th>
-            <th className="td whitespace-nowrap">Kapan</th>
+            <th className="td whitespace-nowrap">Jatuh tempo</th>
             <th className="td num whitespace-nowrap">Dibayar</th>
             <th className="td num whitespace-nowrap">Sisa kas</th>
           </tr>
         </thead>
         <tbody>
-          {plan.schedule.map((c) => (
+          {plan.schedule.map((c, i) => (
             <tr key={c.index} className="border-t border-slate-100">
               <td className="td">ke-{c.index}</td>
               <td className="td">
-                <span className="whitespace-nowrap">{kapan(c.dayOffset, plan.cadence)}</span>{' '}
-                <span className="whitespace-nowrap text-xs text-slate-400">({formatPeriod(c.period)})</span>
+                {jadwal[i] ? (
+                  <>
+                    <span className="whitespace-nowrap">{formatDate(jadwal[i].jatuhTempo)}</span>{' '}
+                    <span className="whitespace-nowrap text-xs text-slate-400">
+                      ({kapan(selisihHari(jadwal[i].jatuhTempo, hariIni), plan.cadence)})
+                    </span>
+                  </>
+                ) : (
+                  <span className="whitespace-nowrap text-xs text-slate-400">{formatPeriod(c.period)}</span>
+                )}
               </td>
               <td className="td num whitespace-nowrap">{formatRupiah(c.amount)}</td>
               <td className={`td num whitespace-nowrap ${c.safe ? '' : 'font-semibold text-red-600'}`}>
@@ -77,12 +101,14 @@ function JadwalCicilan({ plan }: { plan: PurchasePlan }) {
 }
 
 export function PurchaseCalculator({
-  konteks, defaultDate,
+  konteks, defaultDate, tanggalPosisi,
 }: {
   /** Satu konteks penilaian untuk tiap skenario; yang dipakai dipilih di layar. */
   konteks: Record<Skenario, PurchaseContext>;
   /** Tanggal cicilan pertama; biasanya hari ini. */
   defaultDate: string;
+  /** Tanggal posisi kas terakhir — titik nol seluruh hitungan hari. */
+  tanggalPosisi: string;
 }) {
   // Pesimis sebagai bawaan: keputusan belanja sebaiknya diuji pada keadaan
   // terburuk dulu, bukan pada keadaan yang diharapkan.
@@ -106,10 +132,26 @@ export function PurchaseCalculator({
     mulaiTransition(() => kirim(data));
   };
 
-  const saran = useMemo(
-    () => (harga > 0 ? advisePurchase(context, harga, cicilan, cadence) : null),
-    [context, harga, cicilan, cadence],
+  // Jarak hari dari posisi kas ke cicilan pertama. Mesin penilaian menghitung
+  // hari sejak posisi kas, sedangkan tanggal mulai boleh dipilih sendiri —
+  // tanpa pergeseran ini, jadwal yang disimpan dan jadwal yang dinilai berbeda.
+  const mulaiPada = useMemo(
+    () => Math.max(0, selisihHari(tanggalUtc(mulai), tanggalUtc(tanggalPosisi))),
+    [mulai, tanggalPosisi],
   );
+
+  const saran = useMemo(
+    () => (harga > 0 ? advisePurchase(context, harga, cicilan, cadence, mulaiPada) : null),
+    [context, harga, cicilan, cadence, mulaiPada],
+  );
+
+  // Tanggalnya disusun dengan fungsi yang sama dengan yang dipakai saat
+  // menyimpan, sehingga pratinjau dan rencana tersimpan tidak bisa berselisih.
+  const jadwal = useMemo(
+    () => (harga > 0 ? jadwalCicilan(harga, cicilan, cadence, tanggalUtc(mulai)) : []),
+    [harga, cicilan, cadence, mulai],
+  );
+  const hariIni = useMemo(() => tanggalUtc(defaultDate), [defaultDate]);
 
   const rencana = saran?.requested;
   const usulanBeda =
@@ -233,14 +275,27 @@ export function PurchaseCalculator({
               </p>
             )}
 
-            {usulanBeda && (
+            {/* Usulan yang sama bisa berarti dua hal yang berlawanan: memecah
+                lebih banyak supaya cukup, atau justru tidak perlu dipecah
+                sebanyak itu. Keduanya harus berbunyi berbeda. */}
+            {usulanBeda && (rencana.affordable ? (
+              <p className="mt-2 text-sm text-emerald-800">
+                Sebenarnya cukup{' '}
+                <strong>
+                  {saran.minimumInstalments === 1
+                    ? 'dibayar sekaligus'
+                    : `dipecah ${saran.minimumInstalments} kali ${CADENCE_LABEL[cadence]}`}
+                </strong>
+                {' '}&mdash; tidak harus {cicilan} kali.
+              </p>
+            ) : (
               <p className="mt-2 text-sm text-amber-900">
                 Pecah jadi <strong>{saran.minimumInstalments} kali {CADENCE_LABEL[cadence]}</strong>
                 {' '}&mdash; masing-masing sekitar{' '}
                 <strong>{formatRupiah(saran.recommended!.amount / saran.minimumInstalments!)}</strong>
                 {' '}&mdash; dan kasnya cukup.
               </p>
-            )}
+            ))}
 
             {!rencana.affordable && saran.minimumInstalments === null && (
               <p className="mt-2 text-sm text-amber-900">
@@ -251,7 +306,7 @@ export function PurchaseCalculator({
             )}
           </div>
 
-          <JadwalCicilan plan={rencana} />
+          <JadwalCicilan plan={rencana} jadwal={jadwal} hariIni={hariIni} />
 
           {/*
             Menyimpan lewat FormData yang disusun sendiri, bukan lewat <form>:

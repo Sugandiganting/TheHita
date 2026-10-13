@@ -1099,7 +1099,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     },
     konteksBeli: runway && terakhir
       ? (Object.fromEntries(
-          SKENARIO.map((sk) => [sk, konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji)]),
+          SKENARIO.map((sk) => [
+            sk,
+            konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji, rencana!.hari),
+          ]),
         ) as Record<Skenario, PurchaseContext>)
       : null,
     checkpoint: plan.checkpoints.map((c) => ({

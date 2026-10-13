@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { advisePurchase } from '../src/lib/forecast';
+import { advisePurchase, planPurchase } from '../src/lib/forecast';
 import { cicilanPada, cicilanSetelah, jadwalCicilan, konteksPembelian } from '../src/lib/rencana-belanja';
 import type { Runway } from '../src/lib/rencana-kas';
 
@@ -144,4 +144,52 @@ test('kas yang sudah di bawah batas aman menolak pembelian sekecil apa pun', () 
   assert.equal(saran.requested.affordable, false);
   assert.equal(saran.minimumInstalments, null);
   assert.equal(k.maxAffordableNow, 0, 'ruang belanjanya memang nol');
+});
+
+/* ------------- panjang bulan pertama & tanggal mulai ------------- */
+
+/**
+ * Rencana kas berangkat dari tanggal posisi kas, bukan dari awal bulan. Posisi
+ * kas 12 Oktober menyisakan 19 hari, jadi hari ke-19 sudah masuk November.
+ */
+const konteksSisaBulan = () => konteksPembelian(runwayMenurun, jt(200), jt(50), 19);
+
+test('bulan pertama hanya sepanjang sisa hari, bukan sebulan penuh', () => {
+  const rencana = planPurchase(konteksSisaBulan(), jt(12), 6, 'WEEKLY', 1);
+  // Cicilan jatuh pada hari ke-1, 8, 15, 22, 29, 36 sejak posisi kas.
+  assert.deepEqual(
+    rencana.schedule.map((c) => c.period),
+    ['2026-10', '2026-10', '2026-10', '2026-11', '2026-11', '2026-11'],
+  );
+});
+
+test('sisa kas ikut melompat ke bulan berikutnya pada hari yang benar', () => {
+  const rencana = planPurchase(konteksSisaBulan(), jt(6), 4, 'WEEKLY', 0);
+  const akhir = rencana.schedule[3];
+  assert.equal(akhir.dayOffset, 21);
+  assert.equal(akhir.period, '2026-11');
+  // Hari ke-19 menutup Oktober di Rp 180 jt; dua hari November menggerusnya
+  // 2/30 dari Rp 20 jt, lalu dikurangi empat cicilan Rp 6 jt.
+  assert.equal(keJt(akhir.balanceAfter), keJt(jt(180) - (jt(20) * 2) / 30 - jt(6)));
+});
+
+test('tanggal mulai menggeser seluruh jadwal', () => {
+  const k = konteksSisaBulan();
+  const segera = planPurchase(k, jt(6), 2, 'WEEKLY', 0);
+  const nanti = planPurchase(k, jt(6), 2, 'WEEKLY', 14);
+  assert.deepEqual(segera.schedule.map((c) => c.dayOffset), [0, 7]);
+  assert.deepEqual(nanti.schedule.map((c) => c.dayOffset), [14, 21]);
+  assert.deepEqual(nanti.schedule.map((c) => c.period), ['2026-10', '2026-11']);
+  // Kas yang menyusut: menunda membuat sisanya lebih kecil, bukan lebih besar.
+  assert.ok(nanti.schedule[1].balanceAfter < segera.schedule[1].balanceAfter);
+});
+
+test('tanpa keterangan sisa hari, bulan pertama tetap dihitung sebulan penuh', () => {
+  // Ramalan di menu Peramalan memang berangkat dari awal bulan, dan perilaku
+  // lamanya tidak boleh ikut berubah.
+  const rencana = planPurchase(konteksPembelian(runwayMenurun, jt(200), jt(50)), jt(12), 6, 'WEEKLY', 1);
+  assert.deepEqual(
+    rencana.schedule.map((c) => c.period),
+    ['2026-10', '2026-10', '2026-10', '2026-10', '2026-10', '2026-11'],
+  );
 });

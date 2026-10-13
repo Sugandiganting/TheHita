@@ -510,6 +510,18 @@ export type PurchaseContext = {
   openingCash: number;
   minCashBuffer: number;
   maxAffordableNow: number;
+  /**
+   * Berapa hari yang benar-benar dicakup baris pertama.
+   *
+   * Ramalan bulanan biasa berangkat dari awal bulan, sehingga baris pertamanya
+   * sepanjang bulan itu. Rencana kas tidak: ia berangkat dari tanggal posisi
+   * kas, jadi baris pertamanya hanya sisa bulan berjalan. Tanpa angka ini,
+   * seluruh hitungan hari melesat sepanjang hari yang sudah lewat — cicilan
+   * minggu keempat dari tanggal 13 akan dikira masih di bulan yang sama.
+   *
+   * Kosong berarti sebulan penuh.
+   */
+  hariBarisPertama?: number;
 };
 
 /** Batas wajar percobaan saat mencari jumlah cicilan terkecil. */
@@ -524,11 +536,23 @@ const MAX_INSTALMENTS = 24;
  * tagihan besar biasanya menumpuk di tanggal tertentu. Untuk pembelian yang
  * mepet dengan batas aman, jangan bersandar pada selisih beberapa hari.
  */
-function balanceAtDay(rows: PurchaseContext['rows'], openingCash: number, dayOffset: number): number {
+/** Panjang baris ke-`i` dalam hari; baris pertama bisa lebih pendek. */
+function hariBaris(rows: PurchaseContext['rows'], i: number, hariBarisPertama?: number): number {
+  if (i === 0 && hariBarisPertama != null) return Math.max(1, hariBarisPertama);
+  return daysInPeriod(rows[i].period);
+}
+
+function balanceAtDay(
+  rows: PurchaseContext['rows'],
+  openingCash: number,
+  dayOffset: number,
+  hariBarisPertama?: number,
+): number {
   let saldo = openingCash;
   let hariTerlewat = 0;
-  for (const row of rows) {
-    const hariBulanIni = daysInPeriod(row.period);
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const hariBulanIni = hariBaris(rows, i, hariBarisPertama);
     if (dayOffset >= hariTerlewat + hariBulanIni) {
       saldo = row.cashBalance;
       hariTerlewat += hariBulanIni;
@@ -540,20 +564,37 @@ function balanceAtDay(rows: PurchaseContext['rows'], openingCash: number, dayOff
   return saldo;
 }
 
-/** Hari ke berapa dari awal proyeksi, untuk cicilan ke-`index` (mulai 1). */
-function dayOffsetFor(rows: PurchaseContext['rows'], index: number, cadence: PurchaseCadence): number {
-  if (index <= 1) return 0;
-  if (cadence === 'WEEKLY') return (index - 1) * 7;
+/**
+ * Hari ke berapa dari awal proyeksi, untuk cicilan ke-`index` (mulai 1).
+ *
+ * `mulaiPada` menggeser seluruh jadwal: cicilan pertama tidak selalu hari ini,
+ * karena tanggalnya bisa dipilih sendiri saat rencananya disimpan.
+ */
+function dayOffsetFor(
+  rows: PurchaseContext['rows'],
+  index: number,
+  cadence: PurchaseCadence,
+  mulaiPada: number,
+  hariBarisPertama?: number,
+): number {
+  if (index <= 1) return mulaiPada;
+  if (cadence === 'WEEKLY') return mulaiPada + (index - 1) * 7;
   let hari = 0;
-  for (let i = 0; i < index - 1; i++) hari += daysInPeriod(rows[Math.min(i, rows.length - 1)].period);
-  return hari;
+  for (let i = 0; i < index - 1; i++) {
+    hari += hariBaris(rows, Math.min(i, rows.length - 1), hariBarisPertama);
+  }
+  return mulaiPada + hari;
 }
 
-function periodAtDay(rows: PurchaseContext['rows'], dayOffset: number): Period {
+function periodAtDay(
+  rows: PurchaseContext['rows'],
+  dayOffset: number,
+  hariBarisPertama?: number,
+): Period {
   let hari = 0;
-  for (const row of rows) {
-    hari += daysInPeriod(row.period);
-    if (dayOffset < hari) return row.period;
+  for (let i = 0; i < rows.length; i += 1) {
+    hari += hariBaris(rows, i, hariBarisPertama);
+    if (dayOffset < hari) return rows[i].period;
   }
   return rows[rows.length - 1]?.period ?? '';
 }
@@ -570,10 +611,14 @@ export function planPurchase(
   amount: number,
   instalments: number,
   cadence: PurchaseCadence,
+  /** Jarak hari dari awal proyeksi ke cicilan pertama. */
+  mulaiPada = 0,
 ): PurchasePlan {
   const jumlah = Math.max(1, Math.min(MAX_INSTALMENTS, Math.round(instalments)));
   const rows = result.rows;
   const buffer = result.minCashBuffer;
+  const hariPertama = result.hariBarisPertama;
+  const mulai = Math.max(0, Math.round(mulaiPada));
 
   // Dibagi rata, sisa pembulatan ditaruh pada cicilan pertama supaya jumlahnya
   // tetap persis sama dengan harga barangnya.
@@ -586,10 +631,10 @@ export function planPurchase(
   let terendah: PurchasePlan['lowest'] = null;
 
   for (let i = 0; i < jumlah; i++) {
-    const dayOffset = dayOffsetFor(rows, i + 1, cadence);
+    const dayOffset = dayOffsetFor(rows, i + 1, cadence, mulai, hariPertama);
     dibayar += cicilan[i];
-    const saldo = balanceAtDay(rows, result.openingCash, dayOffset) - dibayar;
-    const period = periodAtDay(rows, dayOffset);
+    const saldo = balanceAtDay(rows, result.openingCash, dayOffset, hariPertama) - dibayar;
+    const period = periodAtDay(rows, dayOffset, hariPertama);
     schedule.push({
       index: i + 1,
       dayOffset,
@@ -605,8 +650,9 @@ export function planPurchase(
   // sisa horizon dengan garis kas yang sudah turun sebesar harga barang.
   const hariTerakhir = schedule[schedule.length - 1]?.dayOffset ?? 0;
   let hari = 0;
-  for (const row of rows) {
-    hari += daysInPeriod(row.period);
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    hari += hariBaris(rows, i, hariPertama);
     if (hari <= hariTerakhir) continue;
     const saldo = row.cashBalance - amount;
     if (!terendah || saldo < terendah.amount) {
@@ -635,13 +681,17 @@ export function advisePurchase(
   amount: number,
   instalments: number,
   cadence: PurchaseCadence,
+  /** Jarak hari dari awal proyeksi ke cicilan pertama. */
+  mulaiPada = 0,
 ): PurchaseAdvice {
-  const requested = planPurchase(result, amount, instalments, cadence);
+  const requested = planPurchase(result, amount, instalments, cadence, mulaiPada);
 
   let minimumInstalments: number | null = null;
   let recommended: PurchasePlan | null = null;
   for (let n = 1; n <= MAX_INSTALMENTS; n++) {
-    const rencana = n === requested.instalments ? requested : planPurchase(result, amount, n, cadence);
+    const rencana = n === requested.instalments
+      ? requested
+      : planPurchase(result, amount, n, cadence, mulaiPada);
     if (rencana.affordable) {
       minimumInstalments = n;
       recommended = rencana;
