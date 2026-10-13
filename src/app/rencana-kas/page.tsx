@@ -351,6 +351,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <Suku label="Cicilan rencana belanja" value={rencana.cicilanBelanja} />
                     </span>
                   )}
+                  {rencana.kewajiban > 0 && (
+                    <span className="flex items-start gap-4">
+                      <Operator>−</Operator>
+                      <Suku label="Kewajiban terjadwal" value={rencana.kewajiban} />
+                    </span>
+                  )}
                   {rencana.terpakai > 0 && (
                     <span className="flex items-start gap-4">
                       <Operator>−</Operator>
@@ -671,6 +677,89 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               </div>
             )}
           </Card>
+
+          {(data.kewajiban.bulanIni.length > 0 || data.kewajiban.mendatang.length > 0) && (
+            <Card className="card-pad min-w-0">
+              <SectionTitle hint="Berasal dari master data Kewajiban Terjadwal — pajak kendaraan, PBB, perizinan. Tidak perlu diketik ulang tiap bulan.">
+                Kewajiban terjadwal
+              </SectionTitle>
+
+              {data.kewajiban.bulanIni.length > 0 && (
+                <div className="overflow-x-auto">
+                  <p className="mb-2 text-sm font-medium text-slate-700">Bulan ini</p>
+                  <table className="w-full min-w-[560px]">
+                    <thead className="border-b border-slate-200">
+                      <tr>
+                        <th className="th">Jatuh tempo</th>
+                        <th className="th">Kewajiban</th>
+                        <th className="th num">Nominal</th>
+                        <th className="th">Keterangan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {data.kewajiban.bulanIni.map((e) => (
+                        <tr key={`${e.id}-${e.jatuhTempo.toISOString()}`} className={e.sebelumPosisi ? 'text-slate-400' : ''}>
+                          <td className="td whitespace-nowrap">{formatDate(e.jatuhTempo)}</td>
+                          <td className="td">{e.label}</td>
+                          <td className="td num">{formatRupiah(e.amount)}</td>
+                          <td className="td text-xs">
+                            {e.sebelumPosisi ? 'Sudah termasuk di saldo kas yang dilaporkan' : 'Menekan plafon bulan ini'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 font-semibold">
+                      <tr>
+                        <td className="td" colSpan={2}>Masih akan keluar bulan ini</td>
+                        <td className="td num">{formatRupiah(data.kewajiban.belumKeluar)}</td>
+                        <td className="td" />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+
+              {data.kewajiban.mendatang.length > 0 && (
+                <div className={data.kewajiban.bulanIni.length > 0 ? 'mt-6' : ''}>
+                  <p className="mb-2 text-sm font-medium text-slate-700">
+                    {HORIZON_BULAN} bulan ke depan
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px]">
+                      <tbody className="divide-y divide-slate-100">
+                        {data.kewajiban.mendatang.map((e) => (
+                          <tr key={`${e.id}-${e.jatuhTempo.toISOString()}`}>
+                            <td className="td whitespace-nowrap text-slate-500">{formatDate(e.jatuhTempo)}</td>
+                            <td className="td">{e.label}</td>
+                            <td className="td num">{formatRupiah(e.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="border-t-2 border-slate-200 font-semibold">
+                        <tr>
+                          <td className="td" colSpan={2}>Jumlah</td>
+                          <td className="td num">
+                            {formatRupiah(data.kewajiban.mendatang.reduce((t, e) => t + e.amount, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Sudah ikut menurunkan saldo di &ldquo;Kapan kas habis&rdquo; pada bulannya
+                    masing-masing, dan menekan kemampuan beli di rencana belanja.
+                  </p>
+                </div>
+              )}
+
+              <p className="mt-4 text-xs text-slate-500">
+                Daftarnya diurus di{' '}
+                <Link href="/kewajiban" className="text-brand-700 hover:underline">
+                  Kewajiban Terjadwal
+                </Link>.
+              </p>
+            </Card>
+          )}
 
           {data.checkpoint.length > 0 && (
             <Card className="card-pad min-w-0">

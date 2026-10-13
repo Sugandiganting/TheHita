@@ -10,7 +10,7 @@ import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type Ba
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
-  SKENARIO, hitungRencana, hitungRunway, lipatBelanja, usulkanProyeksi,
+  HORIZON_BULAN, SKENARIO, hitungRencana, hitungRunway, lipatBelanja, usulkanProyeksi,
   type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 import {
@@ -19,6 +19,10 @@ import {
 import {
   cicilanPada, cicilanSetelah, jadwalCicilan, konteksPembelian, type Cicilan,
 } from './rencana-belanja';
+import {
+  berikutnya, kejadian, kewajibanPada, kewajibanSetelah,
+  type Kejadian, type Kewajiban, type Pengulangan,
+} from './kewajiban';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
@@ -678,6 +682,14 @@ export type RencanaKasDetail = {
   };
   runway: Record<Skenario, Runway> | null;
   rencanaBelanja: RencanaBelanja[];
+  kewajiban: {
+    /** Jatuh tempo di bulan ini, termasuk yang tanggalnya sudah lewat. */
+    bulanIni: KejadianKewajiban[];
+    /** Jatuh tempo dua belas bulan ke depan, di luar bulan ini. */
+    mendatang: KejadianKewajiban[];
+    /** Yang masih akan keluar bulan ini: jatuh tempo sesudah posisi kas. */
+    belumKeluar: number;
+  };
   /**
    * Konteks penilaian pembelian baru, satu untuk tiap skenario. Yang dipakai
    * dipilih di layar; pesimis adalah pilihan bawaannya.
@@ -726,6 +738,124 @@ export type RencanaBelanja = {
   /** Cicilan yang jatuh tempo bulan ini, termasuk yang sudah lewat. */
   cicilanBulanIni: number;
 };
+
+/* ------------------------------------------------------------------ */
+/* Kewajiban terjadwal & kendaraan                                     */
+/* ------------------------------------------------------------------ */
+
+export type KejadianKewajiban = {
+  /** Id kewajibannya, bukan id kejadian — kejadian tidak disimpan. */
+  id: string;
+  label: string;
+  jatuhTempo: Date;
+  amount: number;
+  period: Period;
+  /** Sudah tercermin pada saldo kas yang dilaporkan. */
+  sebelumPosisi: boolean;
+};
+
+export type KewajibanDetail = Kewajiban & {
+  id: string;
+  notes: string | null;
+  vehicleId: string | null;
+  kendaraan: { plate: string; name: string } | null;
+  /** Jatuh tempo berikutnya yang belum dilunasi, dihitung dari hari ini. */
+  berikutnya: Kejadian | null;
+  riwayat: { id: string; dueDate: Date; paidDate: Date; amount: number }[];
+};
+
+export type KendaraanDetail = {
+  id: string;
+  plate: string;
+  name: string;
+  kind: string;
+  unitId: string | null;
+  unitName: string | null;
+  active: boolean;
+  notes: string | null;
+  kewajiban: KewajibanDetail[];
+};
+
+/** Bentuk baris database menjadi bentuk yang dimengerti mesin kewajiban. */
+function bentukKewajiban(r: {
+  id: string; label: string; amount: number; dueDate: Date; repeat: string;
+  repeatEvery: number; active: boolean; paidUntil: Date | null; notes: string | null;
+  vehicleId: string | null;
+  vehicle?: { plate: string; name: string } | null;
+  payments?: { id: string; dueDate: Date; paidDate: Date; amount: number }[];
+}): KewajibanDetail {
+  const k: Kewajiban = {
+    label: r.label,
+    amount: r.amount,
+    dueDate: r.dueDate,
+    repeat: r.repeat as Pengulangan,
+    repeatEvery: r.repeatEvery,
+    active: r.active,
+    paidUntil: r.paidUntil,
+  };
+  return {
+    ...k,
+    id: r.id,
+    notes: r.notes,
+    vehicleId: r.vehicleId,
+    kendaraan: r.vehicle ? { plate: r.vehicle.plate, name: r.vehicle.name } : null,
+    berikutnya: berikutnya(k, new Date()),
+    riwayat: r.payments ?? [],
+  };
+}
+
+/** Seluruh kewajiban terjadwal, yang menempel pada kendaraan maupun yang berdiri sendiri. */
+export async function getKewajiban(): Promise<KewajibanDetail[]> {
+  const rows = await prisma.scheduledObligation.findMany({
+    orderBy: [{ active: 'desc' }, { dueDate: 'asc' }],
+    include: {
+      vehicle: { select: { plate: true, name: true } },
+      payments: {
+        orderBy: { dueDate: 'desc' },
+        select: { id: true, dueDate: true, paidDate: true, amount: true },
+      },
+    },
+  });
+  return rows.map(bentukKewajiban);
+}
+
+export async function getKendaraan(): Promise<KendaraanDetail[]> {
+  const rows = await prisma.vehicle.findMany({
+    orderBy: [{ active: 'desc' }, { plate: 'asc' }],
+    include: {
+      unit: { select: { name: true } },
+      obligations: {
+        orderBy: [{ active: 'desc' }, { dueDate: 'asc' }],
+        include: {
+          payments: {
+            orderBy: { dueDate: 'desc' },
+            select: { id: true, dueDate: true, paidDate: true, amount: true },
+          },
+        },
+      },
+    },
+  });
+  return rows.map((v) => ({
+    id: v.id,
+    plate: v.plate,
+    name: v.name,
+    kind: v.kind,
+    unitId: v.unitId,
+    unitName: v.unit?.name ?? null,
+    active: v.active,
+    notes: v.notes,
+    kewajiban: v.obligations.map((o) => bentukKewajiban({ ...o, vehicle: null })),
+  }));
+}
+
+/** Unit usaha untuk pemilih pada formulir kendaraan. */
+export async function getUnitPilihan(): Promise<{ id: string; code: string; name: string }[]> {
+  return prisma.businessUnit.findMany({
+    where: { active: true },
+    orderBy: { code: 'asc' },
+    select: { id: true, code: true, name: true },
+  });
+}
 
 export async function getRencanaKasPeriods(): Promise<Period[]> {
   const rows = await prisma.cashPlan.findMany({ select: { period: true }, orderBy: { period: 'desc' } });
@@ -842,7 +972,40 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const cicilanBulanIni = terakhir
     ? disetujui.reduce((t, b) => t + cicilanSetelah(b.jadwal, period, terakhir.date), 0)
     : 0;
-  const cicilanBulan = (p: Period) => disetujui.reduce((t, b) => t + cicilanPada(b.jadwal, p), 0);
+  // Bulan berjalan memakai angka yang sudah dibersihkan dari cicilan sebelum
+  // posisi kas; bulan-bulan berikutnya dihitung penuh.
+  const cicilanBulan = (p: Period) =>
+    p === period ? cicilanBulanIni : disetujui.reduce((t, b) => t + cicilanPada(b.jadwal, p), 0);
+
+  // Kewajiban terjadwal datang dari master data, bukan dari rencana bulan ini,
+  // sehingga satu pajak yang jatuh tempo tahun depan sudah terlihat sekarang.
+  const kewajibanRows = await prisma.scheduledObligation.findMany({
+    where: { active: true },
+    include: { vehicle: { select: { plate: true, name: true } } },
+  });
+  const daftarKewajiban = kewajibanRows.map((r) => bentukKewajiban(r));
+
+  const kejadianKewajiban = (dari: Period, sampai: Period): KejadianKewajiban[] =>
+    daftarKewajiban
+      .flatMap((k) =>
+        kejadian(k, periodStart(dari), periodEndExclusive(sampai)).map((e) => ({
+          id: k.id,
+          label: k.kendaraan ? `${k.label} — ${k.kendaraan.plate}` : k.label,
+          jatuhTempo: e.jatuhTempo,
+          amount: e.amount,
+          period: toPeriod(e.jatuhTempo),
+          sebelumPosisi: batas !== null && e.jatuhTempo <= batas,
+        })),
+      )
+      .sort((a, b) => a.jatuhTempo.getTime() - b.jatuhTempo.getTime());
+
+  // Yang jatuh tempo sebelum posisi kas dilaporkan sudah tercermin pada
+  // saldonya — sama seperti belanja dan cicilan rencana belanja.
+  const kewajibanBulanIni = terakhir
+    ? kewajibanSetelah(daftarKewajiban, period, terakhir.date)
+    : kewajibanPada(daftarKewajiban, period);
+  const kewajibanBulan = (p: Period) =>
+    p === period ? kewajibanBulanIni : kewajibanPada(daftarKewajiban, p);
 
   const rencana = terakhir
     ? hitungRencana({
@@ -852,6 +1015,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         masukSampaiKini: terakhir.incomeToDate,
         proyeksi: dipakai,
         cicilanBelanja: cicilanBulanIni,
+        kewajiban: kewajibanBulanIni,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
@@ -891,6 +1055,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
               .reduce((t, k) => t + k.amount, 0),
             kebutuhanGaji: gaji,
             cicilanPada: cicilanBulan,
+            kewajibanPada: kewajibanBulan,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
@@ -927,6 +1092,11 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     },
     runway,
     rencanaBelanja,
+    kewajiban: {
+      bulanIni: kejadianKewajiban(period, period),
+      mendatang: kejadianKewajiban(addMonths(period, 1), addMonths(period, HORIZON_BULAN)),
+      belumKeluar: kewajibanBulanIni,
+    },
     konteksBeli: runway && terakhir
       ? (Object.fromEntries(
           SKENARIO.map((sk) => [sk, konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji)]),

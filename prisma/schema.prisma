@@ -39,11 +39,12 @@ model BusinessUnit {
   openingCash Float   @default(0)
   active      Boolean @default(true)
 
-  group    BusinessGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group    BusinessGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   lines    JournalLine[]
   entries  JournalEntry[]
   projects Project[]
   stats    MonthlyStat[]
+  vehicles Vehicle[]
 
   createdAt DateTime @default(now())
 
@@ -110,15 +111,15 @@ model JournalEntry {
 
 /// Baris jurnal — inti sistem double-entry.
 model JournalLine {
-  id        String  @id @default(cuid())
-  entryId   String
-  accountId String
+  id          String  @id @default(cuid())
+  entryId     String
+  accountId   String
   /// Unit pemilik baris ini. Memungkinkan satu bukti dibagi ke beberapa cabang
   /// (mis. tagihan listrik satu meteran untuk hotel + laundry).
-  unitId    String
-  debit     Float   @default(0)
-  credit    Float   @default(0)
-  memo      String?
+  unitId      String
+  debit       Float   @default(0)
+  credit      Float   @default(0)
+  memo        String?
   /// Diisi bila baris ini bagian dari biaya yang ditanggung beberapa cabang
   /// bersama-sama, mis. "THL+SKR" untuk gaji staf yang bekerja di kedua lokasi,
   /// atau "IGYT+THU" untuk listrik satu meteran. Nilainya tetap dibagi ke tiap
@@ -238,7 +239,7 @@ model ForecastScenario {
 
 /// Rencana Anggaran Biaya untuk satu bulan.
 model Budget {
-  id String @id @default(cuid())
+  id     String  @id @default(cuid())
   /// Siapa yang menganggarkan. Bisa kode cabang ("THL") atau nama kelompok
   /// penanggung ("THL+SKR") untuk biaya yang ditanggung beberapa cabang
   /// bersama — bentuknya sama persis dengan JournalLine.sharedGroup, supaya
@@ -314,16 +315,16 @@ model CashPlan {
 /// Pengeluaran yang sudah pasti dan tidak boleh dipakai untuk belanja lain —
 /// cicilan bank, gaji, service pegawai.
 model CashCommitment {
-  id     String  @id @default(cuid())
-  planId String
-  label  String
-  amount Float   @default(0)
+  id        String  @id @default(cuid())
+  planId    String
+  label     String
+  amount    Float   @default(0)
   /// Tanggal jatuh tempo dalam bulan, 1–31. null bila belum pasti.
-  dueDay Int?
-  paid   Boolean @default(false)
+  dueDay    Int?
+  paid      Boolean @default(false)
   /// Ikut tersalin saat rencana bulan berikutnya dibuat.
   recurring Boolean @default(true)
-  sort   Int     @default(0)
+  sort      Int     @default(0)
 
   plan CashPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -388,13 +389,13 @@ model SpendEntry {
 /// yang belum berjalan, dan disediakan sebagai master data karena polanya sama
 /// untuk seluruh cabang dan jarang berubah.
 model Season {
-  id   String @id @default(cuid())
+  id    String @id @default(cuid())
   /// Kode singkat, mis. LOW atau PEAK.
-  code String @unique
-  name String
+  code  String @unique
+  name  String
   /// Selisih terhadap musim acuan, dalam persen. Musim acuan bernilai 0.
-  delta Float @default(0)
-  sort  Int   @default(0)
+  delta Float  @default(0)
+  sort  Int    @default(0)
 
   months SeasonMonth[]
 
@@ -417,20 +418,88 @@ model SeasonMonth {
 /// tidak disimpan — diturunkan dari harga, jumlah cicilan, jarak, dan tanggal
 /// mulainya, memakai aturan pembagian yang sama dengan mesin penilaiannya.
 model Purchase {
-  id     String @id @default(cuid())
-  label  String
-  amount Float  @default(0)
+  id          String   @id @default(cuid())
+  label       String
+  amount      Float    @default(0)
   /// WEEKLY | MONTHLY
-  cadence     String @default("MONTHLY")
-  instalments Int    @default(1)
+  cadence     String   @default("MONTHLY")
+  instalments Int      @default(1)
   /// Tanggal cicilan pertama.
-  startDate DateTime
+  startDate   DateTime
   /// DRAFT | APPROVED — hanya yang disetujui memotong anggaran.
-  status String @default("DRAFT")
-  notes  String?
+  status      String   @default("DRAFT")
+  notes       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+/// Kendaraan milik perusahaan, termasuk yang disewakan. Didaftarkan supaya
+/// pajaknya punya pemilik yang jelas: satu kendaraan biasanya menanggung dua
+/// jadwal sekaligus — pajak tahunan dan STNK lima tahunan yang jauh lebih besar.
+model Vehicle {
+  id     String  @id @default(cuid())
+  plate  String  @unique
+  name   String
+  /// MOBIL | MOTOR | LAINNYA
+  kind   String  @default("MOBIL")
+  unitId String?
+  active Boolean @default(true)
+  notes  String?
+
+  unit        BusinessUnit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  obligations ScheduledObligation[]
+
+  createdAt DateTime @default(now())
+
+  @@index([unitId])
+}
+
+/// Kewajiban bertanggal yang sudah diketahui jauh hari: pajak kendaraan, PBB,
+/// perpanjangan izin, asuransi tahunan. Berbeda dari komitmen yang menempel
+/// pada satu bulan, kewajiban di sini hidup lintas tahun dan menghasilkan
+/// jatuh temponya sendiri, sehingga ramalan kas bisa melihatnya jauh di depan.
+model ScheduledObligation {
+  id          String    @id @default(cuid())
+  label       String
+  amount      Float     @default(0)
+  /// Jatuh tempo pertama; yang berikutnya diturunkan dari pengulangannya.
+  dueDate     DateTime
+  /// SEKALI | BULANAN | TAHUNAN
+  repeat      String    @default("TAHUNAN")
+  /// Tiap berapa kali satuan pengulangannya; 5 untuk STNK lima tahunan.
+  repeatEvery Int       @default(1)
+  active      Boolean   @default(true)
+  /// Jatuh tempo terakhir yang sudah dilunasi; yang sampai tanggal ini dilewati.
+  paidUntil   DateTime?
+  vehicleId   String?
+  notes       String?
+
+  vehicle  Vehicle?            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  payments ObligationPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vehicleId])
+}
+
+/// Riwayat pelunasan sebuah kewajiban. Nominal sebenarnya dicatat karena pajak
+/// naik sedikit tiap tahun — tahun depan angkanya tidak perlu ditebak dari nol.
+model ObligationPayment {
+  id           String   @id @default(cuid())
+  obligationId String
+  /// Jatuh tempo yang dibayar, bukan tanggal pembayarannya.
+  dueDate      DateTime
+  paidDate     DateTime
+  amount       Float
+  notes        String?
+
+  obligation ScheduledObligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([obligationId])
 }

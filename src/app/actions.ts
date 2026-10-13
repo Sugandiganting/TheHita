@@ -11,6 +11,7 @@ import { periodeBerikutnya } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
+import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -47,6 +48,11 @@ function parseAmount(value: FormDataEntryValue | null): number {
   const cleaned = String(value).replace(/[^\d,-]/g, '').replace(',', '.');
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** "14 Mar 2027" — untuk pesan yang dibaca manusia, bukan untuk disimpan. */
+function formatTanggal(d: Date): string {
+  return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
 }
 
 function fail(message: string): ActionState {
@@ -1315,4 +1321,194 @@ export async function deletePurchase(_prev: ActionState, formData: FormData): Pr
   await prisma.purchase.delete({ where: { id } });
   segarkanRencanaKas();
   return ok(`${ada.label} dihapus.`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Kendaraan & kewajiban terjadwal                                     */
+/* ------------------------------------------------------------------ */
+
+function segarkanKewajiban() {
+  revalidatePath('/kewajiban');
+  revalidatePath('/kendaraan');
+  revalidatePath('/rencana-kas');
+}
+
+const JENIS_KENDARAAN = ['MOBIL', 'MOTOR', 'LAINNYA'];
+
+export async function saveVehicle(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const plate = String(formData.get('plate') ?? '').trim().toUpperCase();
+  const name = String(formData.get('name') ?? '').trim();
+  const kind = String(formData.get('kind') ?? 'MOBIL');
+  const unitId = String(formData.get('unitId') ?? '').trim() || null;
+  const active = formData.get('active') !== 'off';
+
+  if (!plate) return fail('Plat nomor wajib diisi.');
+  if (!name) return fail('Nama kendaraan wajib diisi.');
+  if (!JENIS_KENDARAAN.includes(kind)) return fail('Jenis kendaraan tidak dikenal.');
+
+  const kembar = await prisma.vehicle.findUnique({ where: { plate }, select: { id: true } });
+  if (kembar && kembar.id !== id) return fail(`Plat ${plate} sudah terdaftar.`);
+
+  const data = {
+    plate, name, kind, unitId, active,
+    notes: String(formData.get('notes') ?? '').trim() || null,
+  };
+
+  if (id) {
+    await prisma.vehicle.update({ where: { id }, data });
+  } else {
+    await prisma.vehicle.create({ data });
+  }
+  segarkanKewajiban();
+  return ok(id ? `${plate} diperbarui.` : `${plate} ditambahkan.`);
+}
+
+export async function deleteVehicle(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.vehicle.findUnique({
+    where: { id },
+    select: { plate: true, _count: { select: { obligations: true } } },
+  });
+  if (!ada) return fail('Kendaraan tidak ditemukan.');
+
+  // Jadwal pajaknya ikut terhapus bersama riwayat pelunasannya, jadi
+  // jumlahnya disebutkan di layar sebelum tombol ini ditekan.
+  await prisma.vehicle.delete({ where: { id } });
+  segarkanKewajiban();
+  return ok(
+    ada._count.obligations > 0
+      ? `${ada.plate} dihapus beserta ${ada._count.obligations} jadwalnya.`
+      : `${ada.plate} dihapus.`,
+  );
+}
+
+export async function saveObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const label = String(formData.get('label') ?? '').trim();
+  const amount = angka(formData, 'amount');
+  const tanggalTeks = String(formData.get('dueDate') ?? '');
+  const repeat = String(formData.get('repeat') ?? 'TAHUNAN');
+  const repeatEvery = Number(String(formData.get('repeatEvery') ?? '1').replace(/[^\d]/g, ''));
+  const vehicleId = String(formData.get('vehicleId') ?? '').trim() || null;
+
+  if (!label) return fail('Nama kewajiban wajib diisi.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal harus lebih dari nol.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalTeks)) return fail('Tanggal jatuh tempo wajib diisi.');
+  if (!PENGULANGAN.some((p) => p.nilai === repeat)) return fail('Pengulangan tidak dikenal.');
+  if (repeat !== 'SEKALI' && (!Number.isInteger(repeatEvery) || repeatEvery < 1 || repeatEvery > 60)) {
+    return fail('Langkah pengulangan harus antara 1 dan 60.');
+  }
+
+  const data = {
+    label,
+    amount,
+    dueDate: parseDate(tanggalTeks),
+    repeat,
+    repeatEvery: repeat === 'SEKALI' ? 1 : repeatEvery,
+    vehicleId,
+    notes: String(formData.get('notes') ?? '').trim() || null,
+  };
+
+  if (id) {
+    const ada = await prisma.scheduledObligation.findUnique({ where: { id }, select: { id: true } });
+    if (!ada) return fail('Kewajiban tidak ditemukan.');
+    await prisma.scheduledObligation.update({ where: { id }, data });
+  } else {
+    await prisma.scheduledObligation.create({ data });
+  }
+  segarkanKewajiban();
+  return ok(id ? `${label} diperbarui.` : `${label} ditambahkan.`);
+}
+
+export async function setObligationActive(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const active = String(formData.get('active') ?? '') === 'true';
+  const ada = await prisma.scheduledObligation.findUnique({ where: { id }, select: { label: true } });
+  if (!ada) return fail('Kewajiban tidak ditemukan.');
+
+  await prisma.scheduledObligation.update({ where: { id }, data: { active } });
+  segarkanKewajiban();
+  return ok(active
+    ? `${ada.label} diaktifkan kembali dan ikut lagi di ramalan.`
+    : `${ada.label} dinonaktifkan; tidak lagi memukul ramalan.`);
+}
+
+export async function deleteObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.scheduledObligation.findUnique({
+    where: { id },
+    select: { label: true, _count: { select: { payments: true } } },
+  });
+  if (!ada) return fail('Kewajiban tidak ditemukan.');
+
+  await prisma.scheduledObligation.delete({ where: { id } });
+  segarkanKewajiban();
+  return ok(
+    ada._count.payments > 0
+      ? `${ada.label} dihapus beserta ${ada._count.payments} riwayat pelunasannya.`
+      : `${ada.label} dihapus.`,
+  );
+}
+
+/**
+ * Menandai satu jatuh tempo sudah dibayar.
+ *
+ * Nominal sebenarnya dicatat, bukan nominal perkiraan: pajak naik sedikit tiap
+ * tahun, dan angka tahun lalu adalah tebakan terbaik untuk tahun depan.
+ */
+export async function payObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const dueTeks = String(formData.get('dueDate') ?? '');
+  const paidTeks = String(formData.get('paidDate') ?? '');
+  const amount = angka(formData, 'amount');
+
+  const row = await prisma.scheduledObligation.findUnique({ where: { id } });
+  if (!row) return fail('Kewajiban tidak ditemukan.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueTeks)) return fail('Jatuh tempo yang dibayar tidak dikenal.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidTeks)) return fail('Tanggal pembayaran wajib diisi.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal pembayaran harus lebih dari nol.');
+
+  const dueDate = parseDate(dueTeks);
+  await prisma.$transaction([
+    prisma.obligationPayment.create({
+      data: { obligationId: id, dueDate, paidDate: parseDate(paidTeks), amount },
+    }),
+    prisma.scheduledObligation.update({ where: { id }, data: { paidUntil: dueDate } }),
+  ]);
+
+  const lanjutan = setelahDilunasi(
+    {
+      label: row.label, amount: row.amount, dueDate: row.dueDate,
+      repeat: row.repeat as Pengulangan, repeatEvery: row.repeatEvery,
+      active: row.active, paidUntil: dueDate,
+    },
+    dueDate,
+  );
+  segarkanKewajiban();
+  return ok(lanjutan
+    ? `${row.label} dicatat lunas. Jatuh tempo berikutnya ${formatTanggal(lanjutan)}.`
+    : `${row.label} dicatat lunas dan sudah tidak berulang lagi.`);
+}
+
+/** Membatalkan pelunasan terakhir, mis. salah tanggal atau salah nominal. */
+export async function unpayObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const row = await prisma.scheduledObligation.findUnique({
+    where: { id },
+    select: { label: true, payments: { orderBy: { dueDate: 'desc' }, take: 2 } },
+  });
+  if (!row) return fail('Kewajiban tidak ditemukan.');
+  const [terakhir, sebelumnya] = row.payments;
+  if (!terakhir) return fail('Belum ada pelunasan yang bisa dibatalkan.');
+
+  await prisma.$transaction([
+    prisma.obligationPayment.delete({ where: { id: terakhir.id } }),
+    prisma.scheduledObligation.update({
+      where: { id },
+      data: { paidUntil: sebelumnya?.dueDate ?? null },
+    }),
+  ]);
+  segarkanKewajiban();
+  return ok(`Pelunasan ${row.label} ${formatTanggal(terakhir.dueDate)} dibatalkan.`);
 }

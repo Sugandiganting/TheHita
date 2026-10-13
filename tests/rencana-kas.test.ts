@@ -475,3 +475,32 @@ test('cicilan di bulan-bulan berikutnya menurunkan ramalan di bulannya sendiri',
   // Penurunannya menetap, bukan hanya sebulan.
   assert.equal(keJt(polos.bulan[3].saldoAkhir - dengan.bulan[3].saldoAkhir), 40);
 });
+
+test('kewajiban terjadwal memotong jatah bulan berjalan, terpisah dari komitmen', () => {
+  const polos = hitungRencana(rapat9Okt);
+  const dengan = hitungRencana({ ...rapat9Okt, kewajiban: jt(3.5) });
+  assert.equal(dengan.kewajiban, jt(3.5));
+  assert.equal(keJt(polos.skenario.NORMAL.jatah - dengan.skenario.NORMAL.jatah), 3.5);
+  assert.equal(dengan.komitmenBelumBayar, polos.komitmenBelumBayar, 'komitmen biasa tidak berubah');
+  assert.equal(dengan.cicilanBelanja, 0, 'juga tidak tercampur dengan cicilan rencana belanja');
+});
+
+test('kewajiban terjadwal bulan depan menurunkan ramalan di bulannya sendiri', () => {
+  const dasar = {
+    // Kas yang tumbuh, supaya ramalannya berjalan penuh dua belas bulan dan
+    // bulan sesudah pajak masih ada barisnya.
+    ...runwaySeptember, saldoKas: jt(300), sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3),
+    proyeksiBerikutnya: () => jt(450),
+  };
+  const polos = hitungRunway(dasar);
+  const dengan = hitungRunway({
+    ...dasar,
+    kewajibanPada: (p) => (p === '2027-03' ? jt(9) : 0),
+  });
+  assert.equal(polos.bulan[1].saldoAkhir, dengan.bulan[1].saldoAkhir, 'bulan lain tidak terpengaruh');
+  const maret = polos.bulan.findIndex((b) => b.period === '2027-03');
+  assert.ok(maret > 0, 'Maret 2027 memang ada di ramalan');
+  assert.equal(keJt(polos.bulan[maret].saldoAkhir - dengan.bulan[maret].saldoAkhir), 9);
+  // Pajak yang dibayar tidak kembali: penurunannya menetap.
+  assert.equal(keJt(polos.bulan[maret + 1].saldoAkhir - dengan.bulan[maret + 1].saldoAkhir), 9);
+});
