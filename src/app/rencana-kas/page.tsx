@@ -2,12 +2,14 @@ import Link from 'next/link';
 import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
+import { NAMA_KADENS } from '@/lib/rencana-belanja';
 import { formatDate, formatPeriod, formatPeriodShort, formatRupiah, toDateInput } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
   CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
+import { JadwalTersimpan, PurchaseActions, PurchaseCalculator } from '@/components/belanja-form';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -314,6 +316,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <Suku label={k.dueDay ? `${k.label} tgl ${k.dueDay}` : k.label} value={k.amount} />
                     </span>
                   ))}
+                  {rencana.cicilanBelanja > 0 && (
+                    <span className="flex items-start gap-4">
+                      <Operator>−</Operator>
+                      <Suku label="Cicilan rencana belanja" value={rencana.cicilanBelanja} />
+                    </span>
+                  )}
                   {rencana.terpakai > 0 && (
                     <span className="flex items-start gap-4">
                       <Operator>−</Operator>
@@ -476,6 +484,65 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               )}
             </>
           )}
+
+          <Card className="card-pad min-w-0">
+            <SectionTitle hint="Dinilai dengan skenario pesimis dan batas aman satu kali gaji. Hanya rencana yang disetujui yang memotong anggaran.">
+              Rencana belanja
+            </SectionTitle>
+
+            {data.rencanaBelanja.length > 0 && (
+              <div className="mb-6 overflow-x-auto">
+                <table className="w-full min-w-[760px]">
+                  <thead className="border-b border-slate-200">
+                    <tr>
+                      <th className="th">Rencana</th>
+                      <th className="th">Status</th>
+                      <th className="th num">Harga</th>
+                      <th className="th">Cicilan</th>
+                      <th className="th num">Jatuh tempo bulan ini</th>
+                      <th className="th num">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.rencanaBelanja.map((b) => (
+                      <tr key={b.id} className={b.status === 'APPROVED' ? '' : 'text-slate-500'}>
+                        <td className="td">
+                          {b.label}
+                          <span className="mt-0.5 block">
+                            <JadwalTersimpan jadwal={b.jadwal} />
+                          </span>
+                        </td>
+                        <td className="td">
+                          <Badge tone={b.status === 'APPROVED' ? 'brand' : 'slate'}>
+                            {b.status === 'APPROVED' ? 'Disetujui' : 'Draf'}
+                          </Badge>
+                        </td>
+                        <td className="td num">{formatRupiah(b.amount)}</td>
+                        <td className="td whitespace-nowrap text-xs">
+                          {b.instalments === 1
+                            ? 'sekali bayar'
+                            : `${b.instalments}× ${NAMA_KADENS[b.cadence]}`}
+                        </td>
+                        <td className="td num">
+                          {b.cicilanBulanIni > 0 ? formatRupiah(b.cicilanBulanIni) : '—'}
+                        </td>
+                        <td className="td num"><PurchaseActions id={b.id} status={b.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {data.konteksBeli ? (
+              <PurchaseCalculator context={data.konteksBeli} defaultDate={tanggalBawaan} />
+            ) : (
+              <Alert tone="info">
+                Isi posisi kas dan pengeluaran rutin dulu — pemeriksa kemampuan beli membutuhkan
+                keduanya untuk tahu sampai mana kas sanggup.
+              </Alert>
+            )}
+          </Card>
 
           {data.belanja.length > 0 && (
             <Card className="card-pad min-w-0">

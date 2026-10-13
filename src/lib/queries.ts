@@ -16,6 +16,10 @@ import {
 import {
   dasarAcuan, polaBervariasi, proyeksiMusim, type Musim, type PolaMusim,
 } from './musim';
+import {
+  cicilanPada, cicilanSetelah, jadwalCicilan, konteksPembelian, type Cicilan,
+} from './rencana-belanja';
+import type { PurchaseCadence, PurchaseContext } from './forecast';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -673,6 +677,9 @@ export type RencanaKasDetail = {
     usulanGaji: number | null;
   };
   runway: Record<Skenario, Runway> | null;
+  rencanaBelanja: RencanaBelanja[];
+  /** Konteks penilaian pembelian baru, memakai skenario pesimis. */
+  konteksBeli: PurchaseContext | null;
   checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
   terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
   /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
@@ -702,6 +709,20 @@ export async function polaMusim(): Promise<PolaMusim> {
     { code: r.season.code, name: r.season.name, delta: r.season.delta },
   ]));
 }
+
+export type RencanaBelanja = {
+  id: string;
+  label: string;
+  amount: number;
+  cadence: PurchaseCadence;
+  instalments: number;
+  startDate: Date;
+  status: string;
+  notes: string | null;
+  jadwal: Cicilan[];
+  /** Cicilan yang jatuh tempo bulan ini, termasuk yang sudah lewat. */
+  cicilanBulanIni: number;
+};
 
 export async function getRencanaKasPeriods(): Promise<Period[]> {
   const rows = await prisma.cashPlan.findMany({ select: { period: true }, orderBy: { period: 'desc' } });
@@ -800,6 +821,26 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     terpakai: terpakaiKategori(k.id, true),
     terpakaiBulanIni: terpakaiKategori(k.id, false),
   }));
+  // Hanya rencana yang sudah disetujui yang memotong anggaran; yang masih draf
+  // adalah hitung-hitungan, belum keputusan.
+  const belanjaRows = await prisma.purchase.findMany({ orderBy: { createdAt: 'desc' } });
+  const rencanaBelanja: RencanaBelanja[] = belanjaRows.map((b) => {
+    const jadwal = jadwalCicilan(b.amount, b.instalments, b.cadence as PurchaseCadence, b.startDate);
+    return {
+      id: b.id, label: b.label, amount: b.amount, cadence: b.cadence as PurchaseCadence,
+      instalments: b.instalments, startDate: b.startDate, status: b.status, notes: b.notes,
+      jadwal, cicilanBulanIni: cicilanPada(jadwal, period),
+    };
+  });
+  const disetujui = rencanaBelanja.filter((b) => b.status === 'APPROVED');
+
+  // Cicilan yang jatuh tempo sebelum posisi kas dilaporkan sudah tercermin pada
+  // saldonya, sama seperti belanja biasa.
+  const cicilanBulanIni = terakhir
+    ? disetujui.reduce((t, b) => t + cicilanSetelah(b.jadwal, period, terakhir.date), 0)
+    : 0;
+  const cicilanBulan = (p: Period) => disetujui.reduce((t, b) => t + cicilanPada(b.jadwal, p), 0);
+
   const rencana = terakhir
     ? hitungRencana({
         period,
@@ -807,6 +848,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         saldoKas: terakhir.cashOnHand,
         masukSampaiKini: terakhir.incomeToDate,
         proyeksi: dipakai,
+        cicilanBelanja: cicilanBulanIni,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
@@ -845,6 +887,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
               .filter((k) => k.recurring)
               .reduce((t, k) => t + k.amount, 0),
             kebutuhanGaji: gaji,
+            cicilanPada: cicilanBulan,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
@@ -880,6 +923,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       usulanGaji,
     },
     runway,
+    rencanaBelanja,
+    konteksBeli: runway && terakhir
+      ? konteksPembelian(runway.PESIMIS, terakhir.cashOnHand, gaji)
+      : null,
     checkpoint: plan.checkpoints.map((c) => ({
       id: c.id, date: c.date, cashOnHand: c.cashOnHand, incomeToDate: c.incomeToDate, notes: c.notes,
     })),

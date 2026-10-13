@@ -1,9 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useActionState, useMemo, useState, useTransition } from 'react';
 import { advisePurchase, type PurchaseCadence, type PurchaseContext, type PurchasePlan } from '@/lib/forecast';
-import { formatPeriod, formatRupiah } from '@/lib/format';
+import { formatDate, formatPeriod, formatRupiah } from '@/lib/format';
+import { MAKS_CICILAN } from '@/lib/rencana-belanja';
+import { deletePurchase, savePurchase, setPurchaseStatus, type ActionState } from '@/app/actions';
 import { MoneyInput } from './money-input';
+
+const initial: ActionState = { ok: false, message: '' };
 
 /**
  * "Uangnya cukup atau tidak?" — pemeriksa kemampuan beli.
@@ -61,10 +65,30 @@ function JadwalCicilan({ plan }: { plan: PurchasePlan }) {
   );
 }
 
-export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
+export function PurchaseCalculator({
+  context, defaultDate,
+}: {
+  context: PurchaseContext;
+  /** Tanggal cicilan pertama; biasanya hari ini. */
+  defaultDate: string;
+}) {
   const [harga, setHarga] = useState(0);
   const [cicilan, setCicilan] = useState(1);
   const [cadence, setCadence] = useState<PurchaseCadence>('WEEKLY');
+  const [nama, setNama] = useState('');
+  const [mulai, setMulai] = useState(defaultDate);
+  const [state, kirim] = useActionState(savePurchase, initial);
+  const [pending, mulaiTransition] = useTransition();
+
+  const simpan = () => {
+    const data = new FormData();
+    data.set('label', nama);
+    data.set('amount', String(harga));
+    data.set('cadence', cadence);
+    data.set('instalments', String(cicilan));
+    data.set('startDate', mulai);
+    mulaiTransition(() => kirim(data));
+  };
 
   const saran = useMemo(
     () => (harga > 0 ? advisePurchase(context, harga, cicilan, cadence) : null),
@@ -100,10 +124,10 @@ export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
               id="beli-cicilan"
               type="number"
               min={1}
-              max={24}
+              max={MAKS_CICILAN}
               className="input w-20 shrink-0"
               value={cicilan}
-              onChange={(e) => setCicilan(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+              onChange={(e) => setCicilan(Math.max(1, Math.min(MAKS_CICILAN, Number(e.target.value) || 1)))}
             />
             <select
               aria-label="Jarak antar cicilan"
@@ -119,7 +143,21 @@ export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
         </div>
       </div>
 
-      {!rencana && (
+      {/*
+        Ruang belanja nol berarti garis kasnya sendiri sudah menembus batas aman,
+        bahkan sebelum ada pembelian. Tanpa dikatakan, jawaban "belum cukup" akan
+        terbaca seolah barangnya yang kemahalan — padahal barang seharga sejuta
+        pun akan ditolak.
+      */}
+      {context.maxAffordableNow === 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Kas sudah berada di bawah batas aman bahkan tanpa pembelian apa pun, jadi berapa pun
+          harganya akan dinilai belum aman. Yang perlu dibereskan lebih dulu adalah kasnya sendiri,
+          bukan rencana belanjanya.
+        </div>
+      )}
+
+      {!rencana && context.maxAffordableNow > 0 && (
         <p className="text-sm text-slate-500">
           Sekali dibayar sekaligus sekarang, kemampuan belanja maksimum{' '}
           <strong>{formatRupiah(context.maxAffordableNow)}</strong> tanpa menembus batas aman.
@@ -171,6 +209,53 @@ export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
 
           <JadwalCicilan plan={rencana} />
 
+          {/*
+            Menyimpan lewat FormData yang disusun sendiri, bukan lewat <form>:
+            setelah aksi server selesai React mengosongkan isian formulir, dan
+            seluruh angka yang baru dihitung ikut hilang bersamanya.
+          */}
+          <div className="rounded-lg border border-slate-200 p-4">
+            <p className="mb-3 text-sm font-medium text-slate-700">Simpan rencana ini</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="beli-nama">Nama rencana</label>
+                <input
+                  id="beli-nama"
+                  className="input"
+                  placeholder="Renovasi kamar Uluwatu"
+                  value={nama}
+                  onChange={(e) => setNama(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="beli-mulai">Cicilan pertama</label>
+                <input
+                  id="beli-mulai"
+                  type="date"
+                  className="input"
+                  value={mulai}
+                  onChange={(e) => setMulai(e.target.value)}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={simpan}
+              disabled={pending || !nama.trim()}
+              className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pending ? 'Menyimpan…' : 'Simpan sebagai draf'}
+            </button>
+            <p className="mt-2 text-xs text-slate-500">
+              Tersimpan sebagai draf dulu. Anggaran baru terpotong setelah disetujui.
+            </p>
+            {state.message && (
+              <p className={`mt-2 text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>
+                {state.message}
+              </p>
+            )}
+          </div>
+
           <p className="text-xs text-slate-500">
             Diperiksa bukan hanya saat tiap cicilan dibayar, tetapi juga bulan-bulan sesudahnya &mdash;
             pembelian menurunkan saldo kas seterusnya, jadi bisa saja tiap cicilan terlihat aman tetapi
@@ -181,5 +266,67 @@ export function PurchaseCalculator({ context }: { context: PurchaseContext }) {
         </>
       )}
     </div>
+  );
+}
+
+/** Setujui atau kembalikan ke draf, dan hapus. */
+export function PurchaseActions({ id, status }: { id: string; status: string }) {
+  const [statusState, statusAction] = useActionState(setPurchaseStatus, initial);
+  const [hapusState, hapusAction] = useActionState(deletePurchase, initial);
+  const [pending, mulaiTransition] = useTransition();
+  const [konfirmasi, setKonfirmasi] = useState(false);
+  const draf = status === 'DRAFT';
+
+  const jalankan = (aksi: (fd: FormData) => void, tambahan?: Record<string, string>) => {
+    const data = new FormData();
+    data.set('id', id);
+    for (const [k, v] of Object.entries(tambahan ?? {})) data.set(k, v);
+    mulaiTransition(() => aksi(data));
+  };
+
+  return (
+    <span className="flex items-center justify-end gap-3">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => jalankan(statusAction, { status: draf ? 'APPROVED' : 'DRAFT' })}
+        className="text-xs font-medium text-slate-600 hover:underline"
+      >
+        {pending ? '…' : draf ? 'Setujui' : 'Kembalikan ke draf'}
+      </button>
+
+      {konfirmasi ? (
+        <>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => jalankan(hapusAction)}
+            className="text-xs font-medium text-red-600 hover:underline"
+          >
+            Ya, hapus
+          </button>
+          <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => setKonfirmasi(false)}>
+            Batal
+          </button>
+        </>
+      ) : (
+        <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setKonfirmasi(true)}>
+          Hapus
+        </button>
+      )}
+
+      {[statusState, hapusState].map((s, i) => (
+        !s.ok && s.message ? <span key={i} className="text-xs text-red-600">{s.message}</span> : null
+      ))}
+    </span>
+  );
+}
+
+/** Jadwal cicilan sebuah rencana yang sudah tersimpan. */
+export function JadwalTersimpan({ jadwal }: { jadwal: { ke: number; jatuhTempo: Date; amount: number }[] }) {
+  return (
+    <span className="text-xs text-slate-500">
+      {jadwal.map((c) => `${formatDate(c.jatuhTempo)} ${formatRupiah(c.amount)}`).join(' · ')}
+    </span>
   );
 }

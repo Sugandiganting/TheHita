@@ -419,3 +419,29 @@ test('tiap bulan boleh punya proyeksinya sendiri', () => {
   // Ringkasan lajunya mewakili bulan terdekat.
   assert.equal(keJt(r.arusBersih), keJt(jt(500) - jt(402.8)));
 });
+
+test('cicilan rencana belanja memotong jatah bulan berjalan', () => {
+  const polos = hitungRencana(rapat9Okt);
+  const dengan = hitungRencana({ ...rapat9Okt, cicilanBelanja: jt(25) });
+  assert.equal(dengan.cicilanBelanja, jt(25));
+  assert.equal(keJt(polos.skenario.NORMAL.jatah - dengan.skenario.NORMAL.jatah), 25);
+  // Komitmen biasa tetap terpisah, supaya keduanya bisa ditampilkan sendiri.
+  assert.equal(dengan.komitmenBelumBayar, polos.komitmenBelumBayar);
+});
+
+test('cicilan di bulan-bulan berikutnya menurunkan ramalan di bulannya sendiri', () => {
+  const dasar = {
+    ...runwaySeptember, saldoKas: jt(300), sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3),
+  };
+  const polos = runway(dasar);
+  const dengan = hitungRunway({
+    ...dasar,
+    proyeksiBerikutnya: () => jt(366.3),
+    cicilanPada: (p) => (p === '2026-12' ? jt(40) : 0),
+  });
+  assert.equal(polos.bulan[0].saldoAkhir, dengan.bulan[0].saldoAkhir, 'Oktober tidak terpengaruh');
+  assert.equal(polos.bulan[1].saldoAkhir, dengan.bulan[1].saldoAkhir, 'November tidak terpengaruh');
+  assert.equal(keJt(polos.bulan[2].saldoAkhir - dengan.bulan[2].saldoAkhir), 40, 'Desember turun');
+  // Penurunannya menetap, bukan hanya sebulan.
+  assert.equal(keJt(polos.bulan[3].saldoAkhir - dengan.bulan[3].saldoAkhir), 40);
+});

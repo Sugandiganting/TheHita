@@ -10,6 +10,7 @@ import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import { periodeBerikutnya } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
+import { MAKS_CICILAN } from '@/lib/rencana-belanja';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -1251,4 +1252,67 @@ export async function setSeasonMonth(_prev: ActionState, formData: FormData): Pr
   });
   segarkanMusim();
   return ok(`${NAMA_BULAN[month - 1]} ditetapkan sebagai ${musim.name}.`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rencana belanja                                                     */
+/* ------------------------------------------------------------------ */
+
+export async function savePurchase(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const label = String(formData.get('label') ?? '').trim();
+  const amount = angka(formData, 'amount');
+  const cadence = String(formData.get('cadence') ?? 'MONTHLY');
+  const instalments = Number(String(formData.get('instalments') ?? '1').replace(/[^\d]/g, ''));
+  const tanggalTeks = String(formData.get('startDate') ?? '');
+
+  if (!label) return fail('Nama rencana belanja wajib diisi.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Harga harus lebih dari nol.');
+  if (!['WEEKLY', 'MONTHLY'].includes(cadence)) return fail('Jarak cicilan tidak dikenal.');
+  if (!Number.isInteger(instalments) || instalments < 1 || instalments > MAKS_CICILAN) {
+    return fail(`Jumlah cicilan harus antara 1 dan ${MAKS_CICILAN}.`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalTeks)) return fail('Tanggal cicilan pertama wajib diisi.');
+
+  const data = {
+    label, amount, cadence, instalments, startDate: parseDate(tanggalTeks),
+    notes: String(formData.get('notes') ?? '').trim() || null,
+  };
+
+  if (id) {
+    const ada = await prisma.purchase.findUnique({ where: { id }, select: { status: true } });
+    if (!ada) return fail('Rencana belanja tidak ditemukan.');
+    if (ada.status === 'APPROVED') {
+      return fail('Rencana yang sudah disetujui tidak bisa diubah. Kembalikan ke draf dulu.');
+    }
+    await prisma.purchase.update({ where: { id }, data });
+  } else {
+    await prisma.purchase.create({ data });
+  }
+  segarkanRencanaKas();
+  return ok(id ? 'Rencana belanja diperbarui.' : `${label} disimpan sebagai draf.`);
+}
+
+export async function setPurchaseStatus(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const status = String(formData.get('status') ?? '');
+  if (!['DRAFT', 'APPROVED'].includes(status)) return fail('Status tidak dikenal.');
+
+  const ada = await prisma.purchase.findUnique({ where: { id }, select: { label: true } });
+  if (!ada) return fail('Rencana belanja tidak ditemukan.');
+
+  await prisma.purchase.update({ where: { id }, data: { status } });
+  segarkanRencanaKas();
+  return ok(status === 'APPROVED'
+    ? `${ada.label} disetujui — cicilannya mulai memotong anggaran.`
+    : `${ada.label} dikembalikan ke draf; cicilannya tidak lagi memotong anggaran.`);
+}
+
+export async function deletePurchase(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.purchase.findUnique({ where: { id }, select: { label: true } });
+  if (!ada) return fail('Rencana belanja tidak ditemukan.');
+  await prisma.purchase.delete({ where: { id } });
+  segarkanRencanaKas();
+  return ok(`${ada.label} dihapus.`);
 }

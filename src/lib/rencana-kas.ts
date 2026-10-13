@@ -65,6 +65,11 @@ export type Masukan = {
   komitmen: Komitmen[];
   kategori: Kategori[];
   /**
+   * Cicilan rencana belanja yang jatuh tempo sesudah tanggal posisi kas di
+   * bulan ini. Dipisah dari komitmen biasa supaya terlihat sendiri di layar.
+   */
+  cicilanBelanja?: number;
+  /**
    * Yang sudah dibelanjakan SETELAH tanggal posisi kas di atas. Belanja sebelum
    * tanggal itu tidak dihitung di sini karena sudah tercermin pada saldo yang
    * dilaporkan — menghitungnya dua kali akan mengecilkan anggaran tanpa sebab.
@@ -130,6 +135,7 @@ export type Rencana = {
   selesai: Date;
   hari: number;
   komitmenBelumBayar: number;
+  cicilanBelanja: number;
   terpakai: number;
   skenario: Record<Skenario, HasilSkenario>;
   minggu: Minggu[];
@@ -227,13 +233,15 @@ export function hitungRencana(m: Masukan): Rencana {
   const { mulai, selesai, hari } = jendela(m.period, m.tanggal);
   const potongan = pecahMinggu(mulai, selesai);
   const komitmenBelumBayar = m.komitmen.filter((k) => !k.paid).reduce((s, k) => s + k.amount, 0);
+  const cicilanBelanja = m.cicilanBelanja ?? 0;
   const terpakai = m.terpakai ?? m.kategori.reduce((s, k) => s + (k.terpakai ?? 0), 0);
 
   const skenario = Object.fromEntries(
     SKENARIO.map((s) => [
       s,
       hasilSkenario(
-        s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas, komitmenBelumBayar, terpakai, potongan.length,
+        s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas,
+        komitmenBelumBayar + cicilanBelanja, terpakai, potongan.length,
       ),
     ]),
   ) as Record<Skenario, HasilSkenario>;
@@ -290,7 +298,9 @@ export function hitungRencana(m: Masukan): Rencana {
     };
   });
 
-  return { mulai, selesai, hari, komitmenBelumBayar, terpakai, skenario, minggu, kategori };
+  return {
+    mulai, selesai, hari, komitmenBelumBayar, cicilanBelanja, terpakai, skenario, minggu, kategori,
+  };
 }
 
 /**
@@ -338,6 +348,8 @@ export function hitungRunway(opsi: {
   /** Komitmen yang berulang tiap bulan — bagian dari pengeluaran rutin. */
   komitmenRutinSebulan: number;
   kebutuhanGaji: number;
+  /** Cicilan rencana belanja yang jatuh tempo di sebuah bulan. */
+  cicilanPada?: (period: Period) => number;
   hariTersisa: number;
   hariSebulan: number;
   horizon?: number;
@@ -345,8 +357,9 @@ export function hitungRunway(opsi: {
   const {
     period, saldoKas, sisaMasuk, proyeksiBerikutnya, pengeluaranBulanan,
     komitmenBelumBayar, komitmenRutinSebulan,
-    kebutuhanGaji, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
+    kebutuhanGaji, cicilanPada, hariTersisa, hariSebulan, horizon = HORIZON_BULAN,
   } = opsi;
+  const cicilan = cicilanPada ?? (() => 0);
 
   const bulan: BulanRunway[] = [];
 
@@ -362,13 +375,14 @@ export function hitungRunway(opsi: {
   // tanpa ini, menambah komitmen besar sama sekali tidak menggerakkan ramalan.
   const operasionalSebulan = Math.max(0, pengeluaranBulanan - komitmenRutinSebulan);
   const porsi = hariSebulan > 0 ? hariTersisa / hariSebulan : 0;
-  let saldo = saldoKas + sisaMasuk - komitmenBelumBayar - operasionalSebulan * porsi;
+  let saldo = saldoKas + sisaMasuk - komitmenBelumBayar - operasionalSebulan * porsi
+    - cicilan(period);
   bulan.push({ period, saldoAkhir: saldo, cukupGaji: saldo >= kebutuhanGaji });
 
   for (let i = 1; i <= horizon; i += 1) {
     if (saldo < 0) break;
     const bulanIni = addMonths(period, i);
-    saldo += proyeksiBerikutnya(bulanIni) - pengeluaranBulanan;
+    saldo += proyeksiBerikutnya(bulanIni) - pengeluaranBulanan - cicilan(bulanIni);
     bulan.push({
       period: bulanIni,
       saldoAkhir: saldo,

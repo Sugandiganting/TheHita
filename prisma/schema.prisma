@@ -412,3 +412,25 @@ model SeasonMonth {
 
   @@index([seasonId])
 }
+
+/// Rencana belanja besar: proyek, renovasi, pembelian alat. Jadwal cicilannya
+/// tidak disimpan — diturunkan dari harga, jumlah cicilan, jarak, dan tanggal
+/// mulainya, memakai aturan pembagian yang sama dengan mesin penilaiannya.
+model Purchase {
+  id     String @id @default(cuid())
+  label  String
+  amount Float  @default(0)
+  /// WEEKLY | MONTHLY
+  cadence     String @default("MONTHLY")
+  instalments Int    @default(1)
+  /// Tanggal cicilan pertama.
+  startDate DateTime
+  /// DRAFT | APPROVED — hanya yang disetujui memotong anggaran.
+  status String @default("DRAFT")
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
