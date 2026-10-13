@@ -120,9 +120,25 @@ export type BulanRunway = {
   cukupGaji: boolean;
 };
 
+/** Laju kas sebuah bulan: uang masuknya dikurangi pengeluaran rutin sebulan. */
+export type LajuBulan = {
+  period: Period;
+  arus: number;
+};
+
 export type Runway = {
-  /** Laju bulan berikutnya: uang masuknya dikurangi pengeluaran rutin sebulan. */
+  /** Laju bulan berikutnya saja. */
   arusBersih: number;
+  /**
+   * Rata-rata laju sepanjang horizon. Inilah yang mewakili arah keseluruhan:
+   * dengan pola musim, laju satu bulan bisa berlawanan arah dengan nasib kas
+   * setahun ke depan — bulan ramai menambah, tetapi bulan-bulan sepi
+   * sesudahnya yang menghabiskan.
+   */
+  arusRata: number;
+  /** Bulan dengan laju terendah dan tertinggi, untuk menunjukkan ayunan musim. */
+  arusTerendah: LajuBulan;
+  arusTertinggi: LajuBulan;
   bulan: BulanRunway[];
   /** Bulan pertama dengan saldo akhir minus; null bila tidak habis sepanjang horizon. */
   habisPada: Period | null;
@@ -390,13 +406,22 @@ export function hitungRunway(opsi: {
     });
   }
 
-  // Laju bulan pertama sesudah bulan berjalan, dipakai sebagai ringkasan arah.
-  // Dengan pola musim lajunya berbeda tiap bulan, jadi angka ini mewakili yang
-  // terdekat saja, bukan rata-rata sepanjang ramalan.
-  const arusBersih = proyeksiBerikutnya(addMonths(period, 1)) - pengeluaranBulanan;
+  // Laju tiap bulan dihitung terpisah dari saldo, sepanjang horizon penuh.
+  // Daftar saldo di atas berhenti begitu kas habis, sedangkan pertanyaan
+  // "seberapa cepat kas terkuras" tidak boleh ikut berhenti di situ.
+  //
+  // Cicilan rencana belanja sengaja tidak masuk hitungan: ia pengeluaran
+  // sekali ini, bukan laju. Akibatnya pada saldo sudah terlihat di tabel.
+  const laju: LajuBulan[] = Array.from({ length: Math.max(1, horizon) }, (_, i) => {
+    const b = addMonths(period, i + 1);
+    return { period: b, arus: proyeksiBerikutnya(b) - pengeluaranBulanan };
+  });
 
   return {
-    arusBersih,
+    arusBersih: laju[0].arus,
+    arusRata: laju.reduce((t, l) => t + l.arus, 0) / laju.length,
+    arusTerendah: laju.reduce((a, b) => (b.arus < a.arus ? b : a)),
+    arusTertinggi: laju.reduce((a, b) => (b.arus > a.arus ? b : a)),
     bulan,
     habisPada: bulan.find((b) => b.saldoAkhir < 0)?.period ?? null,
     gajiTerancam: bulan.find((b) => !b.cukupGaji)?.period ?? null,

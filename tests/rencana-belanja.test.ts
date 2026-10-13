@@ -64,6 +64,9 @@ test('cicilan sebelum tanggal posisi kas tidak ikut memotong lagi', () => {
 /** Kas menyusut rata Rp 20 jt sebulan dari Rp 200 jt. */
 const runwayMenurun: Runway = {
   arusBersih: jt(-20),
+  arusRata: jt(-20),
+  arusTerendah: { period: '2026-11', arus: jt(-20) },
+  arusTertinggi: { period: '2026-11', arus: jt(-20) },
   habisPada: null,
   gajiTerancam: null,
   bulan: Array.from({ length: 10 }, (_, i) => ({

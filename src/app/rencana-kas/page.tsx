@@ -3,7 +3,9 @@ import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
-import { formatDate, formatPeriod, formatPeriodShort, formatRupiah, toDateInput } from '@/lib/format';
+import {
+  formatDate, formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort, toDateInput,
+} from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
@@ -35,6 +37,11 @@ const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'O
 function bulanSesudah(period: string): string {
   const [y, m] = period.split('-').map(Number);
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+/** "+Rp 52 jt" / "-Rp 40 jt": arah angkanya harus terbaca tanpa menghitung. */
+function bertanda(value: number): string {
+  return `${value > 0 ? '+' : ''}${formatRupiahShort(value)}`;
 }
 
 /** "10 – 16 Okt": rentang dalam satu bulan tidak perlu menyebut bulannya dua kali. */
@@ -202,11 +209,33 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                               Gaji {formatPeriodShort(bulanSesudah(w.gajiTerancam))} tidak tertutup
                             </p>
                           )}
+                          {/* Laju satu bulan saja menyesatkan sejak ada pola musim:
+                              bulan depan bisa ramai dan menambah kas, sementara
+                              bulan-bulan sepi sesudahnya yang menghabiskannya —
+                              dan kartu ini akan berbunyi "bertambah" tepat di
+                              bawah tanggal kas habis. Jadi: rata-rata sepanjang
+                              ramalan, dengan ayunan musimnya disebut terpisah. */}
                           <p className="text-xs text-slate-500">
-                            {w.arusBersih < 0
-                              ? `Berkurang ${formatRupiah(-w.arusBersih)} tiap bulan`
-                              : `Bertambah ${formatRupiah(w.arusBersih)} tiap bulan`}
+                            Rata-rata {w.arusRata < 0 ? 'berkurang' : 'bertambah'}{' '}
+                            <span className="whitespace-nowrap">{formatRupiah(Math.abs(w.arusRata))}</span>{' '}
+                            tiap bulan
                           </p>
+                          {Math.round(w.arusTerendah.arus) !== Math.round(w.arusTertinggi.arus) && (
+                            <p className="text-xs text-slate-400">
+                              <span className="block">
+                                Paling sepi{' '}
+                                <span className="whitespace-nowrap">
+                                  {formatPeriodShort(w.arusTerendah.period)} {bertanda(w.arusTerendah.arus)}
+                                </span>
+                              </span>
+                              <span className="block">
+                                Paling ramai{' '}
+                                <span className="whitespace-nowrap">
+                                  {formatPeriodShort(w.arusTertinggi.period)} {bertanda(w.arusTertinggi.arus)}
+                                </span>
+                              </span>
+                            </p>
+                          )}
                         </div>
                       );
                     })}

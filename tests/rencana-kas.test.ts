@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
-  bagiProporsional, hitungRencana, hitungRunway, jendela, lipatBelanja, pecahMinggu,
-  usulkanProyeksi, type EntriBelanja, type Masukan,
+  HORIZON_BULAN, bagiProporsional, hitungRencana, hitungRunway, jendela, lipatBelanja,
+  pecahMinggu, usulkanProyeksi, type EntriBelanja, type Masukan,
 } from '../src/lib/rencana-kas';
 
 const jt = (n: number) => n * 1_000_000;
@@ -418,6 +418,36 @@ test('tiap bulan boleh punya proyeksinya sendiri', () => {
   assert.ok(r.bulan[2].saldoAkhir < r.bulan[1].saldoAkhir, 'Desember turun');
   // Ringkasan lajunya mewakili bulan terdekat.
   assert.equal(keJt(r.arusBersih), keJt(jt(500) - jt(402.8)));
+});
+
+test('ringkasan laju mengikuti seluruh ramalan, bukan bulan depan saja', () => {
+  const dasar = { ...runwaySeptember, saldoKas: jt(300), sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3) };
+  // November ramai sekali, sebelas bulan sesudahnya sepi: kas tetap habis.
+  const r = hitungRunway({
+    ...dasar,
+    proyeksiBerikutnya: (p) => (p === '2026-11' ? jt(500) : jt(300)),
+  });
+
+  assert.ok(r.arusBersih > 0, 'bulan depan memang menambah kas');
+  assert.ok(r.arusRata < 0, 'tetapi sepanjang ramalan kas menyusut');
+  assert.ok(r.habisPada, 'dan kasnya memang habis');
+  // Kartu ringkasan tidak boleh berbunyi "bertambah" di bawah tanggal kas habis.
+  assert.equal(r.arusRata < 0, r.habisPada !== null);
+
+  assert.equal(r.arusTertinggi.period, '2026-11');
+  assert.equal(keJt(r.arusTertinggi.arus), keJt(jt(500) - jt(402.8)));
+  assert.equal(keJt(r.arusTerendah.arus), keJt(jt(300) - jt(402.8)));
+});
+
+test('laju tetap terbaca sampai akhir horizon meski kas sudah habis di tengah', () => {
+  const r = hitungRunway({
+    ...runwaySeptember, saldoKas: jt(10), sisaMasuk: jt(211.6), proyeksiBulanan: jt(366.3),
+    proyeksiBerikutnya: () => jt(300),
+  });
+  // Daftar saldo berhenti begitu minus, tetapi lajunya tidak ikut berhenti:
+  // pertanyaannya "seberapa cepat terkuras", bukan "sampai kapan dihitung".
+  assert.ok(r.bulan.length < HORIZON_BULAN + 1, 'daftar saldonya memang berhenti lebih awal');
+  assert.equal(keJt(r.arusRata), keJt(jt(300) - jt(402.8)));
 });
 
 test('cicilan rencana belanja memotong jatah bulan berjalan', () => {
