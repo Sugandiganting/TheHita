@@ -7,7 +7,9 @@ dist/
 next-env.d.ts
 
 # Database lokal & cadangannya
-cadangan/
+# Berpangkal di akar repositori: tanpa garis miring di depan, polanya juga
+# mengenai src/app/api/cadangan/ dan berkas rutenya diam-diam tidak ikut masuk.
+/cadangan/
 *.db.gz
 *.db
 *.db-journal
