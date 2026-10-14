@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
@@ -12,6 +13,10 @@ import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
+import { cocokKataSandi, sidikKataSandi } from '@/lib/auth';
+import { NAMA_KUKI, UMUR_SESI_HARI, buatToken } from '@/lib/sesi';
+import { sesiSekarang } from '@/lib/sesi-server';
+import { catatGagal, lupakan, sisaKunci } from '@/lib/gembok';
 import {
   INTERUNIT_PAYABLE,
   INTERUNIT_RECEIVABLE,
@@ -1511,4 +1516,82 @@ export async function unpayObligation(_prev: ActionState, formData: FormData): P
   ]);
   segarkanKewajiban();
   return ok(`Pelunasan ${row.label} ${formatTanggal(terakhir.dueDate)} dibatalkan.`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Masuk dan keluar                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Memeriksa kata sandi lalu memasang kuki sesi.
+ *
+ * Pesan gagalnya sengaja sama untuk "pengguna tidak ada" dan "kata sandi
+ * salah": membedakan keduanya memberi tahu penebak bahwa sebuah nama pengguna
+ * memang ada, dan itu separuh pekerjaannya.
+ */
+export async function masuk(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const username = String(formData.get('username') ?? '').trim().toLowerCase();
+  const password = String(formData.get('password') ?? '');
+  const lanjut = String(formData.get('lanjut') ?? '/');
+
+  if (!username || !password) return fail('Nama pengguna dan kata sandi wajib diisi.');
+
+  // Alamat asal dibaca dari header yang dipasang reverse proxy. Bila tidak ada
+  // (mis. dijalankan langsung di komputer sendiri), seluruh percobaan dihitung
+  // sebagai satu asal — lebih ketat, bukan lebih longgar.
+  const alamat = (await headers()).get('x-forwarded-for')?.split(',')[0].trim() || 'lokal';
+  const terkunci = sisaKunci(alamat);
+  if (terkunci > 0) {
+    return fail(`Terlalu banyak percobaan. Coba lagi ${terkunci} menit lagi.`);
+  }
+
+  const user = await prisma.user.findUnique({ where: { username } });
+  const cocok = user && user.active && await cocokKataSandi(password, user.password);
+  if (!user || !cocok) {
+    catatGagal(alamat);
+    return fail('Nama pengguna atau kata sandi salah.');
+  }
+
+  lupakan(alamat);
+  await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+
+  (await cookies()).set({
+    name: NAMA_KUKI,
+    value: await buatToken({ id: user.id, username: user.username, name: user.name }),
+    httpOnly: true,
+    sameSite: 'lax',
+    // Di belakang HTTPS kuki ditandai secure; saat dikembangkan di localhost
+    // tanda itu justru membuat kukinya tidak pernah tersimpan.
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: UMUR_SESI_HARI * 86_400,
+  });
+
+  // Hanya alamat di dalam aplikasi ini, supaya "?lanjut=" tidak bisa dipakai
+  // mengarahkan orang ke situs lain sesudah masuk.
+  redirect(lanjut.startsWith('/') && !lanjut.startsWith('//') ? lanjut : '/');
+}
+
+export async function keluar(): Promise<void> {
+  (await cookies()).delete(NAMA_KUKI);
+  redirect('/masuk');
+}
+
+/** Mengganti kata sandi sendiri. */
+export async function gantiKataSandi(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const sesi = await sesiSekarang();
+  if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
+
+  const lama = String(formData.get('lama') ?? '');
+  const baru = String(formData.get('baru') ?? '');
+  const ulangi = String(formData.get('ulangi') ?? '');
+
+  if (baru.length < 8) return fail('Kata sandi baru minimal 8 karakter.');
+  if (baru !== ulangi) return fail('Ketikan ulang kata sandi barunya tidak sama.');
+
+  const user = await prisma.user.findUnique({ where: { id: sesi.id } });
+  if (!user || !(await cocokKataSandi(lama, user.password))) return fail('Kata sandi lama salah.');
+
+  await prisma.user.update({ where: { id: user.id }, data: { password: await sidikKataSandi(baru) } });
+  return ok('Kata sandi diperbarui.');
 }

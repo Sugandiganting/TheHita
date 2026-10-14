@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { keluar } from '@/app/actions';
 
 type Item = {
   href: string;
@@ -148,7 +149,7 @@ function grupHalaman(pathname: string): string | null {
   return null;
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, pengguna }: { children: ReactNode; pengguna?: string }) {
   const pathname = usePathname();
   // Di layar lebar sidebar mengecil jadi ikon; di ponsel ia menjadi laci geser.
   const [collapsed, setCollapsed] = useState(false);
@@ -203,6 +204,10 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const width = collapsed ? 'lg:w-[68px]' : 'lg:w-[248px]';
 
+  // Halaman masuk berdiri sendiri: menu untuk orang yang belum boleh masuk
+  // hanya memamerkan isi yang tidak bisa dibukanya.
+  if (pathname === '/masuk') return <>{children}</>;
+
   return (
     <>
       {/* Bilah atas: hanya berisi tombol menu dan identitas */}
@@ -226,6 +231,23 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="block text-[11px] text-slate-500">Akuntansi &amp; Peramalan Kas</span>
           </span>
         </Link>
+
+        {pengguna && (
+          <div className="ml-auto flex items-center gap-3">
+            <Link
+              href="/akun"
+              className="hidden text-sm text-slate-600 hover:text-slate-900 hover:underline sm:block"
+              title="Pengaturan akun"
+            >
+              {pengguna}
+            </Link>
+            <form action={keluar}>
+              <button type="submit" className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
+                Keluar
+              </button>
+            </form>
+          </div>
+        )}
       </header>
 
       {/* Latar gelap saat laci terbuka di ponsel */}

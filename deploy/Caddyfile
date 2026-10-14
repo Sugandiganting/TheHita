@@ -1,0 +1,36 @@
+# Caddy mengurus HTTPS sendiri: sertifikat Let's Encrypt diminta, dipasang, dan
+# diperpanjang otomatis tanpa perintah tambahan. Ganti nama domainnya saja.
+#
+# Pasang dengan:
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo nano /etc/caddy/Caddyfile      # ganti domain & surel
+#   sudo systemctl reload caddy
+
+keuangan.contoh.co.id {
+	# Surel untuk pemberitahuan dari Let's Encrypt bila sertifikat bermasalah.
+	tls admin@contoh.co.id
+
+	encode zstd gzip
+
+	# Alamat asli pengunjung diteruskan ke aplikasi, dipakai membatasi
+	# percobaan menebak kata sandi.
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		# Peramban diminta hanya memakai HTTPS untuk domain ini.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/hita.log {
+			roll_size 10MB
+			roll_keep 10
+		}
+	}
+}

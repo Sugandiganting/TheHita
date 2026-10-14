@@ -1,0 +1,21 @@
+# Menjalankan cadangan tiap malam pukul 02:00 waktu server.
+#
+# Pasang dengan:
+#   sudo cp deploy/hita-cadangan.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hita-cadangan.timer
+#
+# Periksa jadwalnya dengan: systemctl list-timers hita-cadangan.timer
+
+[Unit]
+Description=Jadwal cadangan harian The Hita Finance
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+# Kalau server sedang mati pada jam itu, cadangannya dijalankan begitu menyala.
+Persistent=true
+# Sebar beberapa menit supaya tidak bentrok dengan tugas lain yang juga jam 2.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

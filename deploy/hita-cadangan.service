@@ -1,0 +1,10 @@
+# Satu kali jalan: menyalin basis data lalu membuang salinan lama.
+[Unit]
+Description=Cadangan basis data The Hita Finance
+
+[Service]
+Type=oneshot
+User=hita
+Group=hita
+WorkingDirectory=/home/hita/app
+ExecStart=/usr/bin/npm run cadangkan -- /home/hita/cadangan --simpan=30

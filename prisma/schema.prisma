@@ -503,3 +503,22 @@ model ObligationPayment {
 
   @@index([obligationId])
 }
+
+/// Pengguna yang boleh membuka sistem.
+///
+/// Kata sandi disimpan sebagai sidik scrypt beserta garamnya, tidak pernah
+/// sebagai teks biasa — pembobol yang berhasil menyalin berkas database tetap
+/// tidak mendapatkan kata sandi siapa pun.
+model User {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  name      String
+  /// Format "scrypt:<garam heksa>:<sidik heksa>".
+  password  String
+  active    Boolean   @default(true)
+  /// Waktu masuk terakhir, untuk menandai akun yang sudah tidak dipakai.
+  lastLogin DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -6,7 +6,9 @@ dist/
 *.tsbuildinfo
 next-env.d.ts
 
-# Database lokal
+# Database lokal & cadangannya
+cadangan/
+*.db.gz
 *.db
 *.db-journal
 *.sqlite

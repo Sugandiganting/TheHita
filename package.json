@@ -22,7 +22,9 @@
     "setup": "prisma generate && prisma db push && npm run db:seed",
     "test": "node --import tsx --test tests/*.test.ts",
     "impor": "tsx scripts/impor.ts",
-    "impor-kas": "tsx scripts/impor-kondisi-kas.ts"
+    "impor-kas": "tsx scripts/impor-kondisi-kas.ts",
+    "pengguna": "node scripts/pengguna.mjs",
+    "cadangkan": "node scripts/cadangkan.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

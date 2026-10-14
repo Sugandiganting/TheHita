@@ -1,0 +1,46 @@
+# Layanan systemd untuk The Hita Finance.
+#
+# Pasang dengan:
+#   sudo cp deploy/hita.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hita
+#
+# Sesuaikan User dan WorkingDirectory bila aplikasinya tidak diletakkan di
+# /home/hita/app.
+
+[Unit]
+Description=The Hita Finance — akuntansi & peramalan kas
+# Tunggu jaringan siap; tanpa ini layanan bisa menyala sebelum porta bisa diikat.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hita
+Group=hita
+WorkingDirectory=/home/hita/app
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# Hanya mendengarkan dari dalam server. Yang menghadap internet adalah Caddy,
+# dan tanpa baris ini aplikasinya bisa dibuka langsung di porta 3000 tanpa
+# melewati HTTPS.
+Environment=HOSTNAME=127.0.0.1
+
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+
+# Pengetatan secukupnya: aplikasinya hanya perlu menulis ke foldernya sendiri.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/hita/app
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hita
+
+[Install]
+WantedBy=multi-user.target
