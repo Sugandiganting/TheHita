@@ -14,7 +14,7 @@ import {
   type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 import {
-  dasarAcuan, polaBervariasi, proyeksiMusim, type Musim, type PolaMusim,
+  dasarAcuan, polaBervariasi, proyeksiBulan, type Musim, type PolaMusim,
 } from './musim';
 import {
   cicilanPada, cicilanSetelah, jadwalCicilan, konteksPembelian, type Cicilan,
@@ -910,8 +910,22 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     SKENARIO.map((s) => [s, musimAktif ? dasarAcuan(dipakai[s], musimBulanIni ?? undefined) : null]),
   ) as Record<Skenario, number | null>;
 
-  const proyeksiUntuk = (s: Skenario) => (p: Period) =>
-    proyeksiMusim(p, dasar[s], pola) ?? dipakai[s];
+  /**
+   * Proyeksi sebuah bulan menurut pola musim.
+   *
+   * Bulan yang belum diberi musim diramalkan sebagai musim acuan — bukan
+   * disamakan dengan bulan berjalan. Keduanya kebetulan sama persis selama
+   * bulan berjalan memang bulan acuan, tetapi berbeda jauh begitu bulan
+   * berjalan ternyata high atau low: menyamakannya dengan bulan berjalan akan
+   * menularkan musim bulan ini ke seluruh bulan yang belum diisi.
+   *
+   * Pola yang belum terpakai sama sekali (dasarnya null) tetap memakai angka
+   * bulan berjalan, karena memang tidak ada pola yang bisa diikuti.
+   */
+  const proyeksiUntuk = (s: Skenario) => (p: Period) => {
+    const acuan = dasar[s];
+    return acuan === null ? dipakai[s] : proyeksiBulan(p, acuan, pola);
+  };
 
   const bulanDepan = addMonths(period, 1);
   const dipakaiBerikutnya = Object.fromEntries(

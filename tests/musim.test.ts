@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
-  MUSIM_BAWAAN, dasarAcuan, musimAcuan, pengali, polaBervariasi, proyeksiMusim,
-  type Musim, type PolaMusim,
+  MUSIM_BAWAAN, dasarAcuan, musimAcuan, pengali, polaBervariasi, proyeksiBulan,
+  proyeksiMusim, type Musim, type PolaMusim,
 } from '../src/lib/musim';
 
 const jt = (n: number) => n * 1_000_000;
@@ -49,6 +49,19 @@ test('bulan yang sama berulang tiap tahun', () => {
 
 test('bulan yang belum diberi musim tidak diramalkan', () => {
   assert.equal(proyeksiMusim('2026-07', dasarAcuan(jt(391.4), MID), pola), null);
+});
+
+test('bulan tanpa musim diramalkan sebagai musim acuan', () => {
+  // Oktober high 30% bernilai 390 -> dasarnya 300. Juli belum diberi musim,
+  // jadi ia 300, bukan ikut 390 seperti bulan berjalan.
+  const dasar = dasarAcuan(jt(390), HIGH)!;
+  assert.equal(keJt(proyeksiBulan('2026-07', dasar, pola)), 300);
+  assert.equal(keJt(proyeksiBulan('2026-11', dasar, pola)), 390, 'bulan bermusim tetap mengikuti musimnya');
+});
+
+test('ketika bulan berjalan memang acuan, bulan kosong kebetulan sama dengannya', () => {
+  const dasar = dasarAcuan(jt(391.4), MID)!;
+  assert.equal(proyeksiBulan('2026-07', dasar, pola), jt(391.4));
 });
 
 test('tanpa pola atau tanpa dasar, tidak ada proyeksi musim', () => {

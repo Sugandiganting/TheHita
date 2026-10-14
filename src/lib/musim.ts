@@ -78,6 +78,19 @@ export function proyeksiMusim(
 }
 
 /**
+ * Proyeksi sebuah bulan, dengan bulan yang belum diberi musim diramalkan
+ * sebagai musim acuan.
+ *
+ * Bedanya dengan menyamakan bulan kosong dengan bulan berjalan baru terasa
+ * ketika bulan berjalan bukan bulan acuan: bulan berjalan yang high akan
+ * menularkan ketinggiannya ke seluruh bulan yang belum diisi, padahal yang
+ * belum diisi justru belum diketahui ramai atau sepinya.
+ */
+export function proyeksiBulan(period: Period, dasar: number, pola: PolaMusim): number {
+  return proyeksiMusim(period, dasar, pola) ?? dasar;
+}
+
+/**
  * Pola dianggap berguna hanya bila ada bulan yang musimnya berbeda. Dua belas
  * bulan yang seluruhnya satu musim menghasilkan angka yang persis sama dengan
  * tidak memakai pola sama sekali, dan menampilkannya sebagai "mengikuti pola
