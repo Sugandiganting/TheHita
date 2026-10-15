@@ -54,19 +54,44 @@ console.log('[db] Skema berubah — menyamakan struktur database…');
 const binPrisma = join(akar, 'node_modules', '.bin', 'prisma');
 const pakaiBin = existsSync(binPrisma);
 
-const jalankanPrisma = (args, stdio) => (pakaiBin
-  ? execFileSync(binPrisma, args, { cwd: akar, stdio })
-  : execFileSync('npx', ['prisma', ...args], { cwd: akar, stdio }));
+const jalankanPrisma = (args, stdio, timeout) => (pakaiBin
+  ? execFileSync(binPrisma, args, { cwd: akar, stdio, timeout })
+  : execFileSync('npx', ['prisma', ...args], { cwd: akar, stdio, timeout }));
+
+/*
+ * "db push" diberi batas waktu.
+ *
+ * Di sebagian hosting bersama, schema-engine milik Prisma tidak boleh
+ * dieksekusi, dan gejalanya bukan pesan galat melainkan perintah yang
+ * menggantung berjam-jam. Batas waktu mengubah gejala itu menjadi kegagalan
+ * yang bisa ditangani — dan yang menanganinya ada tepat di bawah.
+ */
+const BATAS_PUSH = 120_000;
 
 try {
-  jalankanPrisma(['db', 'push', '--skip-generate'], 'inherit');
-  jalankanPrisma(['generate'], ['ignore', 'ignore', 'inherit']);
+  jalankanPrisma(['db', 'push', '--skip-generate'], 'inherit', BATAS_PUSH);
 } catch (e) {
-  // Sebabnya ikut dicetak: pesan "jalankan sendiri untuk melihat sebabnya"
-  // memaksa satu putaran bolak-balik yang tidak perlu.
-  console.error(`\n[db] Penyamaan struktur database gagal: ${e.message}`);
+  console.error(`\n[db] "prisma db push" tidak berhasil: ${e.message}`);
   if (!pakaiBin) console.error('[db] node_modules/.bin/prisma tidak ditemukan — pustaka belum terpasang penuh?');
-  console.error('[db] Jalankan "npm run db:push" sendiri untuk melihat rinciannya.');
+
+  // Jalur cadangan: tabel dibuat langsung lewat Prisma Client, mesin yang sama
+  // dengan yang dipakai aplikasi sehari-hari, jadi tidak menyentuh
+  // schema-engine sama sekali.
+  console.log('[db] Mencoba jalur cadangan — membuat tabel dari prisma/awal.sql…');
+  try {
+    execFileSync(process.execPath, [join(akar, 'scripts', 'siapkan-db-sql.mjs')], {
+      cwd: akar, stdio: 'inherit',
+    });
+  } catch {
+    console.error('[db] Jalur cadangan ikut gagal. Jalankan "npm run db:awal" sendiri untuk melihat rinciannya.');
+    process.exit(1);
+  }
+}
+
+try {
+  jalankanPrisma(['generate'], ['ignore', 'ignore', 'inherit'], BATAS_PUSH);
+} catch (e) {
+  console.error(`\n[db] "prisma generate" gagal: ${e.message}`);
   process.exit(1);
 }
 
