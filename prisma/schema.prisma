@@ -4,6 +4,17 @@
 
 generator client {
   provider = "prisma-client-js"
+
+  /// Mesin yang ikut diunduh, di luar yang cocok dengan mesin tempat generate
+  /// dijalankan.
+  ///
+  /// Prisma menebak jenis sistem operasinya sendiri. Di hosting bersama
+  /// berbasis CloudLinux, tebakannya meleset: berkas penanda distribusi
+  /// disembunyikan, Prisma menyerah ke tebakan "debian", lalu memuat mesin
+  /// Debian di atas sistem RHEL — dan tersangkut saat menyalakannya, tanpa
+  /// pesan galat apa pun. Dengan daftar ini, mesin yang benar ikut tersedia
+  /// dan bisa ditunjuk lewat PRISMA_QUERY_ENGINE_LIBRARY.
+  binaryTargets = ["native", "rhel-openssl-1.1.x", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
