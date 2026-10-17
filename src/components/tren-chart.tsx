@@ -1,10 +1,9 @@
 'use client';
 
-import type { ComponentProps } from 'react';
 import {
   CartesianGrid,
+  Customized,
   Label,
-  LabelList,
   Legend,
   Line,
   LineChart,
@@ -48,6 +47,11 @@ const AXIS_PROPS = {
   axisLine: false,
 } as const;
 
+/** Lebar pias kanan tempat nama acuan ditulis, di luar bidang gambar. */
+const PIAS_KANAN = 62;
+/** Jarak tegak terkecil antara dua nama supaya keduanya tetap terbaca. */
+const JARAK_NAMA = 14;
+
 function Kotak({
   active, payload, label,
 }: {
@@ -77,20 +81,53 @@ function Kotak({
   );
 }
 
+/** Bidang gambar di dalam bingkai, diberikan Recharts kepada lapisan Customized. */
+type Bidang = { top: number; left: number; width: number; height: number };
+
 /**
- * Nama seri acuan, ditulis sekali di ujung kanan garisnya.
+ * Nama tiap acuan, ditulis di pias kanan sejajar ujung garisnya.
  *
- * Recharts memanggil content untuk tiap titik, jadi yang digambar hanya titik
- * terakhir — kalau tidak, namanya tercetak berkali-kali menimpa garisnya
- * sendiri.
+ * Dua proyeksi yang nilainya berdekatan berakhir di titik yang nyaris sama,
+ * dan namanya akan saling menimpa. Yang dekat digeser secukupnya lalu ditarik
+ * garis halus ke tempat aslinya — bukan dibuang, karena nama yang hilang
+ * membuat garisnya tak bisa dikenali sama sekali.
+ *
+ * Kedudukannya dihitung sendiri dari tinggi bidang dan batas atas sumbu, yang
+ * dipatok di bawah, jadi tidak perlu menebak isi skala bawaan Recharts.
  */
-function NamaUjung(nama: string, jumlah: number) {
-  return function Isi({ x, y, index }: { x?: number; y?: number; index?: number }) {
-    if (index !== jumlah - 1 || typeof x !== 'number' || typeof y !== 'number') return null;
+function PenulisNama(daftar: { kunci: string; nama: string; nilai: number }[], maks: number) {
+  return function Lapisan({ offset }: { offset?: Bidang }) {
+    if (!offset?.width || !offset.height || maks <= 0) return null;
+    const { top, left, width, height } = offset;
+    const xGaris = left + width;
+    const xTeks = xGaris + 8;
+
+    const urut = [...daftar].sort((a, b) => b.nilai - a.nilai);
+    const asli = urut.map((a) => top + height * (1 - Math.min(a.nilai, maks) / maks));
+
+    // Dari atas ke bawah: yang terlalu rapat didorong turun. Bila barisan
+    // terakhirnya terdorong melewati dasar, seluruhnya digeser naik.
+    const y = asli.map((v) => v);
+    for (let i = 1; i < y.length; i += 1) y[i] = Math.max(y[i], y[i - 1] + JARAK_NAMA);
+    const lewat = y[y.length - 1] - (top + height);
+    if (lewat > 0) for (let i = 0; i < y.length; i += 1) y[i] -= lewat;
+
     return (
-      <text x={x - 4} y={y - 6} textAnchor="end" fontSize={11} fill={SERIES.axis}>
-        {nama}
-      </text>
+      <g>
+        {urut.map((a, i) => (
+          <g key={a.kunci}>
+            {Math.abs(y[i] - asli[i]) > 1 && (
+              <line
+                x1={xGaris} y1={asli[i]} x2={xTeks - 3} y2={y[i]}
+                stroke={SERIES.grid} strokeWidth={1}
+              />
+            )}
+            <text x={xTeks} y={y[i]} dominantBaseline="middle" fontSize={11} fill={SERIES.axis}>
+              {a.nama}
+            </text>
+          </g>
+        ))}
+      </g>
     );
   };
 }
@@ -99,16 +136,18 @@ function NamaUjung(nama: string, jumlah: number) {
  * Batas atas sumbu beserta tanda-tandanya, dibulatkan ke angka yang enak dibaca.
  *
  * Dibiarkan otomatis, Recharts membulatkan terlalu jauh ke atas — sumbu sampai
- * Rp 600 jt untuk data yang berhenti di Rp 430 jt — dan seluruh garis terdesak
+ * Rp 600 jt untuk data yang berhenti di Rp 485 jt — dan seluruh garis terdesak
  * ke bawah sampai bedanya tidak terbaca. Dipatok persis ke data, tandanya
- * berubah ganjil seperti "Rp 414,9 jt". Jadi dicari langkah bulat yang
- * menghasilkan empat sampai lima tanda.
+ * berubah ganjil seperti "Rp 414,9 jt". Jadi dicari langkah bulat terkecil yang
+ * tandanya tidak lebih dari sepuluh: untuk angka ratusan juta itu jatuh ke
+ * kelipatan Rp 50 jt, cukup rapat untuk membaca kedudukan garis tanpa menebak.
  */
-function sumbuRapi(tertinggi: number): { maks: number; ticks: number[] } {
-  const pangkat = 10 ** Math.floor(Math.log10(Math.max(tertinggi, 1) / 5));
+function sumbuRapi(tertinggi: number, maksTanda = 10): { maks: number; ticks: number[] } {
+  const kasar = Math.max(tertinggi, 1) / maksTanda;
+  const pangkat = 10 ** Math.floor(Math.log10(kasar));
   const langkah = [1, 2, 2.5, 5, 10]
     .map((m) => m * pangkat)
-    .find((l) => tertinggi / l <= 5) ?? pangkat * 10;
+    .find((l) => l >= kasar) ?? pangkat * 10;
 
   const maks = Math.ceil(tertinggi / langkah) * langkah;
   const ticks: number[] = [];
@@ -116,42 +155,14 @@ function sumbuRapi(tertinggi: number): { maks: number; ticks: number[] } {
   return { maks, ticks };
 }
 
-/**
- * Nama acuan mana saja yang muat ditulis di ujung garisnya.
- *
- * Dua proyeksi yang nilainya berdekatan berakhir di titik yang hampir sama,
- * dan namanya akan saling menimpa sampai dua-duanya tidak terbaca. Yang
- * tertutup dilewati saja — legenda di bawah grafik tetap menyebut semuanya.
- */
-function acuanYangMuat(data: TitikTren[]): Set<string> {
-  const akhir = data[data.length - 1];
-  const muat = new Set<string>();
-  if (!akhir) return muat;
-
-  const nilai = (kunci: string) => Number(akhir[kunci as 'normal']) || 0;
-  const maks = Math.max(...ACUAN.map((a) => nilai(a.kunci)), 1);
-
-  let sebelumnya: number | null = null;
-  for (const a of [...ACUAN].sort((x, y) => nilai(y.kunci) - nilai(x.kunci))) {
-    const v = nilai(a.kunci);
-    // Jarak minimal 7% tinggi grafik — kira-kira dua kali tinggi hurufnya.
-    if (sebelumnya === null || Math.abs(sebelumnya - v) / maks > 0.07) {
-      muat.add(a.kunci);
-      sebelumnya = v;
-    }
-  }
-  return muat;
-}
-
 export function TrenMasukChart({
-  data, hariTerakhir, height = 300,
+  data, hariTerakhir, height = 340,
 }: {
   data: TitikTren[];
   /** Tanggal laporan terakhir — ditandai garis tegak. */
   hariTerakhir: number;
   height?: number;
 }) {
-  const berlabel = acuanYangMuat(data);
   const akhir = data[data.length - 1];
   const tertinggi = Math.max(
     akhir?.optimis ?? 0, akhir?.normal ?? 0, akhir?.pesimis ?? 0,
@@ -159,10 +170,15 @@ export function TrenMasukChart({
     1,
   );
   const sumbu = sumbuRapi(tertinggi);
+  const nama = ACUAN.map((a) => ({
+    kunci: a.kunci,
+    nama: a.nama,
+    nilai: akhir ? Number(akhir[a.kunci]) : 0,
+  }));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 12, right: 16, left: 8, bottom: 16 }}>
+      <LineChart data={data} margin={{ top: 12, right: PIAS_KANAN, left: 8, bottom: 16 }}>
         <CartesianGrid stroke={SERIES.grid} vertical={false} />
 
         <XAxis
@@ -204,16 +220,7 @@ export function TrenMasukChart({
             dot={false}
             activeDot={false}
             isAnimationActive={false}
-          >
-            {/* Bentuk props dari Recharts jauh lebih longgar daripada yang
-                dipakai di sini, jadi hanya bagian yang dipakai yang ditulis. */}
-            {berlabel.has(a.kunci) && (
-              <LabelList
-                dataKey={a.kunci}
-                content={NamaUjung(a.nama, data.length) as ComponentProps<typeof LabelList>['content']}
-              />
-            )}
-          </Line>
+          />
         ))}
 
         {/* Titik kecil pada tanggal laporan terakhir: di sinilah tiap skenario
@@ -248,6 +255,9 @@ export function TrenMasukChart({
           connectNulls={false}
           isAnimationActive={false}
         />
+
+        {/* Ditulis terakhir supaya berada di atas garis-garisnya. */}
+        <Customized component={PenulisNama(nama, sumbu.maks)} />
       </LineChart>
     </ResponsiveContainer>
   );
