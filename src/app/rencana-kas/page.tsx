@@ -9,6 +9,7 @@ import {
 } from '@/lib/format';
 import { titikGrafik } from '@/lib/tren-masuk';
 import { TrenMasukChart } from '@/components/tren-chart';
+import { CapaianTarget } from '@/components/capaian-target';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
@@ -214,8 +215,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         </p>
                         <p className={`mt-1 text-lg font-semibold ${nada.teks}`}>{judul}</p>
                         <p className="mt-1 text-sm text-slate-600">
-                          Sudah masuk <strong>{formatRupiah(t.masukTerakhir)}</strong>. Bila lajunya
-                          bertahan, sebulan penuh menjadi{' '}
+                          Sudah masuk <strong>{formatRupiah(t.masukTerakhir)}</strong> —{' '}
+                          <strong>{formatPercent(t.capaian.NORMAL.persen * 100, 0)}</strong> dari
+                          target normal, padahal bulan baru berjalan{' '}
+                          <strong>{formatPercent(t.porsiHari * 100, 0)}</strong>.
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Bila lajunya bertahan, sebulan penuh menjadi{' '}
                           <strong>{formatRupiah(t.lajuAkhirBulan)}</strong> —{' '}
                           {t.selisihNormal >= 0 ? 'lebih cepat' : 'lebih lambat'}{' '}
                           <strong>{formatRupiah(Math.abs(t.selisihNormal))}</strong> daripada yang
@@ -224,6 +230,10 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       </div>
                     );
                   })()}
+
+                  <div className="mb-6">
+                    <CapaianTarget tren={data.tren} />
+                  </div>
 
                   <TrenMasukChart data={titikGrafik(data.tren)} hariTerakhir={data.tren.hariTerakhir} />
 

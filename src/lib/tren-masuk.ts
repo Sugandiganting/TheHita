@@ -26,6 +26,18 @@ export type LaporanMasuk = {
 /** Di mana laju sekarang berdiri terhadap rentang pesimis–optimis. */
 export type PosisiTren = 'DI_ATAS' | 'DI_DALAM' | 'DI_BAWAH';
 
+/** Seberapa jauh target sebulan sebuah skenario sudah dikejar. */
+export type Capaian = {
+  target: number;
+  /** Bagian target yang sudah masuk, 0–1 (bisa lebih dari 1 bila terlampaui). */
+  persen: number;
+  /** Yang masih kurang sampai akhir bulan; nol bila targetnya sudah lewat. */
+  kurang: number;
+  /** Rata-rata yang harus masuk tiap hari tersisa agar targetnya tercapai. */
+  perHariSisa: number;
+  tercapai: boolean;
+};
+
 export type Tren = {
   hariSebulan: number;
   /** Laporan yang dipakai, urut dari tanggal terkecil. */
@@ -43,6 +55,10 @@ export type Tren = {
   selisihNormal: number;
   /** Berapa persen dari sebulan yang sudah berlalu. */
   porsiHari: number;
+  /** Sisa hari sampai akhir bulan. */
+  sisaHari: number;
+  /** Capaian terhadap target sebulan tiap skenario. */
+  capaian: Record<Skenario, Capaian>;
 };
 
 /** Jumlah hari dalam bulan sebuah periode "YYYY-MM". */
@@ -96,6 +112,31 @@ export function hitungTren(
   if (lajuAkhirBulan > tertinggi) posisi = 'DI_ATAS';
   else if (lajuAkhirBulan < terendah) posisi = 'DI_BAWAH';
 
+  const sisaHari = hariSebulan - akhir.hari;
+
+  /*
+   * Dua angka yang mudah tertukar, dan keduanya perlu ditampilkan.
+   *
+   * "persen" membandingkan yang sudah masuk dengan target SEBULAN PENUH —
+   * inilah yang terasa masih jauh di pertengahan bulan. "porsiHari" adalah
+   * bagian bulan yang sudah berlalu. Capaian di atas porsi hari berarti
+   * berjalan lebih cepat daripada targetnya, walaupun angkanya masih jauh di
+   * bawah target sebulan.
+   */
+  const capaian = Object.fromEntries(
+    SKENARIO.map((s) => {
+      const target = proyeksi[s];
+      const kurang = Math.max(0, target - akhir.masuk);
+      return [s, {
+        target,
+        persen: target > 0 ? akhir.masuk / target : 0,
+        kurang,
+        perHariSisa: sisaHari > 0 ? kurang / sisaHari : 0,
+        tercapai: kurang === 0,
+      }];
+    }),
+  ) as Record<Skenario, Capaian>;
+
   return {
     hariSebulan,
     laporan,
@@ -107,6 +148,8 @@ export function hitungTren(
     posisi,
     selisihNormal: akhir.masuk - proyeksi.NORMAL * porsiHari,
     porsiHari,
+    sisaHari,
+    capaian,
   };
 }
 

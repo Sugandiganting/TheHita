@@ -87,3 +87,33 @@ test('titik grafik selalu punya pangkal nol dan ujung akhir bulan', () => {
   assert.equal(keJt(titik[2].pesimis), keJt(proyeksi.PESIMIS));
   assert.equal(titik[0].normal, 0);
 });
+
+test('capaian membandingkan dengan target sebulan, bukan dengan porsi hari', () => {
+  // 12 dari 31 hari = 39% bulan berjalan, tetapi Rp 174,6 jt dari target
+  // normal Rp 391,4 jt = 45% tercapai. Dua angka berbeda, dua-duanya benar.
+  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
+  const c = t.capaian.NORMAL;
+
+  assert.equal(Math.round(c.persen * 100), 45);
+  assert.equal(Math.round(t.porsiHari * 100), 39);
+  assert.ok(c.persen > t.porsiHari, 'lebih cepat daripada lajunya');
+  assert.equal(keJt(c.kurang), keJt(proyeksi.NORMAL - 174_593_772));
+  assert.equal(t.sisaHari, 19);
+  assert.equal(keJt(c.perHariSisa), keJt((proyeksi.NORMAL - 174_593_772) / 19));
+  assert.equal(c.tercapai, false);
+});
+
+test('target yang sudah terlampaui tidak menyisakan kekurangan', () => {
+  const t = hitungTren('2026-10', [{ hari: 25, masuk: jt(400) }], proyeksi)!;
+  assert.equal(t.capaian.PESIMIS.tercapai, true);
+  assert.equal(t.capaian.PESIMIS.kurang, 0);
+  assert.equal(t.capaian.PESIMIS.perHariSisa, 0);
+  assert.ok(t.capaian.PESIMIS.persen > 1, 'persennya boleh lewat 100%');
+});
+
+test('pada hari terakhir bulan, kebutuhan per hari tidak dibagi nol', () => {
+  const t = hitungTren('2026-10', [{ hari: 31, masuk: jt(100) }], proyeksi)!;
+  assert.equal(t.sisaHari, 0);
+  assert.equal(t.capaian.NORMAL.perHariSisa, 0);
+  assert.ok(Number.isFinite(t.capaian.NORMAL.perHariSisa));
+});

@@ -8,6 +8,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -95,6 +96,27 @@ function NamaUjung(nama: string, jumlah: number) {
 }
 
 /**
+ * Batas atas sumbu beserta tanda-tandanya, dibulatkan ke angka yang enak dibaca.
+ *
+ * Dibiarkan otomatis, Recharts membulatkan terlalu jauh ke atas — sumbu sampai
+ * Rp 600 jt untuk data yang berhenti di Rp 430 jt — dan seluruh garis terdesak
+ * ke bawah sampai bedanya tidak terbaca. Dipatok persis ke data, tandanya
+ * berubah ganjil seperti "Rp 414,9 jt". Jadi dicari langkah bulat yang
+ * menghasilkan empat sampai lima tanda.
+ */
+function sumbuRapi(tertinggi: number): { maks: number; ticks: number[] } {
+  const pangkat = 10 ** Math.floor(Math.log10(Math.max(tertinggi, 1) / 5));
+  const langkah = [1, 2, 2.5, 5, 10]
+    .map((m) => m * pangkat)
+    .find((l) => tertinggi / l <= 5) ?? pangkat * 10;
+
+  const maks = Math.ceil(tertinggi / langkah) * langkah;
+  const ticks: number[] = [];
+  for (let v = 0; v <= maks + langkah / 2; v += langkah) ticks.push(v);
+  return { maks, ticks };
+}
+
+/**
  * Nama acuan mana saja yang muat ditulis di ujung garisnya.
  *
  * Dua proyeksi yang nilainya berdekatan berakhir di titik yang hampir sama,
@@ -130,6 +152,13 @@ export function TrenMasukChart({
   height?: number;
 }) {
   const berlabel = acuanYangMuat(data);
+  const akhir = data[data.length - 1];
+  const tertinggi = Math.max(
+    akhir?.optimis ?? 0, akhir?.normal ?? 0, akhir?.pesimis ?? 0,
+    ...data.map((d) => d.aktual ?? 0),
+    1,
+  );
+  const sumbu = sumbuRapi(tertinggi);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -145,7 +174,13 @@ export function TrenMasukChart({
         >
           <Label value="Tanggal" position="insideBottom" offset={-12} fill={SERIES.axis} fontSize={11} />
         </XAxis>
-        <YAxis tickFormatter={formatRupiahShort} width={88} {...AXIS_PROPS} />
+        <YAxis
+          tickFormatter={formatRupiahShort}
+          width={88}
+          domain={[0, sumbu.maks]}
+          ticks={sumbu.ticks}
+          {...AXIS_PROPS}
+        />
 
         <Tooltip content={<Kotak />} cursor={{ stroke: SERIES.axis, strokeDasharray: '3 3' }} />
         <Legend wrapperStyle={{ fontSize: 12, color: '#52525b', paddingTop: 16 }} />
@@ -180,6 +215,26 @@ export function TrenMasukChart({
             )}
           </Line>
         ))}
+
+        {/* Titik kecil pada tanggal laporan terakhir: di sinilah tiap skenario
+            seharusnya berada hari ini. Tanpa ini, perbandingannya harus ditaksir
+            sendiri dari jarak garis. */}
+        {ACUAN.map((a) => {
+          const pada = data.find((d) => d.hari === hariTerakhir);
+          const y = pada ? Number(pada[a.kunci]) : null;
+          return y === null ? null : (
+            <ReferenceDot
+              key={`titik-${a.kunci}`}
+              x={hariTerakhir}
+              y={y}
+              r={3}
+              fill={SERIES.axis}
+              stroke="#fff"
+              strokeWidth={1.5}
+              isFront
+            />
+          );
+        })}
 
         {/* Satu-satunya seri yang benar-benar data: tebal, berwarna, bertitik. */}
         <Line
