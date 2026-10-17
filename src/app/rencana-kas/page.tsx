@@ -4,8 +4,11 @@ import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
 import {
-  formatDate, formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort, toDateInput,
+  formatDate, formatPercent, formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort,
+  toDateInput,
 } from '@/lib/format';
+import { titikGrafik } from '@/lib/tren-masuk';
+import { TrenMasukChart } from '@/components/tren-chart';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
@@ -182,6 +185,55 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   <strong>{formatRupiah(-rencana.skenario.NORMAL.bolehBelanja)}</strong>. Tidak ada ruang belanja
                   sampai ada uang masuk tambahan atau komitmen digeser.
                 </Alert>
+              )}
+
+              {data.tren && (
+                <Card className="card-pad min-w-0">
+                  <SectionTitle hint="Laju uang masuk sampai laporan terakhir, ditarik lurus sampai akhir bulan, lalu dibandingkan dengan ketiga proyeksi.">
+                    Sedang mengarah ke mana
+                  </SectionTitle>
+
+                  {(() => {
+                    const t = data.tren!;
+                    const nada = t.posisi === 'DI_ATAS'
+                      ? { kotak: 'border-emerald-200 bg-emerald-50', teks: 'text-emerald-800', mini: 'text-emerald-700' }
+                      : t.posisi === 'DI_BAWAH'
+                        ? { kotak: 'border-red-200 bg-red-50', teks: 'text-red-800', mini: 'text-red-700' }
+                        : { kotak: 'border-slate-200 bg-slate-50', teks: 'text-slate-800', mini: 'text-slate-600' };
+
+                    const judul = t.posisi === 'DI_ATAS'
+                      ? 'Di atas skenario optimis'
+                      : t.posisi === 'DI_BAWAH'
+                        ? 'Di bawah skenario pesimis'
+                        : `Paling dekat ke ${NAMA_SKENARIO[t.terdekat].toLowerCase()}`;
+
+                    return (
+                      <div className={`mb-4 rounded-lg border p-4 ${nada.kotak}`}>
+                        <p className={`text-xs font-medium uppercase tracking-wide ${nada.mini}`}>
+                          Tanggal {t.hariTerakhir} dari {t.hariSebulan} · {formatPercent(t.porsiHari * 100, 0)} bulan berjalan
+                        </p>
+                        <p className={`mt-1 text-lg font-semibold ${nada.teks}`}>{judul}</p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Sudah masuk <strong>{formatRupiah(t.masukTerakhir)}</strong>. Bila lajunya
+                          bertahan, sebulan penuh menjadi{' '}
+                          <strong>{formatRupiah(t.lajuAkhirBulan)}</strong> —{' '}
+                          {t.selisihNormal >= 0 ? 'lebih cepat' : 'lebih lambat'}{' '}
+                          <strong>{formatRupiah(Math.abs(t.selisihNormal))}</strong> daripada yang
+                          diperkirakan skenario normal sampai tanggal ini.
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  <TrenMasukChart data={titikGrafik(data.tren)} hariTerakhir={data.tren.hariTerakhir} />
+
+                  <p className="mt-3 text-xs text-slate-500">
+                    Garis acuan dianggap naik rata tiap hari, padahal uang masuk tidak begitu —
+                    akhir pekan, hari raya dan jadwal pembayaran OTA membuatnya bergelombang. Jadi
+                    bacalah arahnya, bukan selisih beberapa juta. Makin banyak posisi kas yang
+                    dilaporkan dalam sebulan, makin terbaca bentuk garisnya.
+                  </p>
+                </Card>
               )}
 
               {data.runway && (

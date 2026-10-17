@@ -23,6 +23,7 @@ import {
   berikutnya, kejadian, kewajibanPada, kewajibanSetelah,
   type Kejadian, type Kewajiban, type Pengulangan,
 } from './kewajiban';
+import { hitungTren, type Tren } from './tren-masuk';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
@@ -681,6 +682,11 @@ export type RencanaKasDetail = {
     usulanGaji: number | null;
   };
   runway: Record<Skenario, Runway> | null;
+  /**
+   * Arah uang masuk bulan ini terhadap ketiga proyeksinya. null bila belum ada
+   * satu pun posisi kas yang dilaporkan.
+   */
+  tren: Tren | null;
   rencanaBelanja: RencanaBelanja[];
   kewajiban: {
     /** Jatuh tempo di bulan ini, termasuk yang tanggalnya sudah lewat. */
@@ -1105,6 +1111,13 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       usulanGaji,
     },
     runway,
+    // Tiap posisi kas membawa uang masuk kumulatif pada tanggalnya; itu sudah
+    // cukup untuk melihat ke skenario mana bulan ini sedang mengarah.
+    tren: hitungTren(
+      period,
+      plan.checkpoints.map((c) => ({ hari: c.date.getUTCDate(), masuk: c.incomeToDate })),
+      dipakai,
+    ),
     rencanaBelanja,
     kewajiban: {
       bulanIni: kejadianKewajiban(period, period),
