@@ -486,22 +486,24 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah dikurangi yang sudah dipakai sama dengan sisa. Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14.">
+                  <SectionTitle hint="Jatah dihitung dari saldo kas yang terakhir dilaporkan, jadi belanja sampai tanggal itu sudah ikut mengecilkannya. Yang dipotong sekali lagi hanya belanja sesudahnya: jatah − dipakai = sisa. Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[800px]">
+                    <table className="w-full min-w-[900px]">
                       {/* Urutannya mengikuti hitungannya: jatah − dipakai = sisa, bersebelahan
                           dan terbaca dari kiri ke kanan. Belanja yang sudah tercermin di saldo
                           tidak jadi kolom tersendiri — ia hampir selalu sama dengan kolom
                           sebelahnya, dan dua angka kembar bersebelahan membuat seluruh tabel
-                          terbaca seperti teka-teki. Tempatnya di baris kecil, hanya saat berbeda. */}
+                          terbaca seperti teka-teki. Tempatnya di baris kecil, hanya saat berbeda —
+                          dan baris itu menyebut akibatnya, bukan hanya keberadaannya, karena yang
+                          membacanya justru sedang bertanya mengapa sisa tidak ikut berkurang. */}
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
                           <th className="th num">Porsi</th>
                           <th className="th num">Jatah bulan ini</th>
-                          <th className="th num">Sudah dipakai</th>
+                          <th className="th num">Dipakai sejak posisi kas</th>
                           <th className="th num">Sisa</th>
                           <th className="th num">Plafon/minggu</th>
                           <th className="th num">Aksi</th>
@@ -523,7 +525,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
                                 {sudahDiSaldo > 0 && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    +{formatRupiah(sudahDiSaldo)} sudah di saldo
+                                    {formatRupiah(sudahDiSaldo)} sebelum itu, tidak memotong sisa
                                   </span>
                                 )}
                               </td>
@@ -564,14 +566,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     </table>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    Seluruh belanja Oktober{' '}
+                    Seluruh belanja {formatPeriod(data.period)}{' '}
                     <strong>
                       {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
                     </strong>
-                    . Yang memotong jatah hanya{' '}
+                    . Yang memotong kolom sisa hanya{' '}
                     <strong>{formatRupiah(rencana.terpakai)}</strong>, yaitu yang terjadi setelah
-                    tanggal posisi kas; sisanya sudah tercermin pada saldo yang dilaporkan sehingga
-                    tidak dipotong dua kali.
+                    tanggal posisi kas. Sisanya sudah keluar dari saldo yang dilaporkan, jadi
+                    sudah ikut mengecilkan jatah di kolom sebelah kiri — memotongnya sekali lagi
+                    berarti menghitung uang yang sama dua kali.
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">
