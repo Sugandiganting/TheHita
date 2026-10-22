@@ -42,6 +42,15 @@ test('uang masuk tiap baris adalah selisih dua laporan', () => {
   assert.equal(lalu[1].masuk, jt(150), '250 dikurangi 100');
 });
 
+test('uang masuk tiap baris dibagi harinya, supaya baris beda panjang bisa diadu', () => {
+  const lalu = barisMinggu(pokok).baris.filter((b) => b.lalu);
+  // Rp 100 jt dalam 9 hari, Rp 150 jt dalam 7 hari: rupiahnya lebih besar yang
+  // kedua, dan lajunya juga — tetapi perbandingannya tidak lagi menebak.
+  assert.equal(lalu[0].masukPerHari, jt(100) / 9);
+  assert.equal(lalu[1].masukPerHari, jt(150) / 7);
+  assert.equal(barisMinggu(pokok).baris.find((b) => !b.lalu)!.masukPerHari, null);
+});
+
 test('target dihitung per hari, jadi baris sembilan hari bukan seminggu penuh', () => {
   const lalu = barisMinggu(pokok).baris.filter((b) => b.lalu);
   assert.equal(lalu[0].target, jt(90), '9 hari x Rp 10 jt');

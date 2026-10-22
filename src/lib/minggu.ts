@@ -54,6 +54,12 @@ export type BarisMinggu = {
   target: number;
   /** Yang benar-benar masuk; null bila rentangnya belum dilaporkan. */
   masuk: number | null;
+  /**
+   * Uang masuk dibagi jumlah hari barisnya. Inilah yang membuat baris sepuluh
+   * hari dan baris sepekan bisa diadu — rupiahnya pasti berbeda, lajunya belum
+   * tentu.
+   */
+  masukPerHari: number | null;
 };
 
 export type RingkasMinggu = {
@@ -128,6 +134,8 @@ export function barisMinggu({
     // Dua laporan bertanggal sama tidak mungkin tersimpan, tetapi kalau pernah
     // ada, baris sepanjang nol hari tidak menjelaskan apa pun.
     if (selisihHari(mulai, selesai) < 0) continue;
+    const masuk = l.incomeToDate - kumulatif;
+    const hari = selisihHari(mulai, selesai) + 1;
     baris.push({
       ...rangka(mulai, selesai),
       lalu: true,
@@ -137,7 +145,8 @@ export function barisMinggu({
       plafonDasar: null,
       tambahan: null,
       targetKumulatif: null,
-      masuk: l.incomeToDate - kumulatif,
+      masuk,
+      masukPerHari: hari > 0 ? masuk / hari : null,
     });
     batas = selesai;
     kumulatif = l.incomeToDate;
@@ -155,6 +164,7 @@ export function barisMinggu({
       tambahan: m.tambahan,
       targetKumulatif: m.tambahan > 0 ? m.targetMasuk : null,
       masuk: null,
+      masukPerHari: null,
     });
   }
 
@@ -169,6 +179,7 @@ export function barisMinggu({
       tambahan: null,
       targetKumulatif: null,
       masuk: null,
+      masukPerHari: null,
     });
     ujung = selesai;
   }

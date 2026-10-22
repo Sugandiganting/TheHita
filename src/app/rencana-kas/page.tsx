@@ -9,9 +9,11 @@ import {
 } from '@/lib/format';
 import { barisMinggu } from '@/lib/minggu';
 import { pastikanBulanBerjalan } from '@/lib/rencana-berjalan';
+import { lajuHarian } from '@/lib/laju-harian';
 import { batangTren } from '@/lib/tren-masuk';
 import { TrenBarChart } from '@/components/tren-bar';
 import { CapaianTarget } from '@/components/capaian-target';
+import { LajuHarianBlok } from '@/components/laju-harian';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
@@ -276,6 +278,19 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
                   <div className="mt-4">
                     <CapaianTarget tren={data.tren} />
+                  </div>
+
+                  <div className="mt-5 border-t border-slate-100 pt-4">
+                    <LajuHarianBlok
+                      laju={lajuHarian(
+                        data.tren.masukTerakhir,
+                        data.tren.hariTerakhir,
+                        data.riwayatMasuk,
+                      )}
+                      perluPerHari={data.tren.capaian.NORMAL.perHariSisa}
+                      sisaHari={data.tren.sisaHari}
+                      tercapai={data.tren.capaian.NORMAL.tercapai}
+                    />
                   </div>
 
                   <p className="mt-3 text-xs text-slate-500">
@@ -570,6 +585,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 )}
                                 {!b.dalamBulan && (
                                   <span className="ml-2 text-xs text-slate-400">bulan depan</span>
+                                )}
+                                {/* Barisnya tidak selalu tujuh hari, jadi rupiahnya saja
+                                    belum bisa diadu antar baris. Lajunya bisa. */}
+                                {b.masukPerHari !== null && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    {formatRupiah(b.masukPerHari)} per hari
+                                  </span>
                                 )}
                               </td>
                               <td className="td num">
