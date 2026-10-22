@@ -168,9 +168,10 @@ export type Rencana = {
 /** Ke kelipatan PEMBULATAN terdekat, tetap benar untuk angka negatif. */
 const bulatkan = (n: number) => Math.round(n / PEMBULATAN) * PEMBULATAN;
 
-const hariUtc = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-const selisihHari = (a: Date, b: Date) => Math.round((hariUtc(b) - hariUtc(a)) / HARI);
-const tambahHari = (d: Date, n: number) => new Date(hariUtc(d) + n * HARI);
+/** Tengah malam UTC pada hari yang sama — supaya jam tidak ikut dihitung. */
+export const hariUtc = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+export const selisihHari = (a: Date, b: Date) => Math.round((hariUtc(b) - hariUtc(a)) / HARI);
+export const tambahHari = (d: Date, n: number) => new Date(hariUtc(d) + n * HARI);
 
 /**
  * Sisa bulan yang masih bisa direncanakan: mulai sehari setelah posisi kas

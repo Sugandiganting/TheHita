@@ -7,6 +7,7 @@ import {
   formatDate, formatPercent, formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort,
   toDateInput,
 } from '@/lib/format';
+import { barisMinggu } from '@/lib/minggu';
 import { titikGrafik } from '@/lib/tren-masuk';
 import { TrenMasukChart } from '@/components/tren-chart';
 import { CapaianTarget } from '@/components/capaian-target';
@@ -50,7 +51,12 @@ function bertanda(value: number): string {
 
 /** "10 – 16 Okt": rentang dalam satu bulan tidak perlu menyebut bulannya dua kali. */
 function rentang(mulai: Date, selesai: Date): string {
-  return `${mulai.getUTCDate()} – ${selesai.getUTCDate()} ${BULAN[selesai.getUTCMonth()]}`;
+  // Bulannya ditulis sekali di ujung, kecuali barisnya menyeberang pergantian
+  // bulan — "28 – 3 Nov" tanpa bulan awalnya terbaca seperti salah ketik.
+  const awal = mulai.getUTCMonth() === selesai.getUTCMonth()
+    ? `${mulai.getUTCDate()}`
+    : `${mulai.getUTCDate()} ${BULAN[mulai.getUTCMonth()]}`;
+  return `${awal} – ${selesai.getUTCDate()} ${BULAN[selesai.getUTCMonth()]}`;
 }
 
 /** Satu angka berlabel di dalam baris perhitungan. */
@@ -131,6 +137,20 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   const tanggalBawaan = currentPeriod(hariIni) === data.period
     ? toDateInput(hariIni)
     : toDateInput(new Date(Date.UTC(Number(data.period.slice(0, 4)), Number(data.period.slice(5, 7)), 0)));
+  // Baris mingguan: ke belakang dari laporan posisi kas, ke depan dari rencana,
+  // disambung melewati pergantian bulan supaya selalu ada empat minggu terlihat.
+  const mingguan = rencana
+    ? barisMinggu({
+        period: data.period,
+        hariIni,
+        minggu: rencana.minggu,
+        laporan: data.checkpoint,
+        proyeksi: [
+          { period: data.period, normal: data.dipakai.NORMAL },
+          { period: addMonths(data.period, 1), normal: data.dipakaiBerikutnya.NORMAL },
+        ],
+      })
+    : null;
   const belumBayar = data.komitmen.filter((k) => !k.paid);
   // Komitmen sekali ini tidak termasuk dalam pengeluaran rutin bulanan, jadi
   // hanya yang ini yang betul-betul menambah tekanan di bulan berjalan.
@@ -434,53 +454,140 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </p>
               </Card>
 
-              {rencana.minggu.length > 0 && (
+              {mingguan && mingguan.baris.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Plafon dasar selalu boleh dipakai. Tambahan baru dibuka bila uang masuk kumulatif sudah mencapai targetnya.">
+                  <SectionTitle hint="Baris yang sudah lewat memakai laporan posisi kas, jadi uang masuknya angka nyata — bukan hasil membagi rata. Plafon dasar selalu boleh dipakai; tambahan baru dibuka bila uang masuk kumulatif sudah mencapai ambangnya.">
                     Aturan mingguan
                   </SectionTitle>
+
+                  {/* Perbandingan yang sudah terjadi, satu kalimat, sebelum tabelnya.
+                      Yang ingin diketahui tiap minggu bukan daftar angka, melainkan
+                      satu hal: sedang di depan target atau di belakangnya. */}
+                  {mingguan.baris.some((b) => b.lalu) && (
+                    <p
+                      className={`mb-4 rounded-lg border p-3 text-sm ${
+                        mingguan.selisihLalu >= 0
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                          : 'border-amber-200 bg-amber-50 text-amber-900'
+                      }`}
+                    >
+                      Sampai {terakhir ? formatDate(terakhir.date) : 'laporan terakhir'} masuk{' '}
+                      <strong>{formatRupiah(mingguan.masukLalu)}</strong>, targetnya{' '}
+                      <strong>{formatRupiah(mingguan.targetLalu)}</strong> —{' '}
+                      {mingguan.selisihLalu >= 0 ? 'lebih cepat' : 'tertinggal'}{' '}
+                      <strong>{formatRupiah(Math.abs(mingguan.selisihLalu))}</strong>.
+                    </p>
+                  )}
+
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[700px]">
+                    {/* Tambahan tidak berdiri sebagai kolom sendiri: ia selalu dibaca
+                        bersama maksimumnya, dan tujuh kolom membuat perbandingan target
+                        lawan kenyataan — yang justru jadi inti tabel ini — terdorong
+                        keluar layar. */}
+                    <table className="w-full min-w-[720px]">
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Minggu</th>
                           <th className="th num">Plafon dasar</th>
-                          <th className="th num">Tambahan</th>
                           <th className="th num">Maksimum</th>
                           <th className="th num">Target masuk</th>
+                          <th className="th num">Masuk nyata</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {rencana.minggu.map((m) => (
-                          <tr key={m.mulai.toISOString()}>
-                            <td className="td whitespace-nowrap">
-                              {rentang(m.mulai, m.selesai)}
-                              <span className="ml-2 text-xs text-slate-400">{m.hari} hari</span>
-                            </td>
-                            <td className="td num">{formatRupiah(m.plafonDasar)}</td>
-                            <td className="td num">{m.tambahan > 0 ? `+${formatRupiah(m.tambahan)}` : '—'}</td>
-                            <td className="td num font-medium">{formatRupiah(m.plafonDasar + m.tambahan)}</td>
-                            <td className="td num">{m.tambahan > 0 ? formatRupiah(m.targetMasuk) : '—'}</td>
-                          </tr>
-                        ))}
+                        {mingguan.baris.map((b, i) => {
+                          const selisih = b.masuk === null ? null : b.masuk - b.target;
+                          // Garis tebal sekali saja, tepat di batas antara yang sudah
+                          // terjadi dan yang masih rencana.
+                          const batas = !b.lalu && i > 0 && mingguan.baris[i - 1].lalu;
+                          return (
+                            <tr
+                              key={b.mulai.toISOString()}
+                              className={[
+                                b.lalu ? 'bg-slate-50/70' : '',
+                                b.berjalan ? 'bg-brand-50/40' : '',
+                                batas ? 'border-t-2 border-slate-300' : '',
+                              ].join(' ')}
+                            >
+                              <td className="td whitespace-nowrap">
+                                {rentang(b.mulai, b.selesai)}
+                                <span className="ml-2 text-xs text-slate-400">{b.hari} hari</span>
+                                {b.berjalan && (
+                                  <span className="ml-2 text-xs text-brand-700">berjalan</span>
+                                )}
+                                {!b.dalamBulan && (
+                                  <span className="ml-2 text-xs text-slate-400">bulan depan</span>
+                                )}
+                              </td>
+                              <td className="td num">
+                                {b.plafonDasar === null ? '—' : formatRupiah(b.plafonDasar)}
+                              </td>
+                              <td className="td num font-medium">
+                                {b.plafonDasar === null
+                                  ? '—'
+                                  : formatRupiah(b.plafonDasar + (b.tambahan ?? 0))}
+                                {/* Diringkas: kolomnya sempit, dan angka pastinya tidak
+                                    diperlukan untuk mengenali syaratnya. */}
+                                {b.targetKumulatif !== null && b.tambahan ? (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    +{formatRupiahShort(b.tambahan)} bila masuk ≥{' '}
+                                    {formatRupiahShort(b.targetKumulatif)}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="td num text-slate-500">{formatRupiah(b.target)}</td>
+                              {/* Selisihnya menempel pada angka nyatanya, bukan jadi kolom
+                                  sendiri: satu kolom lagi mendorong seluruh perbandingan
+                                  keluar layar, padahal justru itu isi tabel ini. */}
+                              <td className="td num">
+                                {/* Tanpa ini angka minus pecah: tanda "-" tertinggal di
+                                    baris sendiri karena kolomnya sempit. */}
+                                <span className="whitespace-nowrap">
+                                  {b.masuk === null ? '—' : formatRupiah(b.masuk)}
+                                </span>
+                                {selisih !== null && (
+                                  <span
+                                    className={`mt-0.5 block text-[11px] font-medium ${
+                                      selisih >= 0 ? 'text-emerald-700' : 'text-red-600'
+                                    }`}
+                                  >
+                                    {selisih > 0 ? '+' : ''}
+                                    {formatRupiahShort(selisih)} dari target
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot className="border-t-2 border-slate-200 font-semibold">
                         <tr>
-                          <td className="td">Total</td>
+                          <td className="td whitespace-nowrap">Sisa {formatPeriod(data.period)}</td>
                           <td className="td num">
                             {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar, 0))}
                           </td>
                           <td className="td num">
-                            +{formatRupiah(rencana.minggu.reduce((s, m) => s + m.tambahan, 0))}
+                            {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar + m.tambahan, 0))}
                           </td>
                           <td className="td num">
-                            {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar + m.tambahan, 0))}
+                            {formatRupiah(
+                              mingguan.baris
+                                .filter((b) => !b.lalu && b.dalamBulan)
+                                .reduce((s, b) => s + b.target, 0),
+                            )}
                           </td>
                           <td className="td num">—</td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
+
+                  <p className="mt-3 text-xs text-slate-500">
+                    Target masuk adalah laju harian skenario normal dikalikan jumlah hari barisnya,
+                    jadi baris yang tidak tepat tujuh hari dan baris yang menyeberang pergantian
+                    bulan tetap dibandingkan dengan angka yang setara. Baris bulan depan belum punya
+                    plafon karena jatahnya baru dihitung setelah posisi kas bulan itu dilaporkan.
+                  </p>
                 </Card>
               )}
 
