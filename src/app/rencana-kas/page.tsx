@@ -9,8 +9,8 @@ import {
 } from '@/lib/format';
 import { barisMinggu } from '@/lib/minggu';
 import { pastikanBulanBerjalan } from '@/lib/rencana-berjalan';
-import { titikGrafik } from '@/lib/tren-masuk';
-import { TrenMasukChart } from '@/components/tren-chart';
+import { batangTren } from '@/lib/tren-masuk';
+import { TrenBarChart } from '@/components/tren-bar';
 import { CapaianTarget } from '@/components/capaian-target';
 import type { SearchParams } from '@/lib/search-params';
 import {
@@ -231,7 +231,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.tren && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Laju uang masuk sampai laporan terakhir, ditarik lurus sampai akhir bulan, lalu dibandingkan dengan ketiga proyeksi.">
+                  <SectionTitle hint="Uang masuk sampai laporan terakhir, dibandingkan dengan target ketiga skenario — target sampai tanggal itu, dan target sebulan penuhnya.">
                     Sedang mengarah ke mana
                   </SectionTitle>
 
@@ -272,17 +272,20 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     );
                   })()}
 
-                  <div className="mb-6">
+                  <TrenBarChart data={batangTren(data.tren)} hariTerakhir={data.tren.hariTerakhir} />
+
+                  <div className="mt-4">
                     <CapaianTarget tren={data.tren} />
                   </div>
 
-                  <TrenMasukChart data={titikGrafik(data.tren)} hariTerakhir={data.tren.hariTerakhir} />
-
                   <p className="mt-3 text-xs text-slate-500">
-                    Garis acuan dianggap naik rata tiap hari, padahal uang masuk tidak begitu —
-                    akhir pekan, hari raya dan jadwal pembayaran OTA membuatnya bergelombang. Jadi
-                    bacalah arahnya, bukan selisih beberapa juta. Makin banyak posisi kas yang
-                    dilaporkan dalam sebulan, makin terbaca bentuk garisnya.
+                    Batang abu adalah targetnya: bagian gelap yang semestinya sudah masuk sampai
+                    tanggal laporan, bagian terang sisanya sampai akhir bulan. Batang biru melewati
+                    bagian gelap berarti berjalan lebih cepat daripada jadwal. Targetnya dianggap
+                    datang rata tiap hari, padahal uang masuk tidak begitu — akhir pekan, hari raya
+                    dan jadwal pembayaran OTA membuatnya bergelombang — jadi bacalah selisih yang
+                    lumayan, bukan beberapa juta. Pergerakan tiap minggunya ada di tabel{' '}
+                    <strong>Aturan mingguan</strong> di bawah.
                   </p>
                 </Card>
               )}

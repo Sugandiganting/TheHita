@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { hariDalamBulan, hitungTren, titikGrafik } from '../src/lib/tren-masuk';
+import { batangTren, hariDalamBulan, hitungTren } from '../src/lib/tren-masuk';
 
 const jt = (n: number) => n * 1_000_000;
 const keJt = (n: number) => Math.round(n / 100_000) / 10;
@@ -73,21 +73,6 @@ test('tanpa laporan tidak ada tren', () => {
   assert.equal(hitungTren('2026-10', [{ hari: 0, masuk: jt(10) }], proyeksi), null);
 });
 
-test('titik grafik selalu punya pangkal nol dan ujung akhir bulan', () => {
-  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
-  const titik = titikGrafik(t);
-
-  assert.deepEqual(titik.map((p) => p.hari), [0, 12, 31]);
-  assert.equal(titik[0].aktual, 0, 'mulai dari nol');
-  assert.equal(titik[1].aktual, 174_593_772);
-  assert.equal(titik[2].aktual, null, 'akhir bulan belum punya angka aktual');
-
-  // Ujung kanan tiap garis acuan tepat sama dengan proyeksinya.
-  assert.equal(keJt(titik[2].normal), keJt(proyeksi.NORMAL));
-  assert.equal(keJt(titik[2].pesimis), keJt(proyeksi.PESIMIS));
-  assert.equal(titik[0].normal, 0);
-});
-
 test('capaian membandingkan dengan target sebulan, bukan dengan porsi hari', () => {
   // 12 dari 31 hari = 39% bulan berjalan, tetapi Rp 174,6 jt dari target
   // normal Rp 391,4 jt = 45% tercapai. Dua angka berbeda, dua-duanya benar.
@@ -116,4 +101,37 @@ test('pada hari terakhir bulan, kebutuhan per hari tidak dibagi nol', () => {
   assert.equal(t.sisaHari, 0);
   assert.equal(t.capaian.NORMAL.perHariSisa, 0);
   assert.ok(Number.isFinite(t.capaian.NORMAL.perHariSisa));
+});
+
+test('batang grafik memecah target jadi bagian berjalan dan sisanya', () => {
+  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
+  const batang = batangTren(t);
+
+  assert.deepEqual(batang.map((b) => b.skenario), ['PESIMIS', 'NORMAL', 'OPTIMIS']);
+
+  const normal = batang[1];
+  assert.equal(normal.targetSebulan, proyeksi.NORMAL);
+  // 12 dari 31 hari: bagian gelapnya 12/31 dari target sebulan.
+  assert.equal(keJt(normal.targetKini), keJt((proyeksi.NORMAL * 12) / 31));
+  assert.equal(keJt(normal.targetKini + normal.targetSisa), keJt(proyeksi.NORMAL));
+});
+
+test('uang masuk sama di ketiga kelompok — satu angka diuji ke tiga target', () => {
+  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
+  const batang = batangTren(t);
+  assert.deepEqual(new Set(batang.map((b) => b.masuk)), new Set([174_593_772]));
+});
+
+test('selisih batang sepakat dengan selisih normal yang dipakai kartu di atasnya', () => {
+  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
+  const normal = batangTren(t).find((b) => b.skenario === 'NORMAL')!;
+  assert.equal(keJt(normal.selisih), keJt(t.selisihNormal));
+  assert.ok(normal.selisih > 0, 'lebih cepat daripada jadwal');
+});
+
+test('target yang sudah terlampaui tidak menyisakan batang abu bagian atas', () => {
+  const t = hitungTren('2026-10', [{ hari: 31, masuk: jt(400) }], proyeksi)!;
+  const pesimis = batangTren(t).find((b) => b.skenario === 'PESIMIS')!;
+  assert.equal(pesimis.targetSisa, 0, 'pada hari terakhir seluruh target sudah berjalan');
+  assert.ok(pesimis.masuk > pesimis.targetKini);
 });
