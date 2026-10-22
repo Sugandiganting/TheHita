@@ -71,8 +71,12 @@ const runwayMenurun: Runway = {
   gajiTerancam: null,
   bulan: Array.from({ length: 10 }, (_, i) => ({
     period: `2026-${String(10 + i).padStart(2, '0')}`.replace('2026-13', '2027-01'),
+    saldoAwal: jt(200 - 20 * i),
+    masuk: jt(100),
+    keluar: jt(120),
     saldoAkhir: jt(200 - 20 * (i + 1)),
     cukupGaji: true,
+    kurangGaji: 0,
   })),
 };
 

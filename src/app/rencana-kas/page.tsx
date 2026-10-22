@@ -268,7 +268,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.runway && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir sebuah bulan harus menutup gaji yang jatuh tempo awal bulan berikutnya.">
+                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir sebuah bulan harus menutup gaji yang jatuh tempo awal bulan berikutnya. Uang keluarnya sama untuk ketiga skenario — yang membedakan hanya uang masuknya.">
                     Kapan kas habis
                   </SectionTitle>
 
@@ -288,7 +288,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                               kuning yang ada tepat di tabel bawahnya. */}
                           {w.gajiTerancam && (
                             <p className="text-xs font-medium text-amber-600">
-                              Gaji {formatPeriodShort(bulanSesudah(w.gajiTerancam))} tidak tertutup
+                              Gaji {formatPeriodShort(bulanSesudah(w.gajiTerancam))} kurang{' '}
+                              <span className="whitespace-nowrap">
+                                {formatRupiahShort(
+                                  w.bulan.find((b) => !b.cukupGaji)?.kurangGaji ?? 0,
+                                )}
+                              </span>
                             </p>
                           )}
                           {/* Laju satu bulan saja menyesatkan sejak ada pola musim:
@@ -324,12 +329,22 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[520px]">
+                    {/* Uang keluar berdiri sebagai kolomnya sendiri karena angkanya
+                        sama persis untuk ketiga skenario — yang membedakan skenario
+                        hanya uang masuknya. Mengulangnya tiga kali hanya menambah
+                        angka yang harus dibaca tanpa menambah satu pun keterangan. */}
+                    <table className="w-full min-w-[700px]">
                       <thead className="border-b border-slate-200">
                         <tr>
-                          <th className="th">Saldo akhir bulan</th>
+                          <th className="th">Bulan</th>
+                          <th className="th num">Uang keluar</th>
                           {SKENARIO.map((sk) => (
-                            <th key={sk} className="th num">{NAMA_SKENARIO[sk]}</th>
+                            <th key={sk} className="th num">
+                              {NAMA_SKENARIO[sk]}
+                              <span className="block text-[11px] font-normal normal-case tracking-normal text-slate-400">
+                                masuk · saldo akhir
+                              </span>
+                            </th>
                           ))}
                         </tr>
                       </thead>
@@ -343,9 +358,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           const kolom = SKENARIO.map((sk) => data.runway![sk].bulan[i] ?? null);
                           const periode = kolom.find((b) => b)?.period;
                           if (!periode) return null;
+                          const keluar = kolom.find((b) => b)?.keluar ?? 0;
                           return (
                             <tr key={periode}>
-                              <td className="td">{formatPeriod(periode)}</td>
+                              <td className="td whitespace-nowrap">{formatPeriod(periode)}</td>
+                              <td className="td num text-slate-500">{formatRupiah(keluar)}</td>
                               {kolom.map((b, j) => (
                                 <td
                                   key={SKENARIO[j]}
@@ -356,10 +373,22 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                       : ''
                                   }`}
                                 >
-                                  {!b ? 'habis' : formatRupiah(b.saldoAkhir)}
+                                  {!b ? (
+                                    'habis'
+                                  ) : (
+                                    <>
+                                      <span className="block text-[11px] font-normal text-slate-400">
+                                        masuk {formatRupiahShort(b.masuk)}
+                                      </span>
+                                      <span className="whitespace-nowrap">
+                                        {formatRupiah(b.saldoAkhir)}
+                                      </span>
+                                    </>
+                                  )}
                                   {b && b.saldoAkhir >= 0 && !b.cukupGaji && (
                                     <span className="block text-[11px]">
-                                      kurang untuk gaji {formatPeriodShort(bulanSesudah(b.period))}
+                                      kurang {formatRupiahShort(b.kurangGaji)} untuk gaji{' '}
+                                      {formatPeriodShort(bulanSesudah(b.period))}
                                     </span>
                                   )}
                                 </td>

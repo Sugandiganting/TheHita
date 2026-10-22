@@ -121,9 +121,27 @@ export type PorsiKategori = {
 
 export type BulanRunway = {
   period: Period;
+  /**
+   * Saldo sebelum bulan itu berjalan. Untuk bulan berjalan yang dipakai adalah
+   * saldo kas yang dilaporkan, bukan saldo awal bulan — sisanya sudah terjadi.
+   */
+  saldoAwal: number;
+  /**
+   * Perkiraan uang masuk bulan itu. Untuk bulan berjalan hanya yang belum
+   * datang, karena yang sudah datang sudah ada di saldo yang dilaporkan.
+   */
+  masuk: number;
+  /**
+   * Perkiraan uang keluar bulan itu. Sama persis untuk ketiga skenario —
+   * yang membedakan skenario hanyalah uang masuknya.
+   */
+  keluar: number;
+  /** saldoAwal + masuk − keluar. */
   saldoAkhir: number;
   /** Saldo akhir bulan itu masih menutup satu kali gaji. */
   cukupGaji: boolean;
+  /** Yang kurang agar gaji bulan berikutnya tertutup; nol bila sudah cukup. */
+  kurangGaji: number;
 };
 
 /** Laju kas sebuah bulan: uang masuknya dikurangi pengeluaran rutin sebulan. */
@@ -405,20 +423,37 @@ export function hitungRunway(opsi: {
   // tanpa ini, menambah komitmen besar sama sekali tidak menggerakkan ramalan.
   const operasionalSebulan = Math.max(0, pengeluaranBulanan - komitmenRutinSebulan);
   const porsi = hariSebulan > 0 ? hariTersisa / hariSebulan : 0;
-  let saldo = saldoKas + sisaMasuk - komitmenBelumBayar - operasionalSebulan * porsi
-    - cicilan(period) - kewajiban(period);
-  bulan.push({ period, saldoAkhir: saldo, cukupGaji: saldo >= kebutuhanGaji });
+
+  const catat = (period: Period, saldoAwal: number, masuk: number, keluar: number) => {
+    const saldoAkhir = saldoAwal + masuk - keluar;
+    bulan.push({
+      period,
+      saldoAwal,
+      masuk,
+      keluar,
+      saldoAkhir,
+      cukupGaji: saldoAkhir >= kebutuhanGaji,
+      kurangGaji: Math.max(0, kebutuhanGaji - saldoAkhir),
+    });
+    return saldoAkhir;
+  };
+
+  let saldo = catat(
+    period,
+    saldoKas,
+    sisaMasuk,
+    komitmenBelumBayar + operasionalSebulan * porsi + cicilan(period) + kewajiban(period),
+  );
 
   for (let i = 1; i <= horizon; i += 1) {
     if (saldo < 0) break;
     const bulanIni = addMonths(period, i);
-    saldo += proyeksiBerikutnya(bulanIni) - pengeluaranBulanan - cicilan(bulanIni)
-      - kewajiban(bulanIni);
-    bulan.push({
-      period: bulanIni,
-      saldoAkhir: saldo,
-      cukupGaji: saldo >= kebutuhanGaji,
-    });
+    saldo = catat(
+      bulanIni,
+      saldo,
+      proyeksiBerikutnya(bulanIni),
+      pengeluaranBulanan + cicilan(bulanIni) + kewajiban(bulanIni),
+    );
   }
 
   // Laju tiap bulan dihitung terpisah dari saldo, sepanjang horizon penuh.

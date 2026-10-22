@@ -504,3 +504,58 @@ test('kewajiban terjadwal bulan depan menurunkan ramalan di bulannya sendiri', (
   // Pajak yang dibayar tidak kembali: penurunannya menetap.
   assert.equal(keJt(polos.bulan[maret + 1].saldoAkhir - dengan.bulan[maret + 1].saldoAkhir), 9);
 });
+
+test('tiap bulan runway bisa ditelusuri: saldo awal + masuk − keluar = saldo akhir', () => {
+  // Kas dinaikkan supaya daftarnya tidak berhenti di bulan pertama; yang diuji
+  // di sini rantai angkanya, bukan kapan habisnya.
+  const r = runway({
+    ...runwaySeptember, saldoKas: jt(400), sisaMasuk: jt(211.6), proyeksiBulanan: jt(351),
+  });
+
+  for (const b of r.bulan) {
+    assert.equal(
+      Math.round(b.saldoAwal + b.masuk - b.keluar),
+      Math.round(b.saldoAkhir),
+      `${b.period} tidak cocok`,
+    );
+  }
+  // Saldo awal bulan berjalan adalah kas yang dilaporkan, dan masuknya hanya
+  // yang belum datang — bukan proyeksi sebulan penuh.
+  assert.equal(r.bulan[0].saldoAwal, jt(400));
+  assert.equal(r.bulan[0].masuk, jt(211.6));
+  // Bulan berikutnya menyambung dari saldo akhir bulan sebelumnya.
+  assert.equal(r.bulan[1].saldoAwal, r.bulan[0].saldoAkhir);
+  assert.equal(r.bulan[1].masuk, jt(351));
+  assert.equal(r.bulan[1].keluar, jt(402.8));
+});
+
+test('uang keluar sama untuk ketiga skenario, yang berbeda hanya masuknya', () => {
+  const normal = runway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) });
+  const pesimis = runway({ ...runwaySeptember, sisaMasuk: jt(178.3), proyeksiBulanan: jt(333) });
+
+  assert.equal(pesimis.bulan[0].keluar, normal.bulan[0].keluar);
+  assert.notEqual(pesimis.bulan[0].masuk, normal.bulan[0].masuk);
+});
+
+test('kekurangan gaji disebut angkanya, bukan hanya ditandai', () => {
+  // Gaji Rp 125 jt; saldo akhir bulan berjalan di bawah itu.
+  const r = runway({ ...runwaySeptember, sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) });
+  const b = r.bulan[0];
+
+  assert.equal(b.cukupGaji, b.kurangGaji === 0);
+  if (!b.cukupGaji) {
+    assert.equal(Math.round(b.kurangGaji), Math.round(jt(125) - b.saldoAkhir));
+  }
+});
+
+test('bulan yang gajinya tertutup tidak menyisakan kekurangan', () => {
+  const r = runway({
+    ...runwaySeptember,
+    saldoKas: jt(900),
+    sisaMasuk: jt(211.6),
+    proyeksiBulanan: jt(351),
+    kebutuhanGaji: jt(10),
+  });
+  assert.equal(r.bulan[0].kurangGaji, 0);
+  assert.equal(r.gajiTerancam, null);
+});
