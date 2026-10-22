@@ -488,6 +488,23 @@ export type PurchasePlan = {
   shortfall: number;
 };
 
+/**
+ * Saran menunda: paling cepat kapan pembelian ini aman bila awalnya digeser.
+ *
+ * Memecah pembayaran hanya menolong bila kasnya memang akan pulih; bila kas
+ * sudah di bawah batas aman bahkan tanpa pembelian apa pun, berapa kali pun
+ * dipecah tetap tidak cukup, dan pertanyaannya berpindah dari "berapa kali"
+ * menjadi "kapan".
+ */
+export type SaranTunda = {
+  /** Jarak hari dari awal proyeksi ke cicilan pertama yang disarankan. */
+  mulaiPada: number;
+  /** Bulan tempat cicilan pertama itu jatuh. */
+  period: Period;
+  instalments: number;
+  plan: PurchasePlan;
+};
+
 export type PurchaseAdvice = {
   /** Rencana yang diminta pengguna. */
   requested: PurchasePlan;
@@ -497,6 +514,13 @@ export type PurchaseAdvice = {
   recommended: PurchasePlan | null;
   /** Harga tertinggi yang masih aman bila dibayar sekaligus sekarang. */
   maxLumpSum: number;
+  /**
+   * Paling cepat bisa bila awalnya digeser, boleh dicicil. Null bila rencana
+   * yang diminta memang sudah aman, atau tidak pernah aman sepanjang ramalan.
+   */
+  tercepat: SaranTunda | null;
+  /** Paling cepat bisa bila dibayar sekaligus. Null dengan alasan yang sama. */
+  sekaligus: SaranTunda | null;
 };
 
 /**
@@ -526,6 +550,17 @@ export type PurchaseContext = {
 
 /** Batas wajar percobaan saat mencari jumlah cicilan terkecil. */
 const MAX_INSTALMENTS = 24;
+
+/**
+ * Jarak antar tanggal yang dicoba saat mencari kapan paling cepat bisa.
+ *
+ * Sepekan, bukan sehari. Di dalam satu bulan arus kas dianggap mengalir rata,
+ * jadi beda satu-dua hari tidak membawa keterangan apa pun — hanya ketelitian
+ * palsu. Sepekan juga satuan yang sama dengan rencana kas mingguan, sehingga
+ * tanggal yang disarankan jatuh pada hari yang sama dengan tanggal mulai
+ * sekarang.
+ */
+const LANGKAH_TUNDA = 7;
 
 /**
  * Saldo kas yang diperkirakan pada hari ke-`dayOffset` dari awal proyeksi.
@@ -672,9 +707,64 @@ export function planPurchase(
   };
 }
 
+/** Panjang seluruh ramalan dalam hari. */
+function totalHari(rows: PurchaseContext['rows'], hariBarisPertama?: number): number {
+  let hari = 0;
+  for (let i = 0; i < rows.length; i += 1) hari += hariBaris(rows, i, hariBarisPertama);
+  return hari;
+}
+
+/**
+ * Tanggal paling awal — dicoba per pekan — yang membuat pembelian ini aman.
+ *
+ * Dicari dua arah sekaligus: tanggalnya digeser maju, dan pada tiap tanggal
+ * dicoba dari satu kali bayar ke atas. Yang dikembalikan tanggal paling awal,
+ * dengan pecahan paling sedikit pada tanggal itu — bukan pecahan paling
+ * sedikit secara keseluruhan, karena menunggu lebih lama demi satu cicilan
+ * lebih sedikit bukan pertukaran yang pantas diputuskan sendiri oleh program.
+ *
+ * `maksCicilan` membatasi berapa kali boleh dipecah; dipanggil dengan 1 untuk
+ * menjawab "kalau mau dibayar sekaligus, kapan".
+ */
+function cariTunda(
+  result: PurchaseContext,
+  amount: number,
+  cadence: PurchaseCadence,
+  maksCicilan: number,
+  mulaiDari: number,
+): SaranTunda | null {
+  const rows = result.rows;
+  if (rows.length === 0 || amount <= 0) return null;
+
+  const hariPertama = result.hariBarisPertama;
+  const batas = totalHari(rows, hariPertama);
+
+  for (let mulai = mulaiDari; mulai < batas; mulai += LANGKAH_TUNDA) {
+    for (let n = 1; n <= maksCicilan; n += 1) {
+      const plan = planPurchase(result, amount, n, cadence, mulai);
+      // Jadwal yang ujungnya melewati ramalan tidak bisa dinilai: di luar
+      // horizon, saldo yang dipakai hanyalah saldo akhir yang diulang, jadi
+      // "aman" di sana tidak berarti apa-apa. Makin banyak cicilan makin
+      // panjang jadwalnya, maka sisanya pun pasti lewat.
+      const ujung = plan.schedule[plan.schedule.length - 1]?.dayOffset ?? mulai;
+      if (ujung > batas) break;
+      if (plan.affordable) {
+        return {
+          mulaiPada: mulai,
+          period: periodAtDay(rows, mulai, hariPertama),
+          instalments: n,
+          plan,
+        };
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Menjawab "uangnya cukup atau tidak", dan bila tidak, berapa kali pembelian
- * itu perlu dipecah supaya aman.
+ * itu perlu dipecah supaya aman — atau, kalau memecah pun tidak menolong,
+ * kapan paling cepat pembelian itu bisa dilakukan.
  */
 export function advisePurchase(
   result: PurchaseContext,
@@ -699,5 +789,23 @@ export function advisePurchase(
     }
   }
 
-  return { requested, minimumInstalments, recommended, maxLumpSum: result.maxAffordableNow };
+  // Pertanyaan "kapan" hanya muncul ketika rencana yang diminta belum aman.
+  // Dicari dari sepekan sesudah tanggal yang sedang dipilih, bukan dari nol:
+  // tanggal yang lebih awal daripada pilihan sekarang bukan saran menunda.
+  const mulaiCari = Math.max(0, Math.round(mulaiPada)) + LANGKAH_TUNDA;
+  const tercepat = requested.affordable
+    ? null
+    : cariTunda(result, amount, cadence, MAX_INSTALMENTS, mulaiCari);
+  const sekaligus = requested.affordable
+    ? null
+    : cariTunda(result, amount, cadence, 1, mulaiCari);
+
+  return {
+    requested,
+    minimumInstalments,
+    recommended,
+    maxLumpSum: result.maxAffordableNow,
+    tercepat,
+    sekaligus,
+  };
 }

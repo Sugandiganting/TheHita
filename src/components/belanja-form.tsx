@@ -44,6 +44,13 @@ const selisihHari = (a: Date, b: Date) =>
   Math.round((Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate())
     - Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate())) / HARI);
 
+/** Tanggal pada hari ke-`hari` sejak posisi kas — titik nol mesin penilaian. */
+const tanggalPada = (posisi: Date, hari: number) => new Date(posisi.getTime() + hari * HARI);
+
+/** "2026-11-17" untuk <input type="date">. */
+const keIsian = (d: Date) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
 /** "hari ini", "2 minggu lagi", "1 bulan lagi" — dibaca dari selisih hari. */
 function kapan(hari: number, cadence: PurchaseCadence): string {
   if (hari === 0) return 'hari ini';
@@ -153,7 +160,14 @@ export function PurchaseCalculator({
   );
   const hariIni = useMemo(() => tanggalUtc(defaultDate), [defaultDate]);
 
+  const nolHari = useMemo(() => tanggalUtc(tanggalPosisi), [tanggalPosisi]);
   const rencana = saran?.requested;
+  // Pilihan "dibayar sekaligus" hanya ditampilkan bila memang berbeda dari
+  // yang tercepat — kalau tanggalnya sama, dua baris itu satu saran yang sama.
+  const bedaSekaligus =
+    saran?.sekaligus && saran.tercepat && saran.sekaligus.mulaiPada !== saran.tercepat.mulaiPada
+      ? saran.sekaligus
+      : null;
   const usulanBeda =
     saran?.recommended && saran.minimumInstalments !== null && saran.minimumInstalments !== cicilan
       ? saran
@@ -299,10 +313,56 @@ export function PurchaseCalculator({
 
             {!rencana.affordable && saran.minimumInstalments === null && (
               <p className="mt-2 text-sm text-amber-900">
-                Dipecah berapa kali pun tetap tidak cukup, karena pada akhirnya seluruh harga keluar
-                dari kas. Harga tertinggi yang masih aman bila dibayar sekaligus sekarang{' '}
-                <strong>{formatRupiah(context.maxAffordableNow)}</strong>.
+                Dipecah berapa kali pun tetap tidak cukup kalau dimulai sekarang, karena pada
+                akhirnya seluruh harga keluar dari kas. Harga tertinggi yang masih aman bila dibayar
+                sekaligus sekarang <strong>{formatRupiah(context.maxAffordableNow)}</strong>.
               </p>
+            )}
+
+            {/* Kalau memecah tidak menolong, pertanyaannya berpindah dari
+                "berapa kali" menjadi "kapan" — dan jawabannya tidak ada
+                gunanya tanpa tanggal yang bisa langsung dipakai. */}
+            {!rencana.affordable && saran.tercepat && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-white/60 p-3">
+                <p className="text-sm font-semibold text-amber-900">Paling cepat bisa</p>
+                <ul className="mt-1 space-y-2">
+                  {[saran.tercepat, bedaSekaligus].map((t) => t && (
+                    <li key={t.mulaiPada} className="flex flex-wrap items-baseline gap-x-2 text-sm text-amber-900">
+                      <span>
+                        {/* Bulannya tidak ditulis lagi di sebelah tanggalnya: tanggal
+                            penuh sudah menyebut bulannya, dan penanggalan mesin
+                            penilaian berselisih sehari di batas bulan, jadi dua tulisan
+                            itu sesekali tidak sepakat. Yang dipakai tanggalnya, karena
+                            itulah yang masuk ke formulir. */}
+                        Mulai <strong>{formatDate(tanggalPada(nolHari, t.mulaiPada))}</strong>,{' '}
+                        {t.instalments === 1 ? (
+                          <>dibayar <strong>sekaligus</strong></>
+                        ) : (
+                          <>
+                            dipecah <strong>{t.instalments} kali {CADENCE_LABEL[cadence]}</strong>
+                            {' '}&mdash; masing-masing{' '}
+                            <strong>{formatRupiah(t.plan.amount / t.instalments)}</strong>
+                          </>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMulai(keIsian(tanggalPada(nolHari, t.mulaiPada)));
+                          setCicilan(t.instalments);
+                        }}
+                        className="rounded-md border border-amber-400 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                      >
+                        Pakai
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-amber-700">
+                  Tanggalnya dicoba per pekan, bukan per hari: di dalam satu bulan arus kas dianggap
+                  mengalir rata, jadi beda satu-dua hari tidak membawa keterangan apa pun.
+                </p>
+              </div>
             )}
           </div>
 

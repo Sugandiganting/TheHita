@@ -128,3 +128,80 @@ test('jumlah cicilan tidak masuk akal tetap ditangani', () => {
   assert.equal(planPurchase(r, 10_000_000, -5, 'WEEKLY').instalments, 1);
   assert.equal(planPurchase(r, 10_000_000, 999, 'WEEKLY').instalments, 24);
 });
+
+/* ---------------- kapan paling cepat bisa ---------------- */
+
+/**
+ * Konteks sederhana: kas naik Rp 10 jt tiap bulan dari Rp 100 jt, batas aman
+ * Rp 100 jt. Artinya pembelian apa pun hari ini menembus batas, tetapi makin
+ * lama ditunggu makin longgar.
+ */
+function konteksNaik(bulan = 12) {
+  const rows = Array.from({ length: bulan }, (_, i) => ({
+    period: `2026-${String(i + 1).padStart(2, '0')}`,
+    netCash: 10_000_000,
+    cashBalance: 100_000_000 + 10_000_000 * (i + 1),
+  }));
+  return { rows, openingCash: 100_000_000, minCashBuffer: 100_000_000, maxAffordableNow: 0 };
+}
+
+test('saat memecah tidak menolong, disarankan kapan paling cepat bisa', () => {
+  const saran = advisePurchase(konteksNaik(), 25_000_000, 1, 'MONTHLY');
+
+  assert.equal(saran.requested.affordable, false);
+  assert.equal(saran.minimumInstalments, null, 'dipecah berapa pun tetap menembus batas');
+  assert.ok(saran.tercepat, 'tetap ada tanggal paling cepat');
+  assert.ok(saran.tercepat!.plan.affordable);
+  assert.ok(saran.tercepat!.mulaiPada >= 7, 'tanggalnya digeser, bukan hari ini');
+});
+
+test('tanggal yang disarankan jatuh pada kelipatan sepekan dari tanggal sekarang', () => {
+  const saran = advisePurchase(konteksNaik(), 25_000_000, 1, 'MONTHLY', 3);
+  assert.equal((saran.tercepat!.mulaiPada - 3) % 7, 0, 'bergeser per pekan dari pilihan sekarang');
+  assert.ok(saran.tercepat!.mulaiPada > 3);
+});
+
+test('yang disarankan tanggal paling awal, bukan cicilan paling sedikit', () => {
+  const saran = advisePurchase(konteksNaik(), 60_000_000, 1, 'MONTHLY');
+
+  assert.ok(saran.tercepat, 'ada yang paling cepat');
+  assert.ok(saran.sekaligus, 'ada pula yang sekaligus');
+  // Dipecah membuatnya bisa lebih awal; dibayar sekaligus harus menunggu.
+  assert.ok(saran.tercepat!.instalments > 1);
+  assert.ok(
+    saran.sekaligus!.mulaiPada > saran.tercepat!.mulaiPada,
+    'sekaligus selalu tidak lebih awal daripada yang boleh dicicil',
+  );
+  assert.equal(saran.sekaligus!.instalments, 1);
+});
+
+test('rencana yang memang sudah aman tidak membawa saran menunda', () => {
+  const rows = Array.from({ length: 12 }, (_, i) => ({
+    period: `2026-${String(i + 1).padStart(2, '0')}`,
+    netCash: 10_000_000,
+    cashBalance: 500_000_000 + 10_000_000 * (i + 1),
+  }));
+  const saran = advisePurchase(
+    { rows, openingCash: 500_000_000, minCashBuffer: 100_000_000, maxAffordableNow: 400_000_000 },
+    50_000_000, 1, 'MONTHLY',
+  );
+  assert.equal(saran.requested.affordable, true);
+  assert.equal(saran.tercepat, null);
+  assert.equal(saran.sekaligus, null);
+});
+
+test('harga yang tidak pernah terjangkau sepanjang ramalan tidak dikarang tanggalnya', () => {
+  const saran = advisePurchase(konteksNaik(), 5_000_000_000, 1, 'MONTHLY');
+  assert.equal(saran.tercepat, null);
+  assert.equal(saran.sekaligus, null);
+});
+
+test('jadwal yang ujungnya melewati ramalan tidak dianggap aman', () => {
+  // Ramalan tiga bulan saja: cicilan bulanan yang panjang pasti keluar dari
+  // horizon, dan di luar sana saldonya hanya saldo akhir yang diulang.
+  const saran = advisePurchase(konteksNaik(3), 25_000_000, 1, 'MONTHLY');
+  if (saran.tercepat) {
+    const ujung = saran.tercepat.plan.schedule.at(-1)!.dayOffset;
+    assert.ok(ujung <= 31 + 28 + 31, 'seluruh jadwalnya masih di dalam ramalan');
+  }
+});
