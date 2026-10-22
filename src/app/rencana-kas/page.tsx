@@ -8,6 +8,7 @@ import {
   toDateInput,
 } from '@/lib/format';
 import { barisMinggu } from '@/lib/minggu';
+import { pastikanBulanBerjalan } from '@/lib/rencana-berjalan';
 import { titikGrafik } from '@/lib/tren-masuk';
 import { TrenMasukChart } from '@/components/tren-chart';
 import { CapaianTarget } from '@/components/capaian-target';
@@ -77,6 +78,11 @@ function Operator({ children }: { children: string }) {
 
 export default async function RencanaKasPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
+  // Bulan berjalan tidak perlu dibuat sendiri. Begitu halamannya dibuka ia
+  // sudah ada, melanjutkan bulan terakhir — kategori, komitmen berulang dan
+  // asumsinya ikut terbawa. Ini satu-satunya tempat halaman ini menulis ke
+  // basis data saat dibuka, dan hanya untuk bulan yang sedang berjalan.
+  await pastikanBulanBerjalan(currentPeriod());
   const daftar = await getRencanaKasPeriods();
   const dipilih = one(params.periode) ?? daftar[0] ?? currentPeriod();
   const data = await getRencanaKas(dipilih);
@@ -115,7 +121,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
         <div className="mt-6">
           <EmptyState
             title={`Belum ada rencana untuk ${formatPeriod(dipilih)}`}
-            description="Buat rencana bulan ini lewat formulir di atas. Komitmen seperti cicilan bank dan gaji akan tersalin dari bulan sebelumnya."
+            description="Buat rencana lewat formulir di atas. Setelah bulan pertama ada, bulan-bulan berikutnya muncul sendiri — kategori, komitmen berulang dan asumsinya tersalin."
           />
         </div>
       </>
@@ -151,6 +157,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
         ],
       })
     : null;
+  // Bulan yang isinya terbawa dari bulan sebelumnya dan belum disentuh sama
+  // sekali. Diturunkan dari keadaan, bukan dari penanda sesaat, supaya
+  // keterangannya tetap muncul kalau halamannya dimuat ulang.
+  const lanjutanDari = data.checkpoint.length === 0 && data.belanja.length === 0
+    ? daftar[daftar.indexOf(dipilih) + 1] ?? null
+    : null;
   const belumBayar = data.komitmen.filter((k) => !k.paid);
   // Komitmen sekali ini tidak termasuk dalam pengeluaran rutin bulanan, jadi
   // hanya yang ini yang betul-betul menambah tekanan di bulan berjalan.
@@ -171,6 +183,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
       {!rencana && (
         <div className="mt-6">
           <Alert tone="warning">
+            {/* Bulan yang baru berjalan isinya sudah terbawa dari bulan lalu, dan itu
+                perlu disebut: tanpa ini, kategori dan komitmen yang tiba-tiba sudah
+                terisi terbaca seperti sisa bulan kemarin yang lupa dibersihkan. */}
+            {lanjutanDari && (
+              <>
+                Rencana {formatPeriod(dipilih)} melanjutkan {formatPeriod(lanjutanDari)} — kategori,
+                komitmen berulang, pengeluaran rutin dan kebutuhan gaji sudah tersalin.{' '}
+              </>
+            )}
             Belum ada laporan posisi kas untuk bulan ini. Isi saldo kas dan uang masuk kumulatif di panel
             <strong> Posisi kas minggu ini</strong>, lalu angkanya akan muncul di sini.
           </Alert>

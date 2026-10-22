@@ -12,6 +12,7 @@ import { periodeBerikutnya } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
+import { buatRencanaLanjutan } from '@/lib/rencana-berjalan';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
 import { cocokKataSandi, sidikKataSandi } from '@/lib/auth';
 import { NAMA_KUKI, UMUR_SESI_HARI, buatToken } from '@/lib/sesi';
@@ -903,13 +904,6 @@ function segarkanRencanaKas() {
   revalidatePath('/rencana-kas');
 }
 
-/** Dipakai saat bulan pertama kali dibuat dan belum ada bulan sebelumnya. */
-const KATEGORI_BAWAAN = [
-  { label: 'Purchasing', weight: 20, sort: 0 },
-  { label: 'HR (petty cash)', weight: 7, sort: 1 },
-  { label: 'Bank Perusahaan', weight: 7, sort: 2 },
-];
-
 function angka(formData: FormData, nama: string): number {
   return round(Number(String(formData.get(nama) ?? '').replace(/[^\d.-]/g, '')));
 }
@@ -929,32 +923,13 @@ export async function createCashPlan(_prev: ActionState, formData: FormData): Pr
   const kembar = await prisma.cashPlan.findUnique({ where: { period }, select: { id: true } });
   if (kembar) return fail(`Rencana kas ${period} sudah ada. Buka yang itu.`);
 
-  // Komitmen dan kategori diwarisi dari bulan terakhir yang ada, supaya cicilan
-  // dan gaji tidak perlu diketik ulang tiap bulan.
-  const sebelumnya = await prisma.cashPlan.findFirst({
-    where: { period: { lt: period } },
-    orderBy: { period: 'desc' },
-    include: { commitments: true, categories: true },
-  });
-
-  const komitmen = (sebelumnya?.commitments ?? [])
-    .filter((k) => k.recurring)
-    .map((k) => ({ label: k.label, amount: k.amount, dueDay: k.dueDay, recurring: true, sort: k.sort }));
-  const kategori = sebelumnya?.categories.length
-    ? sebelumnya.categories.map((k) => ({ label: k.label, weight: k.weight, sort: k.sort }))
-    : KATEGORI_BAWAAN;
-
-  await prisma.cashPlan.create({
-    data: {
-      period,
-      commitments: { create: komitmen },
-      categories: { create: kategori },
-    },
-  });
+  // Isinya diwarisi dari bulan terakhir yang ada — aturan yang sama dipakai
+  // saat bulan berjalan dibuat sendiri, jadi keduanya memanggil satu fungsi.
+  const hasil = await buatRencanaLanjutan(period);
   segarkanRencanaKas();
   return ok(
-    sebelumnya
-      ? `Rencana ${period} dibuat, ${komitmen.length} komitmen disalin dari ${sebelumnya.period}.`
+    hasil.dari
+      ? `Rencana ${period} dibuat, ${hasil.komitmen} komitmen disalin dari ${hasil.dari}.`
       : `Rencana ${period} dibuat. Isi proyeksi dan komitmennya.`,
   );
 }
