@@ -661,6 +661,13 @@ export type RencanaKasDetail = {
     bulanDepan: Musim | null;
   };
   riwayatMasuk: { period: Period; cashIn: number }[];
+  /**
+   * Laporan posisi kas bulan-bulan sebelumnya: uang masuk kumulatif pada
+   * laporan terakhir bulan itu, beserta jumlah hari yang dicakupnya. Dipakai
+   * sebagai pembanding laju harian — setara dengan bulan berjalan karena
+   * asalnya dari kolom yang sama, tidak seperti angka jurnal.
+   */
+  riwayatLaporan: { period: Period; masuk: number; hari: number }[];
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
   kategori: {
     id: string; label: string; weight: number;
@@ -868,6 +875,9 @@ export async function getRencanaKasPeriods(): Promise<Period[]> {
   return rows.map((r) => r.period);
 }
 
+/** Sebanyak apa riwayat yang dipakai menghitung rata-rata laju harian. */
+const RIWAYAT_LAJU_BULAN = 6;
+
 /** Uang masuk bulanan, dipakai sebagai dasar usulan tiga skenario. */
 async function riwayatUangMasuk(sebelum: Period, bulan = 6): Promise<{ period: Period; cashIn: number }[]> {
   const mulai = addMonths(sebelum, -bulan);
@@ -939,10 +949,24 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   ) as Record<Skenario, number>;
 
   const terakhir = plan.checkpoints[0] ?? null;
-  const [saldoKas, bulanIni] = await Promise.all([
+  const [saldoKas, bulanIni, planSebelumnya] = await Promise.all([
     getCashBalance(period),
     getMonthlyActuals(period, period),
+    // Laporan terakhir tiap bulan sebelumnya. Hanya satu per bulan: yang
+    // dicari laju sebulan itu, dan laporan terakhirlah yang mencakup paling
+    // banyak hari.
+    prisma.cashPlan.findMany({
+      where: { period: { lt: period } },
+      orderBy: { period: 'desc' },
+      take: RIWAYAT_LAJU_BULAN,
+      select: { period: true, checkpoints: { orderBy: { date: 'desc' }, take: 1 } },
+    }),
   ]);
+
+  const riwayatLaporan = planSebelumnya.flatMap((p) => {
+    const c = p.checkpoints[0];
+    return c ? [{ period: p.period, masuk: c.incomeToDate, hari: c.date.getUTCDate() }] : [];
+  });
 
   // Belanja yang sudah tercermin pada saldo yang dilaporkan tidak boleh
   // mengurangi plafon lagi — kalau ikut dikurangi, uang yang sama dihitung dua
@@ -1099,6 +1123,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       bulanDepan: pola.get(monthOf(bulanDepan)) ?? null,
     },
     riwayatMasuk: riwayat,
+    riwayatLaporan,
     komitmen: plan.commitments.map((k) => ({
       id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,
     })),

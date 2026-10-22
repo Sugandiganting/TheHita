@@ -71,8 +71,9 @@ export function LajuHarianBlok({
           judul="Biasanya"
           rincian={
             laju.riwayat === null
-              ? 'belum ada riwayat di jurnal'
-              : `jurnal ${laju.bulanRiwayat} bulan · ${formatPeriodShort(laju.dari!)}`
+              ? 'belum ada riwayat'
+              : `${laju.sumber === 'LAPORAN' ? 'laporan' : 'jurnal'} ${laju.bulanRiwayat} bulan`
+                + ` · ${formatPeriodShort(laju.dari!)}`
                 + (laju.dari === laju.sampai ? '' : `–${formatPeriodShort(laju.sampai!)}`)
           }
           nilai={laju.riwayat === null ? '—' : formatRupiah(laju.riwayat)}

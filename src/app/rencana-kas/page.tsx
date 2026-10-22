@@ -9,7 +9,7 @@ import {
 } from '@/lib/format';
 import { barisMinggu } from '@/lib/minggu';
 import { pastikanBulanBerjalan } from '@/lib/rencana-berjalan';
-import { lajuHarian } from '@/lib/laju-harian';
+import { dariJurnal, lajuHarian } from '@/lib/laju-harian';
 import { batangTren } from '@/lib/tren-masuk';
 import { TrenBarChart } from '@/components/tren-bar';
 import { CapaianTarget } from '@/components/capaian-target';
@@ -285,7 +285,10 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       laju={lajuHarian(
                         data.tren.masukTerakhir,
                         data.tren.hariTerakhir,
-                        data.riwayatMasuk,
+                        {
+                          laporan: data.riwayatLaporan,
+                          jurnal: dariJurnal(data.riwayatMasuk),
+                        },
                       )}
                       perluPerHari={data.tren.capaian.NORMAL.perHariSisa}
                       sisaHari={data.tren.sisaHari}
