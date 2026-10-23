@@ -611,7 +611,7 @@ test('jatah nol tetap dianggap ditetapkan, bukan kosong', () => {
   assert.equal(r.kategori[0].jatah, 0);
 });
 
-test('jatah dari RAB dipotong seluruh belanja bulan ini, bukan hanya sesudah posisi kas', () => {
+test('sisa kategori dipotong seluruh belanja bulan ini, bukan hanya sesudah posisi kas', () => {
   const r = hitungRencana({
     ...rapat9Okt,
     kategori: [{
@@ -621,21 +621,20 @@ test('jatah dari RAB dipotong seluruh belanja bulan ini, bukan hanya sesudah pos
   });
 
   const k = r.kategori[0];
-  assert.equal(k.dasarPotong, 'BULAN_INI');
-  assert.equal(k.terpakai, jt(96), 'yang dipotong seluruh belanja bulan ini');
+  assert.equal(k.terpakai, jt(96), 'tabel kategori memakai angka sebulan');
   assert.equal(k.sisa, jt(125.4) - jt(96));
 });
 
-test('jatah yang masih ikut porsi hanya dipotong belanja sesudah posisi kas', () => {
+test('aturannya sama walau jatahnya belum ditetapkan', () => {
   const r = hitungRencana({
     ...rapat9Okt,
     kategori: [{ label: 'Purchasing', weight: 20, terpakai: jt(12.5), terpakaiBulanIni: jt(96) }],
   });
 
   const k = r.kategori[0];
-  assert.equal(k.dasarPotong, 'SEJAK_POSISI');
-  assert.equal(k.terpakai, jt(12.5), 'belanja sebelum posisi kas sudah ada di saldonya');
-  assert.equal(k.sisa, k.jatah - jt(12.5));
+  assert.equal(k.ditetapkan, false, 'jatahnya masih dibagi menurut porsi');
+  assert.equal(k.terpakai, jt(96), 'tetapi yang dipotong tetap belanja sebulan');
+  assert.equal(k.sisa, k.jatah - jt(96));
 });
 
 test('total terpakai yang memotong kas tetap hanya yang sesudah posisi kas', () => {

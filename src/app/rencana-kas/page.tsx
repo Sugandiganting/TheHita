@@ -671,7 +671,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya, dan seluruh belanja bulan ini memotongnya: jatah − dipakai = sisa. Baris yang jatahnya belum ditetapkan masih dibagi dari saldo kas, jadi yang dipotong hanya belanja sesudah tanggal posisi kas — sisanya sudah keluar dari saldo itu.">
+                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Sudah dipakai diambil dari laporan belanja kategori itu sepanjang bulan ini. Sisa adalah jatah dikurangi yang sudah dipakai.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
@@ -697,11 +697,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         {rencana.kategori.map((k, i) => {
                           const sumber = data.kategori[i];
                           const sisa = k.sisa;
-                          // Hanya berarti untuk jatah yang dibagi dari saldo kas; jatah
-                          // dari RAB sudah memotong seluruh belanja bulan ini.
-                          const sudahDiSaldo = k.dasarPotong === 'SEJAK_POSISI'
-                            ? (sumber?.terpakaiBulanIni ?? 0) - k.terpakai
-                            : 0;
                           return (
                             <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
                               <td className="td">{k.label}</td>
@@ -711,17 +706,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                   : formatRupiah(k.jatah)}
                                 {!k.ditetapkan && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    belum ditetapkan — masih ikut porsi lama
+                                    belum disimpan
                                   </span>
                                 )}
                               </td>
                               <td className="td num">
                                 {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
-                                {sudahDiSaldo > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    {formatRupiah(sudahDiSaldo)} sebelum itu, tidak memotong sisa
-                                  </span>
-                                )}
                               </td>
                               <td className={`td num ${sisa < 0 ? 'font-semibold text-red-600' : ''}`}>
                                 {formatRupiah(sisa)}
@@ -787,20 +777,10 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <strong>
                       {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
                     </strong>
-                    , yang memotong kolom sisa{' '}
-                    <strong>
-                      {formatRupiah(rencana.kategori.reduce((t, k) => t + k.terpakai, 0))}
-                    </strong>
-                    .
-                    {rencana.kategori.some((k) => k.dasarPotong === 'SEJAK_POSISI') && (
-                      <>
-                        {' '}Selisihnya ada pada baris yang jatahnya belum ditetapkan: jatah itu
-                        dibagi dari saldo kas yang dilaporkan, dan belanja sebelum tanggal posisi
-                        kas sudah keluar dari saldo tersebut — memotongnya sekali lagi di sini
-                        berarti menghitung uang yang sama dua kali. Begitu jatahnya diketik dari
-                        RAB, seluruh belanja bulan ini yang memotongnya.
-                      </>
-                    )}
+                    , seluruhnya memotong kolom sisa di atas. Angka{' '}
+                    <strong>boleh belanja</strong> di kartu paling atas memakai aturan yang
+                    berbeda: di sana belanja sebelum tanggal posisi kas tidak dipotong lagi, karena
+                    sudah keluar dari saldo yang dilaporkan.
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">

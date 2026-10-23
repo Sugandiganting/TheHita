@@ -1156,8 +1156,8 @@ export async function saveSpend(_prev: ActionState, formData: FormData): Promise
       warn: true,
       message: `${pesan} Tanggalnya tidak melewati posisi kas terakhir `
         + `(${formatTanggal(posisi.date)}), jadi belanja ini dianggap sudah termasuk dalam saldo `
-        + 'yang dilaporkan dan tidak mengurangi plafon kas lagi. Ia tetap memotong sisa pada '
-        + 'kategori yang jatahnya diketik dari RAB.',
+        + 'yang dilaporkan dan tidak mengurangi angka boleh belanja lagi. Sisa jatah '
+        + 'kategorinya tetap terpotong seperti biasa.',
     };
   }
   return ok(pesan);
