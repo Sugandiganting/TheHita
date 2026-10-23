@@ -1052,30 +1052,32 @@ export async function deleteCommitment(_prev: ActionState, formData: FormData): 
 export async function saveCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const planId = String(formData.get('planId') ?? '');
   const label = String(formData.get('label') ?? '').trim();
-  const weight = Number(String(formData.get('weight') ?? '').replace(/[^\d.]/g, ''));
+  const budget = angkaAtauNull(formData, 'budget');
 
   if (!label) return fail('Nama kategori wajib diisi.');
-  if (!Number.isFinite(weight) || weight <= 0) return fail('Porsi harus lebih dari nol.');
+  if (budget === null) return fail('Jatah bulan ini wajib diisi.');
+  if (budget < 0) return fail('Jatah tidak boleh negatif.');
 
   const plan = await prisma.cashPlan.findUnique({ where: { id: planId }, select: { id: true } });
   if (!plan) return fail('Rencana kas tidak ditemukan.');
   const jumlah = await prisma.spendCategory.count({ where: { planId } });
-  await prisma.spendCategory.create({ data: { planId, label, weight, sort: jumlah } });
+  await prisma.spendCategory.create({ data: { planId, label, budget, sort: jumlah } });
   segarkanRencanaKas();
   return ok('Kategori ditambahkan.');
 }
 
-export async function updateCategoryWeight(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function updateCategoryBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
-  const weight = Number(String(formData.get('weight') ?? '').replace(/[^\d.]/g, ''));
+  const budget = angkaAtauNull(formData, 'budget');
 
-  if (!Number.isFinite(weight) || weight <= 0) return fail('Porsi harus lebih dari nol.');
+  if (budget === null) return fail('Jatah wajib diisi.');
+  if (budget < 0) return fail('Jatah tidak boleh negatif.');
   const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { label: true } });
   if (!ada) return fail('Kategori tidak ditemukan.');
 
-  await prisma.spendCategory.update({ where: { id }, data: { weight } });
+  await prisma.spendCategory.update({ where: { id }, data: { budget } });
   segarkanRencanaKas();
-  return ok(`Porsi ${ada.label} diubah.`);
+  return ok(`Jatah ${ada.label} diubah.`);
 }
 
 export async function deleteCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {

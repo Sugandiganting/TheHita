@@ -50,8 +50,12 @@ export async function buatRencanaLanjutan(period: Period): Promise<Lanjutan> {
   const komitmen = (sebelumnya?.commitments ?? [])
     .filter((k) => k.recurring)
     .map((k) => ({ label: k.label, amount: k.amount, dueDay: k.dueDay, recurring: true, sort: k.sort }));
+  // Jatah per kategori ikut tersalin: RAB departemen tidak berubah tiap bulan,
+  // dan mengetiknya ulang tiap awal bulan justru cara paling mudah untuk lupa.
   const kategori = sebelumnya?.categories.length
-    ? sebelumnya.categories.map((k) => ({ label: k.label, weight: k.weight, sort: k.sort }))
+    ? sebelumnya.categories.map((k) => ({
+        label: k.label, weight: k.weight, budget: k.budget, sort: k.sort,
+      }))
     : KATEGORI_BAWAAN;
 
   await prisma.cashPlan.create({

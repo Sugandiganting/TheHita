@@ -204,6 +204,7 @@ CREATE TABLE "SpendCategory" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "planId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
+    "budget" REAL,
     "weight" REAL NOT NULL DEFAULT 1,
     "sort" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "SpendCategory_planId_fkey" FOREIGN KEY ("planId") REFERENCES "CashPlan" ("id") ON DELETE CASCADE ON UPDATE CASCADE

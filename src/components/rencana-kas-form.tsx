@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
   deleteSpend, saveAssumptions, saveCashProjection, saveCategory, saveCheckpoint,
-  saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryWeight, type ActionState,
+  saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryBudget, type ActionState,
 } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { MoneyInput } from './money-input';
@@ -256,9 +256,9 @@ export function CategoryForm({ planId }: { planId: string }) {
         <label className="label" htmlFor="rk-glabel">Kategori</label>
         <input id="rk-glabel" name="label" className="input" placeholder="Maintenance" required />
       </div>
-      <div className="w-24">
-        <label className="label" htmlFor="rk-gweight">Porsi</label>
-        <input id="rk-gweight" name="weight" inputMode="numeric" className="input" placeholder="5" required />
+      <div className="w-56">
+        <label className="label" htmlFor="rk-gbudget">Jatah bulan ini</label>
+        <MoneyInput id="rk-gbudget" name="budget" placeholder="50.000.000" required />
       </div>
       <button type="submit" className="btn-primary">Tambah</button>
       <Pesan state={state} />
@@ -267,25 +267,29 @@ export function CategoryForm({ planId }: { planId: string }) {
 }
 
 /**
- * Porsi diubah di tempat. Sebelumnya satu-satunya cara adalah menghapus
+ * Jatah diubah di tempat. Sebelumnya satu-satunya cara adalah menghapus
  * kategori lalu membuatnya lagi, dan itu ikut membuang seluruh riwayat
  * belanjanya — harga yang terlalu mahal untuk mengganti satu angka.
+ *
+ * Bila jatahnya belum pernah ditetapkan, isian ini diisi lebih dulu dengan
+ * angka yang sedang berlaku — hasil pembagian menurut porsi lama. Jadi yang
+ * terbaca di layar tidak berubah sampai tombol simpan ditekan, dan menekannya
+ * berarti "mulai sekarang pakai angka ini".
  */
-export function CategoryWeight({ id, weight }: { id: string; weight: number }) {
-  const [state, action] = useActionState(updateCategoryWeight, initial);
-  const [nilai, setNilai] = useState(String(weight));
-  const berubah = nilai.trim() !== String(weight);
+export function CategoryBudget({ id, jatah }: { id: string; jatah: number }) {
+  const [state, action] = useActionState(updateCategoryBudget, initial);
+  const [nilai, setNilai] = useState(String(Math.round(jatah)));
+  const berubah = nilai.trim() !== String(Math.round(jatah));
 
   return (
     <form action={action} className="flex items-center justify-end gap-1.5">
       <input type="hidden" name="id" value={id} />
-      <input
-        name="weight"
-        inputMode="numeric"
+      <MoneyInput
+        name="budget"
         value={nilai}
-        onChange={(e) => setNilai(e.target.value.replace(/[^\d.]/g, ''))}
-        aria-label="Porsi"
-        className="w-14 rounded-md border border-slate-300 px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+        onChange={setNilai}
+        ariaLabel="Jatah bulan ini"
+        className="w-36 rounded-md border border-slate-300 px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
       />
       {berubah && <Tautan label="Simpan" pendingLabel="…" />}
       {!state.ok && state.message && <span className="text-xs text-red-600">{state.message}</span>}

@@ -16,7 +16,7 @@ import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryDelete, CategoryForm, CategoryWeight, CheckpointDelete, CheckpointForm,
+  AssumptionForm, CategoryBudget, CategoryDelete, CategoryForm, CheckpointDelete, CheckpointForm,
   CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
 import { JadwalTersimpan, PurchaseActions, PurchaseCalculator } from '@/components/belanja-form';
@@ -671,11 +671,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah dihitung dari saldo kas yang terakhir dilaporkan, jadi belanja sampai tanggal itu sudah ikut mengecilkannya. Yang dipotong sekali lagi hanya belanja sesudahnya: jatah − dipakai = sisa. Porsi adalah angka perbandingan, bukan persen: 20-7-7 membagi sama seperti 40-14-14.">
+                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Yang dipotong hanya belanja sesudah tanggal posisi kas: jatah − dipakai = sisa. Belanja sebelum tanggal itu sudah keluar dari saldo yang dilaporkan, jadi tidak dipotong dua kali.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px]">
+                    <table className="w-full min-w-[860px]">
                       {/* Urutannya mengikuti hitungannya: jatah − dipakai = sisa, bersebelahan
                           dan terbaca dari kiri ke kanan. Belanja yang sudah tercermin di saldo
                           tidak jadi kolom tersendiri — ia hampir selalu sama dengan kolom
@@ -686,7 +686,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Kategori</th>
-                          <th className="th num">Porsi</th>
                           <th className="th num">Jatah bulan ini</th>
                           <th className="th num">Dipakai sejak posisi kas</th>
                           <th className="th num">Sisa</th>
@@ -703,9 +702,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                             <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
                               <td className="td">{k.label}</td>
                               <td className="td num">
-                                {sumber && <CategoryWeight id={sumber.id} weight={sumber.weight} />}
+                                {sumber
+                                  ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
+                                  : formatRupiah(k.jatah)}
+                                {!k.ditetapkan && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    belum ditetapkan — masih ikut porsi lama
+                                  </span>
+                                )}
                               </td>
-                              <td className="td num">{formatRupiah(k.jatah)}</td>
                               <td className="td num">
                                 {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
                                 {sudahDiSaldo > 0 && (
@@ -737,10 +742,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       </tbody>
                       <tfoot className="border-t-2 border-slate-200 font-semibold">
                         <tr>
-                          <td className="td" colSpan={2}>Total</td>
-                          <td className="td num">
-                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.jatah, 0))}
-                          </td>
+                          <td className="td">Total</td>
+                          <td className="td num">{formatRupiah(rencana.jatahKategori)}</td>
                           <td className="td num">{formatRupiah(rencana.terpakai)}</td>
                           <td className="td num">
                             {formatRupiah(rencana.kategori.reduce((t, k) => t + k.sisa, 0))}
@@ -750,6 +753,29 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       </tfoot>
                     </table>
                   </div>
+                  {/* Sejak jatahnya diketik sendiri, jumlahnya tidak lagi otomatis
+                      sama dengan yang kas sanggup — dan itu justru angka yang perlu
+                      dilihat. RAB menjawab "berapa yang direncanakan", kas menjawab
+                      "berapa yang ada"; keduanya memang bisa berbeda, asal bedanya
+                      tidak diam-diam. */}
+                  {rencana.jatahKategori > rencana.jatahKas ? (
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, sedangkan
+                      kas bulan ini hanya sanggup{' '}
+                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal
+                      &mdash; kelebihan <strong>{formatRupiah(rencana.jatahKategori - rencana.jatahKas)}</strong>.
+                      Plafon mingguan di bawah tetap mengikuti jatah yang Anda tetapkan, jadi
+                      selisih itu perlu ditutup dari uang masuk yang melebihi perkiraan, atau
+                      jatahnya yang diturunkan.
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-slate-500">
+                      Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, masih di
+                      dalam kemampuan kas bulan ini{' '}
+                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal.
+                    </p>
+                  )}
+
                   <p className="mt-3 text-xs text-slate-500">
                     Seluruh belanja {formatPeriod(data.period)}{' '}
                     <strong>
@@ -757,9 +783,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     </strong>
                     . Yang memotong kolom sisa hanya{' '}
                     <strong>{formatRupiah(rencana.terpakai)}</strong>, yaitu yang terjadi setelah
-                    tanggal posisi kas. Sisanya sudah keluar dari saldo yang dilaporkan, jadi
-                    sudah ikut mengecilkan jatah di kolom sebelah kiri — memotongnya sekali lagi
-                    berarti menghitung uang yang sama dua kali.
+                    tanggal posisi kas. Belanja sebelum tanggal itu sudah keluar dari saldo yang
+                    dilaporkan, jadi memotongnya di sini berarti menghitung uang yang sama dua kali.
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">

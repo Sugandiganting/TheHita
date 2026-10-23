@@ -671,6 +671,8 @@ export type RencanaKasDetail = {
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
   kategori: {
     id: string; label: string; weight: number;
+    /** Jatah sebulan yang diketik sendiri; null berarti ikut porsi. */
+    budget: number | null;
     /** Terpakai setelah tanggal posisi kas — yang mengurangi plafon. */
     terpakai: number;
     /** Terpakai sejak awal bulan, termasuk yang sudah tercermin di saldo. */
@@ -995,6 +997,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     id: k.id,
     label: k.label,
     weight: k.weight,
+    budget: k.budget,
     terpakai: terpakaiKategori(k.id, true),
     terpakaiBulanIni: terpakaiKategori(k.id, false),
   }));
@@ -1065,7 +1068,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         })),
         // Total terpakai diturunkan dari rinciannya, jadi keduanya tidak bisa
         // berbeda — dan kategori yang terhapus tidak meninggalkan selisih.
-        kategori: kategori.map((k) => ({ label: k.label, weight: k.weight, terpakai: k.terpakai })),
+        kategori: kategori.map((k) => ({
+          label: k.label, weight: k.weight, jatah: k.budget, terpakai: k.terpakai,
+        })),
       })
     : null;
 

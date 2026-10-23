@@ -49,7 +49,15 @@ export type EntriBelanja = {
 
 export type Kategori = {
   label: string;
-  /** Porsi relatif; dinormalkan terhadap jumlah seluruh kategori. */
+  /**
+   * Jatah sebulan dalam rupiah, dari RAB departemen itu sendiri.
+   *
+   * Kosong berarti belum ditetapkan, dan jatahnya masih dibagi menurut
+   * `weight` seperti sebelumnya. Dua cara ini sengaja bisa hidup berdampingan:
+   * kategori yang sudah punya RAB tidak perlu menunggu yang lain diisi.
+   */
+  jatah?: number | null;
+  /** Porsi relatif, dipakai hanya bila jatahnya belum ditetapkan. */
   weight: number;
   /** Yang sudah dibelanjakan kategori ini setelah tanggal posisi kas. */
   terpakai?: number;
@@ -110,8 +118,10 @@ export type HasilSkenario = {
 
 export type PorsiKategori = {
   label: string;
-  /** Jatah sebulan penuh menurut porsinya, sebelum dikurangi belanja. */
+  /** Jatah sebulan penuh, sebelum dikurangi belanja. */
   jatah: number;
+  /** Jatahnya diketik sendiri, bukan hasil pembagian menurut porsi. */
+  ditetapkan: boolean;
   terpakai: number;
   /** jatah − terpakai. Minus berarti kategori ini sudah lewat jatahnya. */
   sisa: number;
@@ -178,6 +188,15 @@ export type Rencana = {
   cicilanBelanja: number;
   kewajiban: number;
   terpakai: number;
+  /**
+   * Jumlah seluruh jatah kategori. Dulu angka ini selalu sama dengan jatah
+   * skenario normal karena memang hasil membagi angka itu; sejak jatah boleh
+   * diketik sendiri, keduanya bisa berselisih — dan selisihnya justru yang
+   * perlu dilihat.
+   */
+  jatahKategori: number;
+  /** Yang kas sanggup tanggung sebulan ini menurut skenario normal. */
+  jatahKas: number;
   skenario: Record<Skenario, HasilSkenario>;
   minggu: Minggu[];
   kategori: PorsiKategori[];
@@ -326,13 +345,17 @@ export function hitungRencana(m: Masukan): Rencana {
   // membagi yang kotor, jumlah seluruh sisa kategori kembali persis sama dengan
   // angka boleh belanja di kartu atas.
   const bobotKategori = m.kategori.map((k) => k.weight);
-  const bagianJatah = bagiProporsional(Math.max(0, skenario.NORMAL.jatah), bobotKategori);
+  const jatahKas = Math.max(0, skenario.NORMAL.jatah);
+  const bagianJatah = bagiProporsional(jatahKas, bobotKategori);
   const kategori: PorsiKategori[] = m.kategori.map((k, i) => {
     const dipakai = k.terpakai ?? 0;
-    const sisa = bagianJatah[i] - dipakai;
+    const ditetapkan = k.jatah != null && k.jatah >= 0;
+    const jatah = ditetapkan ? (k.jatah as number) : bagianJatah[i];
+    const sisa = jatah - dipakai;
     return {
       label: k.label,
-      jatah: bagianJatah[i],
+      jatah,
+      ditetapkan,
       terpakai: dipakai,
       sisa,
       // Dinolkan saat jatahnya sudah terlampaui: "boleh belanja minus tiga
@@ -343,6 +366,8 @@ export function hitungRencana(m: Masukan): Rencana {
 
   return {
     mulai, selesai, hari, komitmenBelumBayar, cicilanBelanja, kewajiban, terpakai,
+    jatahKategori: kategori.reduce((t, k) => t + k.jatah, 0),
+    jatahKas,
     skenario, minggu, kategori,
   };
 }

@@ -366,7 +366,12 @@ model SpendCategory {
   id     String @id @default(cuid())
   planId String
   label  String
-  /// Porsi relatif; dinormalkan terhadap jumlah seluruh kategori.
+  /// Jatah sebulan dalam rupiah, diketik dari RAB departemen masing-masing.
+  /// null berarti belum ditetapkan — jatahnya masih dibagi menurut weight.
+  budget Float?
+  /// Porsi relatif, dipakai hanya untuk kategori yang budget-nya belum diisi.
+  /// Ditinggalkan, bukan dihapus: membuangnya berarti membuang data kategori
+  /// lama yang belum sempat diberi jatah sendiri.
   weight Float  @default(1)
   sort   Int    @default(0)
 

@@ -559,3 +559,54 @@ test('bulan yang gajinya tertutup tidak menyisakan kekurangan', () => {
   assert.equal(r.bulan[0].kurangGaji, 0);
   assert.equal(r.gajiTerancam, null);
 });
+
+test('jatah kategori yang ditetapkan dipakai apa adanya, bukan dibagi menurut porsi', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [
+      { label: 'Purchasing', weight: 20, jatah: jt(150) },
+      { label: 'HR', weight: 7, jatah: jt(40) },
+    ],
+  });
+
+  assert.equal(r.kategori[0].jatah, jt(150));
+  assert.equal(r.kategori[1].jatah, jt(40));
+  assert.ok(r.kategori.every((k) => k.ditetapkan));
+  assert.equal(r.jatahKategori, jt(190));
+});
+
+test('kategori yang belum ditetapkan tetap mengikuti porsinya', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [
+      { label: 'Purchasing', weight: 1, jatah: jt(150) },
+      { label: 'HR', weight: 1 },
+    ],
+  });
+
+  assert.equal(r.kategori[0].ditetapkan, true);
+  assert.equal(r.kategori[1].ditetapkan, false);
+  // Yang belum ditetapkan mendapat bagiannya dari jatah kas, bukan dari sisa
+  // sesudah yang sudah ditetapkan: keduanya dihitung sendiri-sendiri.
+  assert.equal(r.kategori[1].jatah, bagiProporsional(r.jatahKas, [1, 1])[1]);
+});
+
+test('jatah yang ditetapkan boleh melebihi kemampuan kas, dan selisihnya terlihat', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [{ label: 'Purchasing', weight: 1, jatah: jt(9_000) }],
+  });
+
+  assert.equal(r.jatahKategori, jt(9_000));
+  assert.ok(r.jatahKategori > r.jatahKas, 'tidak dipaksa turun ke kemampuan kas');
+  assert.equal(r.jatahKas, Math.max(0, r.skenario.NORMAL.jatah));
+});
+
+test('jatah nol tetap dianggap ditetapkan, bukan kosong', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [{ label: 'Dibekukan', weight: 5, jatah: 0 }],
+  });
+  assert.equal(r.kategori[0].ditetapkan, true);
+  assert.equal(r.kategori[0].jatah, 0);
+});
