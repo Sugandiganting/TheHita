@@ -94,6 +94,20 @@ export type Masukan = {
    * kemungkinan total dan rinciannya berbeda.
    */
   terpakai?: number;
+  /**
+   * Gaji sebulan yang harus tersisa di akhir bulan ini.
+   *
+   * Gaji sebuah bulan dibayar di awalnya, jadi yang menutup gaji bulan depan
+   * adalah saldo akhir bulan ini. Tanpa disisihkan, plafon belanja boleh
+   * menghabiskan seluruh kas dan gaji bulan depan bergantung sepenuhnya pada
+   * uang masuk bulan depan — padahal dua menu lain di halaman yang sama
+   * (ramalan kas dan pemeriksa pembelian) sudah menolak keadaan itu.
+   *
+   * Berbeda dengan komitmen gaji yang belum dibayar: komitmen itu gaji bulan
+   * INI yang belum keluar, sedangkan ini gaji bulan DEPAN yang belum jatuh
+   * tempo. Dua pembayaran yang berbeda, jadi keduanya memang dikurangkan.
+   */
+  kebutuhanGaji?: number;
 };
 
 export type Minggu = {
@@ -111,7 +125,10 @@ export type HasilSkenario = {
   skenario: Skenario;
   proyeksi: number;
   sisaMasuk: number;
-  /** Jatah seluruh sisa bulan, sebelum dikurangi yang sudah terpakai. */
+  /**
+   * Jatah seluruh sisa bulan, sesudah menyisihkan gaji bulan depan tetapi
+   * sebelum dikurangi yang sudah terpakai.
+   */
   jatah: number;
   /** Yang masih boleh dibelanjakan: jatah dikurangi yang sudah terpakai. */
   bolehBelanja: number;
@@ -190,6 +207,8 @@ export type Rencana = {
   cicilanBelanja: number;
   kewajiban: number;
   terpakai: number;
+  /** Gaji bulan depan yang disisihkan dari plafon belanja bulan ini. */
+  cadanganGaji: number;
   /**
    * Jumlah seluruh jatah kategori. Dulu angka ini selalu sama dengan jatah
    * skenario normal karena memang hasil membagi angka itu; sejak jatah boleh
@@ -275,9 +294,10 @@ function hasilSkenario(
   komitmen: number,
   terpakai: number,
   jumlahMinggu: number,
+  cadanganGaji: number,
 ): HasilSkenario {
   const sisaMasuk = Math.max(0, proyeksi - masukSampaiKini);
-  const jatah = saldoKas + sisaMasuk - komitmen;
+  const jatah = saldoKas + sisaMasuk - komitmen - cadanganGaji;
   const bolehBelanja = jatah - terpakai;
   return {
     skenario,
@@ -299,6 +319,7 @@ export function hitungRencana(m: Masukan): Rencana {
   const cicilanBelanja = m.cicilanBelanja ?? 0;
   const kewajiban = m.kewajiban ?? 0;
   const terpakai = m.terpakai ?? m.kategori.reduce((s, k) => s + (k.terpakai ?? 0), 0);
+  const cadanganGaji = Math.max(0, m.kebutuhanGaji ?? 0);
 
   const skenario = Object.fromEntries(
     SKENARIO.map((s) => [
@@ -306,6 +327,7 @@ export function hitungRencana(m: Masukan): Rencana {
       hasilSkenario(
         s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas,
         komitmenBelumBayar + cicilanBelanja + kewajiban, terpakai, potongan.length,
+        cadanganGaji,
       ),
     ]),
   ) as Record<Skenario, HasilSkenario>;
@@ -374,6 +396,7 @@ export function hitungRencana(m: Masukan): Rencana {
 
   return {
     mulai, selesai, hari, komitmenBelumBayar, cicilanBelanja, kewajiban, terpakai,
+    cadanganGaji,
     jatahKategori: kategori.reduce((t, k) => t + k.jatah, 0),
     jatahKas,
     skenario, minggu, kategori,

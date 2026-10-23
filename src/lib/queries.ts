@@ -1074,6 +1074,13 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const kewajibanBulan = (p: Period) =>
     p === period ? kewajibanBulanIni : kewajibanPada(daftarKewajiban, p);
 
+  // Kebutuhan gaji dipakai dua kali — menyisihkan cadangan di plafon belanja
+  // dan menilai saldo akhir di ramalan — jadi dihitung sebelum keduanya.
+  const usulanGaji = plan.commitments
+    .filter((k) => k.recurring && /gaji/i.test(k.label))
+    .reduce((s, k) => s + k.amount, 0) || null;
+  const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
+
   const rencana = terakhir
     ? hitungRencana({
         period,
@@ -1083,6 +1090,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         proyeksi: dipakai,
         cicilanBelanja: cicilanBulanIni,
         kewajiban: kewajibanBulanIni,
+        // Gaji bulan depan disisihkan dari plafon: gaji dibayar di awal bulan,
+        // jadi yang menutupinya adalah saldo akhir bulan ini.
+        kebutuhanGaji: gaji,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
@@ -1104,12 +1114,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const usulanOutflow = keluarRiwayat.length > 0
     ? round(keluarRiwayat.reduce((s, v) => s + v, 0) / keluarRiwayat.length)
     : null;
-  const usulanGaji = plan.commitments
-    .filter((k) => k.recurring && /gaji/i.test(k.label))
-    .reduce((s, k) => s + k.amount, 0) || null;
-
   const outflow = plan.monthlyOutflow ?? usulanOutflow;
-  const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
 
   const runway = rencana && outflow !== null
     ? (Object.fromEntries(

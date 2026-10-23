@@ -223,6 +223,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 })}
               </div>
 
+              {rencana.cadanganGaji > 0 && (
+                <p className="-mt-2 text-xs text-slate-500">
+                  Ketiga angka di atas sudah menyisihkan gaji{' '}
+                  {formatPeriod(bulanSesudah(data.period))}{' '}
+                  <strong>{formatRupiah(rencana.cadanganGaji)}</strong> — gaji dibayar di awal
+                  bulan, jadi yang menutupinya adalah saldo akhir bulan ini.
+                </p>
+              )}
+
               {rencana.skenario.NORMAL.bolehBelanja < 0 && (
                 <Alert tone="danger">
                   Pada skenario normal, kas tidak cukup menutup komitmen yang belum dibayar — kurang{' '}
@@ -510,6 +519,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <Suku label="Kewajiban terjadwal" value={rencana.kewajiban} />
                     </span>
                   )}
+                  {rencana.cadanganGaji > 0 && (
+                    <span className="flex items-start gap-4">
+                      <Operator>−</Operator>
+                      <Suku
+                        label={`Gaji ${formatPeriodShort(bulanSesudah(data.period))}`}
+                        value={rencana.cadanganGaji}
+                      />
+                    </span>
+                  )}
                   {rencana.terpakai > 0 && (
                     <span className="flex items-start gap-4">
                       <Operator>−</Operator>
@@ -759,6 +777,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, sedangkan
                       kas bulan ini hanya sanggup{' '}
                       <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal
+                      {rencana.cadanganGaji > 0 && ' (sesudah menyisihkan gaji bulan depan)'}
                       &mdash; kelebihan <strong>{formatRupiah(rencana.jatahKategori - rencana.jatahKas)}</strong>.
                       Plafon mingguan di bawah tetap mengikuti jatah yang Anda tetapkan, jadi
                       selisih itu perlu ditutup dari uang masuk yang melebihi perkiraan, atau
@@ -768,7 +787,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <p className="mt-4 text-xs text-slate-500">
                       Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, masih di
                       dalam kemampuan kas bulan ini{' '}
-                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal.
+                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal
+                      {rencana.cadanganGaji > 0 && ' (sesudah menyisihkan gaji bulan depan)'}.
                     </p>
                   )}
 

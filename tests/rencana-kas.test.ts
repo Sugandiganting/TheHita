@@ -660,3 +660,47 @@ test('total terpakai yang memotong kas tetap hanya yang sesudah posisi kas', () 
   assert.equal(dariRab.terpakai, ikutPorsi.terpakai);
   assert.equal(dariRab.skenario.NORMAL.bolehBelanja, ikutPorsi.skenario.NORMAL.bolehBelanja);
 });
+
+test('gaji bulan depan disisihkan dari plafon belanja', () => {
+  const tanpa = hitungRencana(rapat9Okt);
+  const dengan = hitungRencana({ ...rapat9Okt, kebutuhanGaji: jt(125) });
+
+  assert.equal(dengan.cadanganGaji, jt(125));
+  assert.equal(keJt(dengan.skenario.NORMAL.bolehBelanja), keJt(tanpa.skenario.NORMAL.bolehBelanja - jt(125)));
+  // Berlaku untuk ketiga skenario, karena gajinya satu angka yang sama.
+  for (const s of ['PESIMIS', 'NORMAL', 'OPTIMIS'] as const) {
+    assert.equal(keJt(dengan.skenario[s].jatah), keJt(tanpa.skenario[s].jatah - jt(125)));
+  }
+});
+
+test('gaji bulan ini yang belum dibayar dan gaji bulan depan dikurangkan dua-duanya', () => {
+  // Keduanya pembayaran yang berbeda: komitmen adalah gaji bulan ini yang
+  // belum keluar, cadangan adalah gaji bulan depan yang belum jatuh tempo.
+  const r = hitungRencana({ ...rapat9Okt, kebutuhanGaji: jt(125) });
+  assert.equal(keJt(r.komitmenBelumBayar), 260.6, 'gaji bulan ini tetap di dalam komitmen');
+  assert.equal(r.cadanganGaji, jt(125));
+  assert.equal(
+    keJt(r.skenario.NORMAL.jatah),
+    keJt(rapat9Okt.saldoKas + r.skenario.NORMAL.sisaMasuk - jt(260.6) - jt(125)),
+  );
+});
+
+test('cadangan gaji ikut mengecilkan plafon mingguan dan jatah kategori', () => {
+  const tanpa = hitungRencana(rapat9Okt);
+  const dengan = hitungRencana({ ...rapat9Okt, kebutuhanGaji: jt(125) });
+
+  const maksTanpa = tanpa.minggu.reduce((t, m) => t + m.plafonDasar + m.tambahan, 0);
+  const maksDengan = dengan.minggu.reduce((t, m) => t + m.plafonDasar + m.tambahan, 0);
+  assert.ok(maksDengan < maksTanpa, 'plafon mingguan ikut turun');
+  assert.ok(dengan.jatahKas < tanpa.jatahKas, 'kemampuan kas yang dibandingkan ikut turun');
+});
+
+test('kebutuhan gaji negatif atau kosong tidak menambah plafon', () => {
+  const dasar = hitungRencana(rapat9Okt);
+  assert.equal(hitungRencana({ ...rapat9Okt, kebutuhanGaji: 0 }).cadanganGaji, 0);
+  assert.equal(hitungRencana({ ...rapat9Okt, kebutuhanGaji: -jt(50) }).cadanganGaji, 0);
+  assert.equal(
+    hitungRencana({ ...rapat9Okt, kebutuhanGaji: -jt(50) }).skenario.NORMAL.bolehBelanja,
+    dasar.skenario.NORMAL.bolehBelanja,
+  );
+});
