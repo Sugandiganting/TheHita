@@ -7,6 +7,7 @@
 import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
+import { barisBulan, type BarisBulan } from './bulanan';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
@@ -668,6 +669,11 @@ export type RencanaKasDetail = {
    * asalnya dari kolom yang sama, tidak seperti angka jurnal.
    */
   riwayatLaporan: { period: Period; masuk: number; hari: number }[];
+  /**
+   * Proyeksi dan kenyataan bulan demi bulan, dari beberapa bulan lalu sampai
+   * beberapa bulan ke depan. Dipakai grafik di kartu "Sedang mengarah ke mana".
+   */
+  bulanan: BarisBulan[];
   komitmen: { id: string; label: string; amount: number; dueDay: number | null; paid: boolean; recurring: boolean }[];
   kategori: {
     id: string; label: string; weight: number;
@@ -1074,6 +1080,28 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const kewajibanBulan = (p: Period) =>
     p === period ? kewajibanBulanIni : kewajibanPada(daftarKewajiban, p);
 
+  // Sembilan bulan: tiga ke belakang sebagai pembanding nyata, bulan berjalan,
+  // dan lima ke depan dari pola musim. Bulan lalu pun memakai proyeksi pola
+  // yang berlaku sekarang, jadi mendampingkannya dengan kenyataan sekaligus
+  // menguji polanya sendiri.
+  const bulanan = barisBulan({
+    period,
+    mundur: 3,
+    maju: 5,
+    proyeksi: (p) => Object.fromEntries(
+      SKENARIO.map((s) => [s, p === period ? dipakai[s] : proyeksiUntuk(s)(p)]),
+    ) as Record<Skenario, number>,
+    laporan: riwayatLaporan,
+    // Sengaja kosong selama jurnalnya belum tuntas dirapikan: satu bulan yang
+    // angkanya melenceng jauh akan menarik seluruh sumbu grafik dan membuat
+    // bulan-bulan lain gepeng. Bulan tanpa laporan lebih baik tidak berbatang
+    // sama sekali daripada berbatang yang salah. Kalau jurnalnya nanti sudah
+    // bisa dipercaya, kembalikan `riwayat` ke sini.
+    jurnal: [],
+    masukBulanIni: terakhir?.incomeToDate ?? null,
+    hariBulanIni: terakhir ? terakhir.date.getUTCDate() : null,
+  });
+
   // Kebutuhan gaji dipakai dua kali — menyisihkan cadangan di plafon belanja
   // dan menilai saldo akhir di ramalan — jadi dihitung sebelum keduanya.
   const usulanGaji = plan.commitments
@@ -1158,6 +1186,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     },
     riwayatMasuk: riwayat,
     riwayatLaporan,
+    bulanan,
     komitmen: plan.commitments.map((k) => ({
       id: k.id, label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid, recurring: k.recurring,
     })),

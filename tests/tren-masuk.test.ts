@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { batangTren, hariDalamBulan, hitungTren } from '../src/lib/tren-masuk';
+import { hariDalamBulan, hitungTren } from '../src/lib/tren-masuk';
 
 const jt = (n: number) => n * 1_000_000;
 const keJt = (n: number) => Math.round(n / 100_000) / 10;
@@ -101,37 +101,4 @@ test('pada hari terakhir bulan, kebutuhan per hari tidak dibagi nol', () => {
   assert.equal(t.sisaHari, 0);
   assert.equal(t.capaian.NORMAL.perHariSisa, 0);
   assert.ok(Number.isFinite(t.capaian.NORMAL.perHariSisa));
-});
-
-test('batang grafik memecah target jadi bagian berjalan dan sisanya', () => {
-  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
-  const batang = batangTren(t);
-
-  assert.deepEqual(batang.map((b) => b.skenario), ['PESIMIS', 'NORMAL', 'OPTIMIS']);
-
-  const normal = batang[1];
-  assert.equal(normal.targetSebulan, proyeksi.NORMAL);
-  // 12 dari 31 hari: bagian gelapnya 12/31 dari target sebulan.
-  assert.equal(keJt(normal.targetKini), keJt((proyeksi.NORMAL * 12) / 31));
-  assert.equal(keJt(normal.targetKini + normal.targetSisa), keJt(proyeksi.NORMAL));
-});
-
-test('uang masuk sama di ketiga kelompok — satu angka diuji ke tiga target', () => {
-  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
-  const batang = batangTren(t);
-  assert.deepEqual(new Set(batang.map((b) => b.masuk)), new Set([174_593_772]));
-});
-
-test('selisih batang sepakat dengan selisih normal yang dipakai kartu di atasnya', () => {
-  const t = hitungTren('2026-10', [{ hari: 12, masuk: 174_593_772 }], proyeksi)!;
-  const normal = batangTren(t).find((b) => b.skenario === 'NORMAL')!;
-  assert.equal(keJt(normal.selisih), keJt(t.selisihNormal));
-  assert.ok(normal.selisih > 0, 'lebih cepat daripada jadwal');
-});
-
-test('target yang sudah terlampaui tidak menyisakan batang abu bagian atas', () => {
-  const t = hitungTren('2026-10', [{ hari: 31, masuk: jt(400) }], proyeksi)!;
-  const pesimis = batangTren(t).find((b) => b.skenario === 'PESIMIS')!;
-  assert.equal(pesimis.targetSisa, 0, 'pada hari terakhir seluruh target sudah berjalan');
-  assert.ok(pesimis.masuk > pesimis.targetKini);
 });

@@ -10,8 +10,7 @@ import {
 import { barisMinggu } from '@/lib/minggu';
 import { pastikanBulanBerjalan } from '@/lib/rencana-berjalan';
 import { dariJurnal, lajuHarian } from '@/lib/laju-harian';
-import { batangTren } from '@/lib/tren-masuk';
-import { TrenBarChart } from '@/components/tren-bar';
+import { BulananChart } from '@/components/bulanan-chart';
 import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import type { SearchParams } from '@/lib/search-params';
@@ -242,8 +241,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.tren && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Uang masuk sampai laporan terakhir, dibandingkan dengan target ketiga skenario — target sampai tanggal itu, dan target sebulan penuhnya.">
-                    Sedang mengarah ke mana
+                  <SectionTitle hint="Tiap bulan dua batang: kiri proyeksinya, bertingkat pesimis–normal–optimis; kanan uang yang benar-benar masuk. Bulan-bulan ke depan memakai pola musim.">
+                    Proyeksi dan kenyataan, bulan demi bulan
                   </SectionTitle>
 
                   {(() => {
@@ -283,7 +282,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     );
                   })()}
 
-                  <TrenBarChart data={batangTren(data.tren)} hariTerakhir={data.tren.hariTerakhir} />
+                  <BulananChart data={data.bulanan} />
 
                   <div className="mt-4">
                     <CapaianTarget tren={data.tren} />
@@ -306,13 +305,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   </div>
 
                   <p className="mt-3 text-xs text-slate-500">
-                    Batang abu adalah targetnya: bagian gelap yang semestinya sudah masuk sampai
-                    tanggal laporan, bagian terang sisanya sampai akhir bulan. Batang biru melewati
-                    bagian gelap berarti berjalan lebih cepat daripada jadwal. Targetnya dianggap
-                    datang rata tiap hari, padahal uang masuk tidak begitu — akhir pekan, hari raya
-                    dan jadwal pembayaran OTA membuatnya bergelombang — jadi bacalah selisih yang
-                    lumayan, bukan beberapa juta. Pergerakan tiap minggunya ada di tabel{' '}
-                    <strong>Aturan mingguan</strong> di bawah.
+                    Batang abu satu bulan adalah proyeksinya, bertingkat: dasarnya pesimis, batas
+                    warna berikutnya normal, puncaknya optimis. Batang biru uang yang benar-benar
+                    masuk — pada bulan berjalan bagian pucatnya perkiraan sisa bulan, supaya
+                    tingginya sebanding padahal bulannya belum selesai. Bulan-bulan sebelum ini
+                    memakai pola musim yang berlaku sekarang pula, jadi kalau proyeksi selalu
+                    meleset ke satu arah, di situlah paling mudah terlihat. Uang masuk bulan lalu
+                    diambil dari laporan posisi kas terakhir bulan itu, jadi bisa belum mencakup
+                    beberapa hari terakhirnya.
                   </p>
                 </Card>
               )}

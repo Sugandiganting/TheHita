@@ -13,7 +13,7 @@
  * belanja minggu ini boleh dilonggarkan.
  */
 
-import { NAMA_SKENARIO, SKENARIO, type Skenario } from './rencana-kas';
+import { SKENARIO, type Skenario } from './rencana-kas';
 import type { Period } from './period';
 
 export type LaporanMasuk = {
@@ -36,15 +36,6 @@ export type Capaian = {
   /** Rata-rata yang harus masuk tiap hari tersisa agar targetnya tercapai. */
   perHariSisa: number;
   tercapai: boolean;
-  /**
-   * Yang semestinya sudah masuk sampai tanggal laporan terakhir — target
-   * sebulan dibagi rata ke seluruh hari. Inilah pembanding yang menjawab
-   * "sedang di depan atau di belakang", sedangkan `target` menjawab "masih
-   * kurang berapa sampai akhir bulan".
-   */
-  targetKini: number;
-  /** Uang masuk dikurangi targetKini. Minus berarti tertinggal. */
-  selisihKini: number;
 };
 
 export type Tren = {
@@ -136,15 +127,12 @@ export function hitungTren(
     SKENARIO.map((s) => {
       const target = proyeksi[s];
       const kurang = Math.max(0, target - akhir.masuk);
-      const targetKini = target * porsiHari;
       return [s, {
         target,
         persen: target > 0 ? akhir.masuk / target : 0,
         kurang,
         perHariSisa: sisaHari > 0 ? kurang / sisaHari : 0,
         tercapai: kurang === 0,
-        targetKini,
-        selisihKini: akhir.masuk - targetKini,
       }];
     }),
   ) as Record<Skenario, Capaian>;
@@ -163,49 +151,4 @@ export function hitungTren(
     sisaHari,
     capaian,
   };
-}
-
-/**
- * Baris untuk grafik batang: satu kelompok per skenario.
- *
- * Grafik garis sebelumnya menggambar empat garis yang berangkat dari titik
- * yang sama dan nyaris sejajar sampai akhir bulan. Bentuk itu memang memuat
- * laju harian, tetapi untuk menjawab pertanyaan yang sebenarnya ditanyakan —
- * "sudah cukup belum dibanding targetnya" — mata harus menaksir jarak antar
- * garis yang hanya beberapa piksel. Batang menjawabnya langsung: satu batang
- * target, satu batang kenyataan, bersebelahan.
- *
- * Targetnya dipecah dua supaya satu kelompok menjawab dua pertanyaan
- * sekaligus. Bagian bawah adalah yang semestinya sudah masuk sampai tanggal
- * laporan; bagian atas sisanya sampai akhir bulan. Jadi batang biru yang
- * melewati bagian bawah berarti berjalan lebih cepat daripada jadwal,
- * sementara tinggi seluruh batang abu tetap menunjukkan target sebulannya.
- */
-export type BatangTren = {
-  skenario: Skenario;
-  nama: string;
-  /** Yang semestinya sudah masuk sampai tanggal laporan terakhir. */
-  targetKini: number;
-  /** Sisanya sampai akhir bulan — targetSebulan dikurangi targetKini. */
-  targetSisa: number;
-  targetSebulan: number;
-  /** Uang masuk sebenarnya. Sama untuk ketiga skenario. */
-  masuk: number;
-  /** masuk − targetKini. Minus berarti tertinggal dari jadwal. */
-  selisih: number;
-};
-
-export function batangTren(tren: Tren): BatangTren[] {
-  return SKENARIO.map((s) => {
-    const c = tren.capaian[s];
-    return {
-      skenario: s,
-      nama: NAMA_SKENARIO[s],
-      targetKini: c.targetKini,
-      targetSisa: Math.max(0, c.target - c.targetKini),
-      targetSebulan: c.target,
-      masuk: tren.masukTerakhir,
-      selisih: c.selisihKini,
-    };
-  });
 }
