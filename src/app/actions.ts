@@ -1145,22 +1145,41 @@ export async function saveSpend(_prev: ActionState, formData: FormData): Promise
   segarkanRencanaKas();
 
   const pesan = mode === 'SETEL' ? 'Total belanja disetel ulang.' : 'Belanja ditambahkan.';
+  const catatan: string[] = [];
+
+  // Laporan dilipat menurut tanggal kejadiannya, bukan urutan pengetikan, dan
+  // SETEL mengganti seluruh total pada titik itu. Jadi laporan yang diketik
+  // belakangan tetapi bertanggal lebih lama akan tertimpa oleh SETEL yang
+  // tanggalnya lebih baru — dan sama sekali tidak mengubah angkanya. Itu
+  // keadaan yang paling sering terjadi saat membetulkan salah ketik, dan tanpa
+  // diberitahu yang terlihat hanyalah pesan berhasil di samping angka yang
+  // tidak bergerak.
+  const penimpa = await prisma.spendEntry.findFirst({
+    where: { categoryId, mode: 'SETEL', date: { gt: date } },
+    orderBy: { date: 'asc' },
+    select: { date: true },
+  });
+  if (penimpa) {
+    catatan.push(
+      `Tetapi di kategori ini ada laporan "setel ulang" bertanggal lebih baru `
+      + `(${formatTanggal(penimpa.date)}), dan itulah yang menentukan totalnya — angka ini `
+      + 'tidak mengubahnya. Hapus laporan yang lebih baru itu di tabel Laporan belanja bila '
+      + 'yang ini yang benar.',
+    );
+  }
 
   // Belanja yang tanggalnya tidak melewati posisi kas dianggap sudah termasuk
-  // dalam saldo yang dilaporkan, jadi ia tidak menggerakkan plafon sama sekali.
-  // Tanpa diberitahu, yang terlihat hanyalah pesan berhasil di samping angka
-  // yang tidak berubah — dan itu terbaca seperti kerusakan.
+  // dalam saldo yang dilaporkan, jadi ia tidak menggerakkan plafon kas.
   if (posisi && date.getTime() <= posisi.date.getTime()) {
-    return {
-      ok: true,
-      warn: true,
-      message: `${pesan} Tanggalnya tidak melewati posisi kas terakhir `
-        + `(${formatTanggal(posisi.date)}), jadi belanja ini dianggap sudah termasuk dalam saldo `
-        + 'yang dilaporkan dan tidak mengurangi angka boleh belanja lagi. Sisa jatah '
-        + 'kategorinya tetap terpotong seperti biasa.',
-    };
+    catatan.push(
+      `Tanggalnya juga tidak melewati posisi kas terakhir (${formatTanggal(posisi.date)}), jadi `
+      + 'belanja ini dianggap sudah termasuk dalam saldo yang dilaporkan dan tidak mengurangi '
+      + 'angka boleh belanja lagi.',
+    );
   }
-  return ok(pesan);
+
+  if (catatan.length === 0) return ok(pesan);
+  return { ok: true, warn: true, message: `${pesan} ${catatan.join(' ')}` };
 }
 
 export async function deleteSpend(_prev: ActionState, formData: FormData): Promise<ActionState> {

@@ -872,8 +872,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {/* Laporan yang sudah ditimpa "setel ulang" berikutnya tidak lagi
+                        ikut menentukan total. Tanpa ditandai, ia terbaca seperti masih
+                        dihitung — dan itu persis yang membuat pembetulan salah ketik
+                        terlihat tidak berpengaruh. */}
                     {data.belanja.map((e) => (
-                      <tr key={e.id} className={e.sebelumPosisi ? 'text-slate-400' : ''}>
+                      <tr
+                        key={e.id}
+                        className={e.terabaikan || e.sebelumPosisi ? 'text-slate-400' : ''}
+                      >
                         <td className="td whitespace-nowrap">{formatDate(e.date)}</td>
                         <td className="td">{e.categoryLabel}</td>
                         <td className="td">
@@ -881,11 +888,15 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                             {e.mode === 'SETEL' ? 'Setel ulang' : 'Tambah'}
                           </Badge>
                         </td>
-                        <td className="td num">{formatRupiah(e.amount)}</td>
+                        <td className={`td num ${e.terabaikan ? 'line-through' : ''}`}>
+                          {formatRupiah(e.amount)}
+                        </td>
                         <td className="td text-xs">
-                          {e.sebelumPosisi
-                            ? 'Sudah termasuk di saldo kas yang dilaporkan'
-                            : e.notes ?? '—'}
+                          {e.terabaikan
+                            ? 'Sudah ditimpa setel ulang yang lebih baru'
+                            : e.sebelumPosisi
+                              ? 'Sudah termasuk di saldo kas yang dilaporkan'
+                              : e.notes ?? '—'}
                         </td>
                         <td className="td num"><SpendDelete id={e.id} /></td>
                       </tr>

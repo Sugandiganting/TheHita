@@ -683,6 +683,11 @@ export type RencanaKasDetail = {
     amount: number; mode: ModeBelanja; notes: string | null;
     /** Sudah tercermin pada saldo kas yang dilaporkan, jadi tidak mengurangi plafon. */
     sebelumPosisi: boolean;
+    /**
+     * Ada "setel ulang" bertanggal lebih baru di kategori yang sama, jadi
+     * laporan ini tidak lagi ikut menentukan totalnya.
+     */
+    terabaikan: boolean;
   }[];
   asumsi: {
     monthlyOutflow: number | null;
@@ -983,8 +988,23 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     mode: e.mode as ModeBelanja,
     notes: e.notes,
     sebelumPosisi: batas !== null && e.date <= batas,
+    /** Diisi di bawah, setelah letak SETEL terakhir tiap kategori diketahui. */
+    terabaikan: false,
     urut: i,
   }));
+
+  // Laporan yang berada sebelum "setel ulang" terakhir di kategorinya tidak
+  // lagi menentukan apa pun — SETEL mengganti seluruh total pada titik itu.
+  // Ditandai supaya laporan lama yang tertinggal tidak terbaca seolah masih
+  // ikut dihitung.
+  const setelTerakhir = new Map<string, number>();
+  belanja.forEach((e, i) => {
+    if (e.mode === 'SETEL') setelTerakhir.set(e.categoryId, i);
+  });
+  for (const e of belanja) {
+    const batasSetel = setelTerakhir.get(e.categoryId);
+    e.terabaikan = batasSetel !== undefined && e.urut < batasSetel;
+  }
 
   const terpakaiKategori = (id: string, hanyaSetelahPosisi: boolean) =>
     lipatBelanja(
