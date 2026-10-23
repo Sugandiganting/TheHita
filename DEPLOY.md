@@ -232,18 +232,54 @@ sesekali — misalnya tiap tutup bulan — dan simpan berkasnya di tempat lain.
 
 ### Memperbarui aplikasi
 
+Satu perintah:
+
 ```bash
-su - hita
-cd app
-git pull
-npm ci
-npm run build
-exit
-systemctl restart hita
+sudo bash /home/hita/app/deploy/perbarui.sh
 ```
 
-Basis datanya tidak tersentuh. Kalau ada perubahan struktur tabel,
-`npm run build` menyesuaikannya sendiri.
+Urutannya: basis data dicadangkan dulu, baru versi barunya ditarik, dipasang,
+dan dibangun. **Layanannya hanya dinyalakan ulang bila pembangunannya
+berhasil** — jadi kegagalan di tengah tidak pernah membuat aplikasinya mati,
+versi lama tetap melayani. Setelah menyala, alamatnya dicoba sampai menjawab;
+kalau tidak, catatan layanannya ikut ditampilkan beserta perintah untuk kembali
+ke versi sebelumnya.
+
+Basis datanya tidak tersentuh. Perubahan struktur tabel disesuaikan sendiri,
+karena langkah itu sudah menempel pada `npm run build`.
+
+Tidak ada versi baru? Skripnya berhenti dan mengatakannya. Tambahkan `--paksa`
+untuk tetap membangun ulang.
+
+### Memperbarui dari GitHub, tanpa membuka terminal
+
+Ada juga `.github/workflows/perbarui-vps.yml`: buka tab **Actions** di GitHub,
+pilih **Perbarui VPS**, tekan **Run workflow**. Ia menyambung ke server lewat
+SSH lalu menjalankan skrip yang sama.
+
+Perlu disiapkan sekali di **Settings → Secrets and variables → Actions**:
+
+| Rahasia | Isi |
+| --- | --- |
+| `VPS_HOST` | alamat IP server |
+| `VPS_USER` | pengguna yang boleh `sudo`, biasanya `root` |
+| `VPS_SSH_KEY` | kunci privat SSH, isi berkasnya |
+| `VPS_HOST_KEY` | keluaran `ssh-keyscan <host>` — boleh kosong, tetapi sangat disarankan |
+
+Buat kunci khusus untuk ini, jangan memakai kunci pribadi:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/hita-deploy -C "github-deploy" -N ""
+ssh-copy-id -i ~/.ssh/hita-deploy.pub root@ALAMAT-IP
+cat ~/.ssh/hita-deploy          # isinya yang ditempel ke VPS_SSH_KEY
+ssh-keyscan ALAMAT-IP           # keluarannya ke VPS_HOST_KEY
+```
+
+**Pertimbangkan dulu.** Menaruh kunci SSH di GitHub berarti siapa pun yang
+bisa masuk ke akun GitHub itu bisa masuk ke server. Untuk satu orang yang
+punya akses terminal, menjalankan satu perintah di atas sudah cukup dan lebih
+sedikit yang bisa salah. Sengaja pula ia hanya berjalan saat ditekan, bukan
+tiap kali ada push: yang memutuskan kapan versi baru naik sebaiknya orang.
 
 ### Melihat catatan
 

@@ -1,0 +1,59 @@
+# Memperbarui VPS dari GitHub, tanpa membuka terminal sendiri.
+#
+# Dijalankan dengan menekan "Run workflow" di tab Actions — sengaja tidak
+# otomatis tiap kali ada push. Aplikasi ini memegang angka yang dipakai
+# mengambil keputusan belanja, jadi yang memutuskan kapan versi baru naik
+# sebaiknya orang, bukan jadwal. Untuk menjadikannya otomatis, tambahkan:
+#
+#   push:
+#     branches: [main]
+#
+# Perlu tiga rahasia di Settings > Secrets and variables > Actions:
+#   VPS_HOST      alamat IP atau nama host
+#   VPS_USER      pengguna yang boleh sudo — biasanya root
+#   VPS_SSH_KEY   kunci privat SSH (isi berkas, bukan nama berkasnya)
+#
+# Satu lagi yang sangat disarankan, meski boleh dikosongkan:
+#   VPS_HOST_KEY  keluaran "ssh-keyscan <host>" di komputer yang dipercaya.
+#                 Tanpa ini, sidik jari server diterima apa adanya pada
+#                 sambungan pertama — cukup untuk dipakai, tetapi tidak
+#                 melindungi dari penyusup yang menyamar jadi server.
+name: Perbarui VPS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Dua pembaruan yang berjalan bersamaan akan saling menimpa di tengah
+  # "npm ci"; yang kedua menunggu sampai yang pertama selesai.
+  group: perbarui-vps
+  cancel-in-progress: false
+
+jobs:
+  perbarui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Jalankan pembaruan lewat SSH
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          PENGGUNA: ${{ secrets.VPS_USER }}
+          KUNCI: ${{ secrets.VPS_SSH_KEY }}
+          SIDIK: ${{ secrets.VPS_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST" || { echo "Rahasia VPS_HOST belum diisi." >&2; exit 1; }
+          test -n "$PENGGUNA" || { echo "Rahasia VPS_USER belum diisi." >&2; exit 1; }
+          test -n "$KUNCI" || { echo "Rahasia VPS_SSH_KEY belum diisi." >&2; exit 1; }
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KUNCI" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$SIDIK" ]; then
+            printf '%s\n' "$SIDIK" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$PENGGUNA@$HOST" \
+            'sudo bash /home/hita/app/deploy/perbarui.sh'
