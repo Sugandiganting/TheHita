@@ -1138,9 +1138,18 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
             <SectionTitle hint="Berapa yang sudah dibelanjakan sejak posisi kas terakhir.">
               Catat belanja
             </SectionTitle>
+            {/* Angka di daftar pilihan harus angka yang sama dengan kolom
+                "Sudah dipakai" di tabel kategori. Sebelumnya ia selalu
+                menampilkan belanja sejak posisi kas, padahal jatah dari RAB
+                dipotong seluruh belanja bulan ini — dua angka berbeda dengan
+                satu nama, dan yang satu terbaca nol padahal yang lain tidak. */}
             <SpendForm
               planId={data.id}
-              kategori={data.kategori.map((k) => ({ id: k.id, label: k.label, terpakai: k.terpakai }))}
+              kategori={data.kategori.map((k, i) => ({
+                id: k.id,
+                label: k.label,
+                terpakai: rencana?.kategori[i]?.terpakai ?? k.terpakai,
+              }))}
               defaultDate={tanggalBawaan}
             />
           </Card>

@@ -1126,9 +1126,12 @@ export async function saveSpend(_prev: ActionState, formData: FormData): Promise
   if (!Number.isFinite(amount) || amount < 0) return fail('Nominal tidak boleh negatif.');
   if (mode === 'TAMBAH' && amount === 0) return fail('Nominal harus lebih dari nol.');
 
-  const [plan, kategori] = await Promise.all([
+  const [plan, kategori, posisi] = await Promise.all([
     prisma.cashPlan.findUnique({ where: { id: planId }, select: { period: true } }),
     prisma.spendCategory.findUnique({ where: { id: categoryId }, select: { planId: true } }),
+    prisma.cashCheckpoint.findFirst({
+      where: { planId }, orderBy: { date: 'desc' }, select: { date: true },
+    }),
   ]);
   if (!plan) return fail('Rencana kas tidak ditemukan.');
   if (!kategori || kategori.planId !== planId) return fail('Kategori bukan milik rencana ini.');
@@ -1140,7 +1143,24 @@ export async function saveSpend(_prev: ActionState, formData: FormData): Promise
     data: { planId, categoryId, date, amount, mode, notes: String(formData.get('notes') ?? '').trim() || null },
   });
   segarkanRencanaKas();
-  return ok(mode === 'SETEL' ? 'Total belanja disetel ulang.' : 'Belanja ditambahkan.');
+
+  const pesan = mode === 'SETEL' ? 'Total belanja disetel ulang.' : 'Belanja ditambahkan.';
+
+  // Belanja yang tanggalnya tidak melewati posisi kas dianggap sudah termasuk
+  // dalam saldo yang dilaporkan, jadi ia tidak menggerakkan plafon sama sekali.
+  // Tanpa diberitahu, yang terlihat hanyalah pesan berhasil di samping angka
+  // yang tidak berubah — dan itu terbaca seperti kerusakan.
+  if (posisi && date.getTime() <= posisi.date.getTime()) {
+    return {
+      ok: true,
+      warn: true,
+      message: `${pesan} Tanggalnya tidak melewati posisi kas terakhir `
+        + `(${formatTanggal(posisi.date)}), jadi belanja ini dianggap sudah termasuk dalam saldo `
+        + 'yang dilaporkan dan tidak mengurangi plafon kas lagi. Ia tetap memotong sisa pada '
+        + 'kategori yang jatahnya diketik dari RAB.',
+    };
+  }
+  return ok(pesan);
 }
 
 export async function deleteSpend(_prev: ActionState, formData: FormData): Promise<ActionState> {
