@@ -671,7 +671,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Yang dipotong hanya belanja sesudah tanggal posisi kas: jatah − dipakai = sisa. Belanja sebelum tanggal itu sudah keluar dari saldo yang dilaporkan, jadi tidak dipotong dua kali.">
+                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya, dan seluruh belanja bulan ini memotongnya: jatah − dipakai = sisa. Baris yang jatahnya belum ditetapkan masih dibagi dari saldo kas, jadi yang dipotong hanya belanja sesudah tanggal posisi kas — sisanya sudah keluar dari saldo itu.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
@@ -687,7 +687,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         <tr>
                           <th className="th">Kategori</th>
                           <th className="th num">Jatah bulan ini</th>
-                          <th className="th num">Dipakai sejak posisi kas</th>
+                          <th className="th num">Sudah dipakai</th>
                           <th className="th num">Sisa</th>
                           <th className="th num">Plafon/minggu</th>
                           <th className="th num">Aksi</th>
@@ -697,7 +697,11 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         {rencana.kategori.map((k, i) => {
                           const sumber = data.kategori[i];
                           const sisa = k.sisa;
-                          const sudahDiSaldo = (sumber?.terpakaiBulanIni ?? 0) - k.terpakai;
+                          // Hanya berarti untuk jatah yang dibagi dari saldo kas; jatah
+                          // dari RAB sudah memotong seluruh belanja bulan ini.
+                          const sudahDiSaldo = k.dasarPotong === 'SEJAK_POSISI'
+                            ? (sumber?.terpakaiBulanIni ?? 0) - k.terpakai
+                            : 0;
                           return (
                             <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
                               <td className="td">{k.label}</td>
@@ -744,7 +748,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         <tr>
                           <td className="td">Total</td>
                           <td className="td num">{formatRupiah(rencana.jatahKategori)}</td>
-                          <td className="td num">{formatRupiah(rencana.terpakai)}</td>
+                          <td className="td num">
+                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.terpakai, 0))}
+                          </td>
                           <td className="td num">
                             {formatRupiah(rencana.kategori.reduce((t, k) => t + k.sisa, 0))}
                           </td>
@@ -781,10 +787,20 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <strong>
                       {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
                     </strong>
-                    . Yang memotong kolom sisa hanya{' '}
-                    <strong>{formatRupiah(rencana.terpakai)}</strong>, yaitu yang terjadi setelah
-                    tanggal posisi kas. Belanja sebelum tanggal itu sudah keluar dari saldo yang
-                    dilaporkan, jadi memotongnya di sini berarti menghitung uang yang sama dua kali.
+                    , yang memotong kolom sisa{' '}
+                    <strong>
+                      {formatRupiah(rencana.kategori.reduce((t, k) => t + k.terpakai, 0))}
+                    </strong>
+                    .
+                    {rencana.kategori.some((k) => k.dasarPotong === 'SEJAK_POSISI') && (
+                      <>
+                        {' '}Selisihnya ada pada baris yang jatahnya belum ditetapkan: jatah itu
+                        dibagi dari saldo kas yang dilaporkan, dan belanja sebelum tanggal posisi
+                        kas sudah keluar dari saldo tersebut — memotongnya sekali lagi di sini
+                        berarti menghitung uang yang sama dua kali. Begitu jatahnya diketik dari
+                        RAB, seluruh belanja bulan ini yang memotongnya.
+                      </>
+                    )}
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">

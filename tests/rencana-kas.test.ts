@@ -610,3 +610,54 @@ test('jatah nol tetap dianggap ditetapkan, bukan kosong', () => {
   assert.equal(r.kategori[0].ditetapkan, true);
   assert.equal(r.kategori[0].jatah, 0);
 });
+
+test('jatah dari RAB dipotong seluruh belanja bulan ini, bukan hanya sesudah posisi kas', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [{
+      label: 'Purchasing', weight: 20, jatah: jt(125.4),
+      terpakai: jt(12.5), terpakaiBulanIni: jt(96),
+    }],
+  });
+
+  const k = r.kategori[0];
+  assert.equal(k.dasarPotong, 'BULAN_INI');
+  assert.equal(k.terpakai, jt(96), 'yang dipotong seluruh belanja bulan ini');
+  assert.equal(k.sisa, jt(125.4) - jt(96));
+});
+
+test('jatah yang masih ikut porsi hanya dipotong belanja sesudah posisi kas', () => {
+  const r = hitungRencana({
+    ...rapat9Okt,
+    kategori: [{ label: 'Purchasing', weight: 20, terpakai: jt(12.5), terpakaiBulanIni: jt(96) }],
+  });
+
+  const k = r.kategori[0];
+  assert.equal(k.dasarPotong, 'SEJAK_POSISI');
+  assert.equal(k.terpakai, jt(12.5), 'belanja sebelum posisi kas sudah ada di saldonya');
+  assert.equal(k.sisa, k.jatah - jt(12.5));
+});
+
+test('total terpakai yang memotong kas tetap hanya yang sesudah posisi kas', () => {
+  // Sisi kas tidak boleh ikut berubah: saldo yang dilaporkan sudah memuat
+  // belanja sebelum tanggal itu, apa pun yang dipakai tabel kategori.
+  // Tanpa total yang dipasang sendiri, supaya angkanya benar-benar diturunkan
+  // dari rincian kategorinya.
+  const dariRab = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [{
+      label: 'Purchasing', weight: 20, jatah: jt(125.4),
+      terpakai: jt(12.5), terpakaiBulanIni: jt(96),
+    }],
+  });
+  const ikutPorsi = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [{ label: 'Purchasing', weight: 20, terpakai: jt(12.5), terpakaiBulanIni: jt(96) }],
+  });
+
+  assert.equal(dariRab.terpakai, jt(12.5));
+  assert.equal(dariRab.terpakai, ikutPorsi.terpakai);
+  assert.equal(dariRab.skenario.NORMAL.bolehBelanja, ikutPorsi.skenario.NORMAL.bolehBelanja);
+});

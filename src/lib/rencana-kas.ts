@@ -61,6 +61,8 @@ export type Kategori = {
   weight: number;
   /** Yang sudah dibelanjakan kategori ini setelah tanggal posisi kas. */
   terpakai?: number;
+  /** Yang sudah dibelanjakan sejak awal bulan, termasuk sebelum posisi kas. */
+  terpakaiBulanIni?: number;
 };
 
 export type Masukan = {
@@ -122,6 +124,16 @@ export type PorsiKategori = {
   jatah: number;
   /** Jatahnya diketik sendiri, bukan hasil pembagian menurut porsi. */
   ditetapkan: boolean;
+  /**
+   * Belanja mana yang dipotong dari jatahnya.
+   *
+   * Jatah yang diketik sendiri berasal dari RAB, bukan dari saldo kas, jadi
+   * seluruh belanja bulan ini memotongnya — pertanyaannya "RAB-nya sisa
+   * berapa". Jatah yang masih dibagi menurut porsi berasal dari saldo yang
+   * dilaporkan, dan saldo itu sudah berkurang oleh belanja sebelum tanggal
+   * posisi kas; memotongnya lagi berarti menghitung uang yang sama dua kali.
+   */
+  dasarPotong: 'BULAN_INI' | 'SEJAK_POSISI';
   terpakai: number;
   /** jatah − terpakai. Minus berarti kategori ini sudah lewat jatahnya. */
   sisa: number;
@@ -348,14 +360,17 @@ export function hitungRencana(m: Masukan): Rencana {
   const jatahKas = Math.max(0, skenario.NORMAL.jatah);
   const bagianJatah = bagiProporsional(jatahKas, bobotKategori);
   const kategori: PorsiKategori[] = m.kategori.map((k, i) => {
-    const dipakai = k.terpakai ?? 0;
     const ditetapkan = k.jatah != null && k.jatah >= 0;
+    const dipakai = ditetapkan
+      ? k.terpakaiBulanIni ?? k.terpakai ?? 0
+      : k.terpakai ?? 0;
     const jatah = ditetapkan ? (k.jatah as number) : bagianJatah[i];
     const sisa = jatah - dipakai;
     return {
       label: k.label,
       jatah,
       ditetapkan,
+      dasarPotong: ditetapkan ? ('BULAN_INI' as const) : ('SEJAK_POSISI' as const),
       terpakai: dipakai,
       sisa,
       // Dinolkan saat jatahnya sudah terlampaui: "boleh belanja minus tiga

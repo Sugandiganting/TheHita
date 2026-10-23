@@ -1069,7 +1069,11 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         // Total terpakai diturunkan dari rinciannya, jadi keduanya tidak bisa
         // berbeda — dan kategori yang terhapus tidak meninggalkan selisih.
         kategori: kategori.map((k) => ({
-          label: k.label, weight: k.weight, jatah: k.budget, terpakai: k.terpakai,
+          label: k.label,
+          weight: k.weight,
+          jatah: k.budget,
+          terpakai: k.terpakai,
+          terpakaiBulanIni: k.terpakaiBulanIni,
         })),
       })
     : null;
