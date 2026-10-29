@@ -12,8 +12,9 @@ import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
-  HORIZON_BULAN, SKENARIO, hitungRencana, hitungRunway, lipatBelanja, usulkanProyeksi,
-  type ModeBelanja, type Rencana, type Runway, type Skenario,
+  HORIZON_BULAN, SKENARIO, hitungRencana, hitungRunway, lajuOperasionalBerjalan,
+  lipatBelanja, usulkanProyeksi,
+  type LajuOperasional, type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 import {
   dasarAcuan, polaBervariasi, proyeksiBulan, type Musim, type PolaMusim,
@@ -701,6 +702,12 @@ export type RencanaKasDetail = {
     salaryNeed: number | null;
     usulanOutflow: number | null;
     usulanGaji: number | null;
+    /**
+     * Laju belanja operasional harian yang terukur dari bulan berjalan, dipakai
+     * meramalkan sisa bulan ini. null bila belum layak diukur — bulan masih
+     * terlalu muda, atau bulan sebelumnya belum pernah dilaporkan.
+     */
+    lajuBerjalan: LajuOperasional | null;
   };
   runway: Record<Skenario, Runway> | null;
   /**
@@ -1010,6 +1017,14 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     return c ? [{ period: p.period, masuk: c.incomeToDate, hari: c.date.getUTCDate() }] : [];
   });
 
+  // Saldo akhir bulan tepat sebelum ini — pembanding untuk mengukur berapa
+  // yang sudah keluar bulan ini. Hanya bulan yang bersebelahan yang dipakai:
+  // melompati bulan yang tidak pernah dilaporkan menghasilkan uang keluar dua
+  // bulan yang terbaca sebagai sebulan.
+  const bulanLalu = addMonths(period, -1);
+  const saldoAkhirBulanLalu = planSebelumnya
+    .find((p) => p.period === bulanLalu)?.checkpoints[0]?.cashOnHand ?? null;
+
   // Belanja yang sudah tercermin pada saldo yang dilaporkan tidak boleh
   // mengurangi plafon lagi — kalau ikut dikurangi, uang yang sama dihitung dua
   // kali dan anggarannya mengecil tanpa sebab.
@@ -1173,6 +1188,23 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     : null;
   const outflow = plan.monthlyOutflow ?? usulanOutflow;
 
+  // Sisa bulan berjalan diramalkan dari laju yang terukur bulan ini, bukan
+  // dari angka bulanan yang dibagi rata. Komitmen yang sudah dibayar — gaji,
+  // cicilan bank — dikeluarkan dari hitungan karena jatuh pada satu tanggal,
+  // bukan mengalir tiap hari.
+  const komitmenTerbayar = plan.commitments
+    .filter((k) => k.paid)
+    .reduce((t, k) => t + k.amount, 0);
+  const laju = terakhir
+    ? lajuOperasionalBerjalan({
+        saldoAwal: saldoAkhirBulanLalu,
+        saldoKini: terakhir.cashOnHand,
+        masukSampaiKini: terakhir.incomeToDate,
+        hari: terakhir.date.getUTCDate(),
+        komitmenTerbayar,
+      })
+    : null;
+
   const runway = rencana && outflow !== null
     ? (Object.fromEntries(
         SKENARIO.map((sk) => [
@@ -1191,6 +1223,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             kebutuhanGaji: gaji,
             cicilanPada: cicilanBulan,
             kewajibanPada: kewajibanBulan,
+            lajuOperasionalHarian: laju?.perHari ?? null,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
@@ -1226,6 +1259,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       salaryNeed: plan.salaryNeed,
       usulanOutflow,
       usulanGaji,
+      lajuBerjalan: laju,
     },
     runway,
     // Tiap posisi kas membawa uang masuk kumulatif pada tanggalnya; itu sudah

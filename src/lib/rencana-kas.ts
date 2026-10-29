@@ -422,6 +422,13 @@ export function lipatBelanja(entri: EntriBelanja[]): number {
 export const HORIZON_BULAN = 12;
 
 /**
+ * Hari terkecil sebelum laju belanja bulan berjalan boleh dipercaya. Di bawah
+ * ini satu pembelian besar masih bisa menggandakan laju hariannya, jadi angka
+ * yang diketik lebih aman dipakai.
+ */
+export const MINIMAL_HARI_LAJU = 7;
+
+/**
  * Kapan kas habis bila pola belanja tidak berubah.
  *
  * Pertanyaan ini sengaja dijawab dengan model yang berbeda dari plafon
@@ -430,6 +437,78 @@ export const HORIZON_BULAN = 12;
  * diikuti dan belanja berjalan seperti bulan-bulan kemarin". Keduanya memang
  * harus berbeda — yang satu rencana, yang satu peringatan.
  */
+/**
+ * Laju belanja operasional per hari, DIUKUR dari bulan yang sedang berjalan.
+ *
+ * Selama ini sisa bulan berjalan diramalkan dengan membagi rata angka
+ * pengeluaran bulanan yang diketik. Padahal bulan ini sudah berjalan dan
+ * sudah meninggalkan jejak yang jauh lebih bisa dipercaya: selisih saldo bank
+ * terhadap akhir bulan lalu. Dua angka yang memang diketik tiap minggu sudah
+ * cukup — saldo dan uang masuk kumulatif — persis seperti di Arus Kas Bulanan:
+ *
+ *   keluar sampai kini = masuk − (saldo kini − saldo akhir bulan lalu)
+ *
+ * Yang dicari hanyalah bagian OPERASIONAL-nya, yaitu belanja yang mengalir
+ * tiap hari. Komitmen yang sudah dibayar — gaji, cicilan bank — dikeluarkan
+ * dulu: nominalnya besar dan jatuh pada satu tanggal, jadi membaginya rata ke
+ * seluruh hari akan melambungkan laju harian dan membuat sisa bulan terlihat
+ * jauh lebih mahal daripada kenyataannya. Komitmen yang belum dibayar tetap
+ * dihitung terpisah di tempatnya sendiri, lengkap dengan tanggalnya.
+ *
+ * Mengembalikan null bila belum layak diukur. Itu bukan kegagalan melainkan
+ * jawaban: di awal bulan satu pembelian besar bisa membuat laju harian
+ * melonjak berlipat, dan ramalan yang percaya diri atas tiga hari data lebih
+ * berbahaya daripada ramalan yang mengaku belum tahu.
+ */
+export type LajuOperasional = {
+  /** Rupiah per hari. */
+  perHari: number;
+  /** Banyak hari yang terukur — tanggal laporan posisi kas terakhir. */
+  hari: number;
+  /** Seluruh uang keluar bulan ini sampai tanggal itu, komitmen termasuk. */
+  keluarSampaiKini: number;
+  /** Komitmen terbayar yang dikeluarkan dari hitungan laju. */
+  komitmenTerbayar: number;
+};
+
+export function lajuOperasionalBerjalan(m: {
+  /** Saldo akhir bulan sebelumnya. null bila bulan itu tidak pernah dilaporkan. */
+  saldoAwal: number | null;
+  saldoKini: number;
+  masukSampaiKini: number;
+  /** Tanggal laporan posisi kas terakhir, dipakai sebagai banyak hari terukur. */
+  hari: number;
+  /** Komitmen yang sudah dibayar bulan ini, berulang maupun sekali ini. */
+  komitmenTerbayar: number;
+  /** Hari terkecil yang masih dianggap layak diukur. */
+  minimalHari?: number;
+}): LajuOperasional | null {
+  const { saldoAwal, saldoKini, masukSampaiKini, hari, komitmenTerbayar } = m;
+  const minimalHari = m.minimalHari ?? MINIMAL_HARI_LAJU;
+
+  // Tanpa saldo akhir bulan lalu tidak ada pembanding, jadi tidak ada yang
+  // bisa diukur. Melompati bulan yang tidak dilaporkan akan menghasilkan
+  // keluar dua bulan yang terbaca sebagai keluar sebulan.
+  if (saldoAwal === null) return null;
+  if (hari < minimalHari) return null;
+
+  const keluarSampaiKini = masukSampaiKini - (saldoKini - saldoAwal);
+  const operasional = keluarSampaiKini - komitmenTerbayar;
+
+  // Operasional nol atau minus berarti datanya belum masuk akal untuk diukur
+  // — biasanya laporan posisi kas yang belum diperbarui, atau komitmen yang
+  // ditandai terbayar padahal uangnya belum keluar. Lebih baik mengaku belum
+  // tahu daripada meramalkan sisa bulan dengan laju nol.
+  if (operasional <= 0) return null;
+
+  return {
+    perHari: operasional / hari,
+    hari,
+    keluarSampaiKini,
+    komitmenTerbayar,
+  };
+}
+
 export function hitungRunway(opsi: {
   period: Period;
   saldoKas: number;
@@ -454,12 +533,21 @@ export function hitungRunway(opsi: {
   kewajibanPada?: (period: Period) => number;
   hariTersisa: number;
   hariSebulan: number;
+  /**
+   * Laju operasional harian yang terukur dari bulan berjalan. Bila ada, sisa
+   * bulan ini diramalkan dari sini, bukan dari `pengeluaranBulanan` yang
+   * dibagi rata — bulan ini sudah berjalan, dan jejaknya lebih dekat pada
+   * kenyataan daripada rata-rata yang diketik. Bulan-bulan sesudahnya tetap
+   * memakai `pengeluaranBulanan`: di sana belum ada apa pun untuk diukur.
+   */
+  lajuOperasionalHarian?: number | null;
   horizon?: number;
 }): Runway {
   const {
     period, saldoKas, sisaMasuk, proyeksiBerikutnya, pengeluaranBulanan,
     komitmenBelumBayar, komitmenRutinSebulan,
     kebutuhanGaji, cicilanPada, kewajibanPada, hariTersisa, hariSebulan,
+    lajuOperasionalHarian = null,
     horizon = HORIZON_BULAN,
   } = opsi;
   const cicilan = cicilanPada ?? (() => 0);
@@ -480,6 +568,12 @@ export function hitungRunway(opsi: {
   const operasionalSebulan = Math.max(0, pengeluaranBulanan - komitmenRutinSebulan);
   const porsi = hariSebulan > 0 ? hariTersisa / hariSebulan : 0;
 
+  // Sisa bulan berjalan: dari laju yang terukur bila ada, kalau tidak dari
+  // angka bulanan yang dibagi rata menurut sisa hari.
+  const sisaOperasional = lajuOperasionalHarian !== null
+    ? lajuOperasionalHarian * hariTersisa
+    : operasionalSebulan * porsi;
+
   const catat = (period: Period, saldoAwal: number, masuk: number, keluar: number) => {
     const saldoAkhir = saldoAwal + masuk - keluar;
     bulan.push({
@@ -498,7 +592,7 @@ export function hitungRunway(opsi: {
     period,
     saldoKas,
     sisaMasuk,
-    komitmenBelumBayar + operasionalSebulan * porsi + cicilan(period) + kewajiban(period),
+    komitmenBelumBayar + sisaOperasional + cicilan(period) + kewajiban(period),
   );
 
   for (let i = 1; i <= horizon; i += 1) {

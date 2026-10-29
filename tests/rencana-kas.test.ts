@@ -1,8 +1,9 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
-  HORIZON_BULAN, bagiProporsional, hitungRencana, hitungRunway, jendela, lipatBelanja,
-  pecahMinggu, usulkanProyeksi, type EntriBelanja, type Masukan,
+  HORIZON_BULAN, MINIMAL_HARI_LAJU, bagiProporsional, hitungRencana, hitungRunway, jendela,
+  lajuOperasionalBerjalan, lipatBelanja, pecahMinggu, usulkanProyeksi,
+  type EntriBelanja, type Masukan,
 } from '../src/lib/rencana-kas';
 
 const jt = (n: number) => n * 1_000_000;
@@ -702,5 +703,87 @@ test('kebutuhan gaji negatif atau kosong tidak menambah plafon', () => {
   assert.equal(
     hitungRencana({ ...rapat9Okt, kebutuhanGaji: -jt(50) }).skenario.NORMAL.bolehBelanja,
     dasar.skenario.NORMAL.bolehBelanja,
+  );
+});
+
+/* ---------------------------------------------------------------------------
+ * Laju belanja bulan berjalan, diukur dari laporan posisi kas
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Angka rekaan, sengaja bulat supaya hasilnya bisa dihitung di kepala:
+ * keluar = 300 − (180 − 200) = 320; operasional = 320 − 60 = 260; per hari 13.
+ */
+const bulanBerjalan = {
+  saldoAwal: jt(200),
+  saldoKini: jt(180),
+  masukSampaiKini: jt(300),
+  hari: 20,
+  komitmenTerbayar: jt(60),
+};
+
+test('laju bulan berjalan diukur dari selisih saldo, bukan dari angka yang diketik', () => {
+  const l = lajuOperasionalBerjalan(bulanBerjalan);
+  assert.ok(l, 'cukup data untuk diukur');
+  // keluar = masuk − (saldo kini − saldo bulan lalu)
+  assert.equal(keJt(l.keluarSampaiKini), 320);
+  // Komitmen terbayar dikeluarkan: jatuh pada satu tanggal, bukan mengalir harian.
+  assert.equal(keJt(l.perHari * l.hari), 260);
+  assert.equal(keJt(l.perHari), 13);
+});
+
+test('tanpa saldo bulan sebelumnya tidak ada yang bisa diukur', () => {
+  assert.equal(lajuOperasionalBerjalan({ ...bulanBerjalan, saldoAwal: null }), null);
+});
+
+test('bulan yang masih terlalu muda tidak diukur', () => {
+  // Satu pembelian besar di hari ketiga akan melambungkan laju hariannya,
+  // jadi di bawah ambang lebih baik memakai angka yang diketik.
+  assert.equal(lajuOperasionalBerjalan({ ...bulanBerjalan, hari: 3 }), null);
+  assert.ok(lajuOperasionalBerjalan({ ...bulanBerjalan, hari: MINIMAL_HARI_LAJU }));
+});
+
+test('operasional nol atau minus mengaku belum tahu, bukan meramal laju nol', () => {
+  // Seluruh uang keluar ternyata komitmen — tidak ada belanja harian terukur.
+  assert.equal(lajuOperasionalBerjalan({ ...bulanBerjalan, komitmenTerbayar: jt(320) }), null);
+  // Saldo naik melebihi uang masuk: datanya belum masuk akal.
+  assert.equal(
+    lajuOperasionalBerjalan({ ...bulanBerjalan, saldoKini: jt(600), komitmenTerbayar: 0 }),
+    null,
+  );
+});
+
+test('sisa bulan berjalan memakai laju terukur, bulan berikutnya tetap dari angka bulanan', () => {
+  const dasar = {
+    ...runwaySeptember,
+    sisaMasuk: jt(0),
+    proyeksiBulanan: jt(351),
+    hariTersisa: 3,
+    komitmenBelumBayar: 0,
+    komitmenRutinSebulan: jt(75.65),
+  };
+  const perHari = jt(13);
+
+  const diukur = runway({ ...dasar, lajuOperasionalHarian: perHari });
+  assert.equal(keJt(diukur.bulan[0].keluar), keJt(perHari * 3));
+
+  // Angka bulanan yang diketik tidak lagi menggerakkan bulan berjalan — hanya
+  // bulan-bulan sesudahnya, yang memang belum punya apa pun untuk diukur.
+  const lebihBesar = runway({
+    ...dasar, pengeluaranBulanan: jt(500), lajuOperasionalHarian: perHari,
+  });
+  assert.equal(keJt(lebihBesar.bulan[0].keluar), keJt(diukur.bulan[0].keluar));
+  assert.equal(keJt(lebihBesar.bulan[1].keluar), 500);
+  assert.equal(keJt(diukur.bulan[1].keluar), keJt(jt(402.8)));
+});
+
+test('tanpa laju terukur, bulan berjalan tetap diprorata seperti semula', () => {
+  const dasar = { ...runwaySeptember, sisaMasuk: jt(0), proyeksiBulanan: jt(351), hariTersisa: 3 };
+  const tanpa = runway(dasar);
+  const kosong = runway({ ...dasar, lajuOperasionalHarian: null });
+  assert.equal(tanpa.bulan[0].keluar, kosong.bulan[0].keluar);
+  assert.equal(
+    keJt(tanpa.bulan[0].keluar),
+    keJt(jt(260.6) + (jt(402.8) - jt(260.6)) * (3 / 31)),
   );
 });

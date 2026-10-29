@@ -410,10 +410,26 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           const periode = kolom.find((b) => b)?.period;
                           if (!periode) return null;
                           const keluar = kolom.find((b) => b)?.keluar ?? 0;
+                          // Baris pertama adalah bulan berjalan, dan angkanya hanya
+                          // menutup sisa harinya — bukan sebulan penuh seperti baris
+                          // di bawahnya. Tanpa keterangan ini angkanya terbaca
+                          // seolah bulan ini jauh lebih murah daripada bulan depan.
+                          const berjalan = i === 0;
+                          const laju = data.asumsi.lajuBerjalan;
                           return (
                             <tr key={periode}>
                               <td className="td whitespace-nowrap">{formatPeriod(periode)}</td>
-                              <td className="td num text-slate-500">{formatRupiah(keluar)}</td>
+                              <td className="td num text-slate-500">
+                                {formatRupiah(keluar)}
+                                {berjalan && (
+                                  <span className="block text-[11px] font-normal text-slate-400">
+                                    sisa {data.rencana?.hari ?? 0} hari ·{' '}
+                                    {laju
+                                      ? `terukur ${formatRupiahShort(laju.perHari)}/hari`
+                                      : 'dari asumsi bulanan'}
+                                  </span>
+                                )}
+                              </td>
                               {kolom.map((b, j) => (
                                 <td
                                   key={SKENARIO[j]}
