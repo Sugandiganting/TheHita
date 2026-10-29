@@ -2,10 +2,11 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { getArusKas } from '@/lib/queries';
 import { formatDate, formatPeriod, formatRupiah } from '@/lib/format';
+import { addMonths } from '@/lib/period';
 import { resolveRange, type SearchParams } from '@/lib/search-params';
 import { ReportFilters } from '@/components/filters';
 import { CashflowBarChart } from '@/components/charts';
-import { Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
+import { Alert, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +23,15 @@ export default async function ArusKasPage({ searchParams }: { searchParams: Prom
   const { from, to } = resolveRange(await searchParams, 12);
   const arus = await getArusKas(from, to);
   const lengkap = arus.filter((a) => a.net !== null);
-  const terbaru = lengkap[lengkap.length - 1] ?? null;
+  // Bulan terakhir yang ada, bukan bulan terakhir yang lengkap: uang masuknya
+  // sudah diketahui walau netnya belum, dan menyembunyikannya hanya membuat
+  // halaman terbaca kosong padahal datanya ada.
+  const terbaru = arus[arus.length - 1] ?? null;
   const minus = lengkap.filter((a) => (a.net ?? 0) < 0);
+  // Bulan yang saldo akhirnya dibutuhkan agar baris teratas punya pembanding.
+  const kurangBulan = arus.length > 0 && arus[0].net === null
+    ? addMonths(arus[0].period, -1)
+    : null;
 
   return (
     <>
@@ -50,9 +58,13 @@ export default async function ArusKasPage({ searchParams }: { searchParams: Prom
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               label={terbaru ? `Net cash ${formatPeriod(terbaru.period)}` : 'Net cash'}
-              value={terbaru ? formatRupiah(terbaru.net ?? 0) : '—'}
-              hint={terbaru ? (terbaru.net! < 0 ? 'Kas menyusut bulan itu' : 'Kas bertambah bulan itu') : 'Butuh dua bulan berturut-turut'}
-              tone={terbaru && terbaru.net! < 0 ? 'negative' : 'positive'}
+              value={terbaru?.net == null ? '—' : formatRupiah(terbaru.net)}
+              hint={
+                terbaru?.net == null
+                  ? `Butuh saldo akhir ${kurangBulan ? formatPeriod(kurangBulan) : 'bulan sebelumnya'}`
+                  : terbaru.net < 0 ? 'Kas menyusut bulan itu' : 'Kas bertambah bulan itu'
+              }
+              tone={terbaru?.net != null && terbaru.net < 0 ? 'negative' : 'positive'}
             />
             <StatCard
               label={terbaru ? `Uang masuk ${formatPeriod(terbaru.period)}` : 'Uang masuk'}
@@ -61,8 +73,12 @@ export default async function ArusKasPage({ searchParams }: { searchParams: Prom
             />
             <StatCard
               label={terbaru ? `Uang keluar ${formatPeriod(terbaru.period)}` : 'Uang keluar'}
-              value={terbaru ? formatRupiah(terbaru.keluar ?? 0) : '—'}
-              hint="Semua yang keluar dari bank, termasuk gaji dan cicilan"
+              value={terbaru?.keluar == null ? '—' : formatRupiah(terbaru.keluar)}
+              hint={
+                terbaru?.keluar == null
+                  ? 'Ikut menunggu saldo pembandingnya'
+                  : 'Semua yang keluar dari bank, termasuk gaji dan cicilan'
+              }
               tone="warning"
             />
           </div>
@@ -74,18 +90,41 @@ export default async function ArusKasPage({ searchParams }: { searchParams: Prom
             </p>
           )}
 
-          <Card className="card-pad mt-6 min-w-0">
-            <SectionTitle hint="Batang biru uang masuk, oranye uang keluar. Bulan yang oranyenya lebih tinggi berarti kasnya menyusut.">
-              Masuk dan keluar tiap bulan
-            </SectionTitle>
-            <CashflowBarChart
-              data={lengkap.map((a) => ({
-                period: a.period,
-                masuk: a.masuk,
-                keluar: a.keluar ?? 0,
-              }))}
-            />
-          </Card>
+          {/* Grafik kosong lebih buruk daripada tidak ada grafik: ia terbaca
+              seperti kerusakan, padahal yang terjadi hanya belum ada
+              pembandingnya. Jadi diganti keterangan yang menyebut bulan mana
+              yang kurang dan apa yang harus diisi. */}
+          {lengkap.length === 0 ? (
+            <div className="mt-6">
+              <Alert tone="info" title="Net cash belum bisa dihitung">
+                Uang keluar diturunkan dari perubahan saldo, jadi perlu dua titik: saldo akhir{' '}
+                <strong>{kurangBulan ? formatPeriod(kurangBulan) : 'bulan sebelumnya'}</strong> dan
+                saldo sekarang. Yang ada baru satu.
+                <span className="mt-2 block">
+                  Dua jalan keluarnya: lebarkan rentang bulannya ke belakang bila bulan
+                  sebelumnya memang sudah pernah dilaporkan, atau buat bulan itu di{' '}
+                  <Link href="/rencana-kas" className="font-medium text-brand-700 hover:underline">
+                    Rencana Kas Mingguan
+                  </Link>{' '}
+                  lalu isi satu posisi kas bertanggal akhir bulannya. Sesudah itu halaman ini
+                  terisi sendiri.
+                </span>
+              </Alert>
+            </div>
+          ) : (
+            <Card className="card-pad mt-6 min-w-0">
+              <SectionTitle hint="Batang biru uang masuk, oranye uang keluar. Bulan yang oranyenya lebih tinggi berarti kasnya menyusut.">
+                Masuk dan keluar tiap bulan
+              </SectionTitle>
+              <CashflowBarChart
+                data={lengkap.map((a) => ({
+                  period: a.period,
+                  masuk: a.masuk,
+                  keluar: a.keluar ?? 0,
+                }))}
+              />
+            </Card>
+          )}
 
           <Card className="card-pad mt-6 min-w-0">
             <SectionTitle hint="Net cash = saldo akhir bulan ini dikurangi saldo akhir bulan sebelumnya. Uang keluar diturunkan dari masuk dikurangi net, jadi ketiganya tidak mungkin tidak cocok.">
