@@ -143,6 +143,26 @@ pengembangan menyusun tiap halaman saat pertama dibuka: pada mesin pengujian,
 halaman pertama perlu 16 detik dan tiap menu baru 1,5-4,7 detik, sedangkan mode
 produksi siap dalam 0,2 detik dan tiap menu terbuka di bawah 0,1 detik.
 
+### Di mana berkas Excel-nya ditaruh
+
+Perintah impor membaca berkas dari folder tempat perintah itu dijalankan, yaitu
+folder projek ini. Cara paling sederhana: salin workbook ke folder `data/` di
+dalam projek, lalu sebut `data/Proyeksi.xlsx`. Nama berkas yang mengandung spasi
+ditulis di antara tanda kutip.
+
+```bash
+mkdir -p data          # sekali saja
+npm run impor-riwayat -- "data/Copy of Proyeksi The Hita orak orek.xlsx" --coba
+```
+
+Berkas Excel tidak akan ikut terkirim ke GitHub: `*.xlsx`, `*.xls`, `*.xlsm`, dan
+seluruh folder `data/` diabaikan git. Ini penting karena repositori ini publik
+sedangkan workbook berisi angka keuangan sebenarnya.
+
+Berkas boleh juga ditaruh di luar projek asal jalurnya disebut lengkap. Di
+Terminal macOS, jalur lengkap bisa didapat tanpa mengetik: ketik perintahnya
+sampai `-- `, lalu seret berkasnya dari Finder ke jendela Terminal.
+
 ### Memuat posisi kas mingguan dari workbook
 
 Menu Rencana Kas bisa diisi dari dua berkas kerja yang sudah dipakai sehari-hari,

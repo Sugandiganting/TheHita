@@ -6,6 +6,16 @@ dist/
 *.tsbuildinfo
 next-env.d.ts
 
+# Berkas kerja Excel. Repositori ini publik, dan workbook proyeksi maupun
+# kondisi keuangan berisi angka keuangan sebenarnya. Diabaikan menurut jenis
+# berkasnya, bukan menurut nama foldernya saja, supaya tetap terlindungi
+# walaupun berkasnya tertaruh di folder projek karena perintah impor memang
+# dijalankan dari sini.
+*.xlsx
+*.xlsm
+*.xls
+/data/
+
 # Database lokal & cadangannya
 # Berpangkal di akar repositori: tanpa garis miring di depan, polanya juga
 # mengenai src/app/api/cadangan/ dan berkas rutenya diam-diam tidak ikut masuk.
