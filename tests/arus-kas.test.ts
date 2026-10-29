@@ -66,3 +66,14 @@ test('tanggal kedua ujungnya ikut terbawa supaya bisa ditulis di layar', () => {
   assert.equal(oktober.tanggalAwal?.toISOString().slice(0, 10), '2026-09-28');
   assert.equal(oktober.tanggal.toISOString().slice(0, 10), '2026-10-23');
 });
+
+test('baris paling awal tetap punya net bila bulan sebelumnya ikut diambil', () => {
+  // Begitulah saringan rentang bekerja: satu bulan sebelum rentang ikut
+  // dihitung, lalu barisnya dibuang. Tanpa itu baris teratas selalu kosong.
+  const semua = arusKasBulanan(laporan);
+  const terlihat = semua.filter((a) => a.period >= '2026-09');
+
+  assert.deepEqual(terlihat.map((a) => a.period), ['2026-09', '2026-10']);
+  assert.equal(terlihat[0].net, jt(15), 'September tetap punya pembanding dari Agustus');
+  assert.equal(terlihat[0].saldoAwal, jt(180));
+});

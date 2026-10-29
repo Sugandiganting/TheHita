@@ -891,10 +891,15 @@ export async function getUnitPilihan(): Promise<{ id: string; code: string; name
  * banyak hari. Jurnal sengaja tidak dilibatkan: selama belum tuntas dirapikan,
  * angka yang diketik sendiri justru yang bisa dipercaya.
  */
-export async function getArusKas(batas = 12): Promise<ArusBulan[]> {
+export async function getArusKas(dari: Period, sampai: Period): Promise<ArusBulan[]> {
+  // Satu bulan sebelum rentangnya ikut diambil: net bulan pertama adalah
+  // selisih terhadap saldo bulan sebelumnya, jadi tanpa itu baris teratas
+  // selalu kosong — dan terbaca seperti data yang hilang, bukan seperti batas
+  // saringan. Barisnya sendiri dibuang lagi sesudah dihitung.
+  const awal = addMonths(dari, -1);
   const plans = await prisma.cashPlan.findMany({
-    orderBy: { period: 'desc' },
-    take: batas,
+    where: { period: { gte: awal, lte: sampai } },
+    orderBy: { period: 'asc' },
     select: { period: true, checkpoints: { orderBy: { date: 'desc' }, take: 1 } },
   });
 
@@ -904,7 +909,7 @@ export async function getArusKas(batas = 12): Promise<ArusBulan[]> {
       ? [{ period: p.period, tanggal: c.date, saldo: c.cashOnHand, masuk: c.incomeToDate }]
       : [];
   });
-  return arusKasBulanan(laporan);
+  return arusKasBulanan(laporan).filter((a) => a.period >= dari);
 }
 
 export async function getRencanaKasPeriods(): Promise<Period[]> {

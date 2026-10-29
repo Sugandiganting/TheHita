@@ -1,6 +1,9 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { getArusKas } from '@/lib/queries';
 import { formatDate, formatPeriod, formatRupiah } from '@/lib/format';
+import { resolveRange, type SearchParams } from '@/lib/search-params';
+import { ReportFilters } from '@/components/filters';
 import { CashflowBarChart } from '@/components/charts';
 import { Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -15,8 +18,9 @@ export const dynamic = 'force-dynamic';
  * berguna di sini dua belas baris berderet — pola bulan sepi baru terlihat
  * kalau bulannya berjajar, dan itu tidak muat sebagai kartu.
  */
-export default async function ArusKasPage() {
-  const arus = await getArusKas(12);
+export default async function ArusKasPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const { from, to } = resolveRange(await searchParams, 12);
+  const arus = await getArusKas(from, to);
   const lengkap = arus.filter((a) => a.net !== null);
   const terbaru = lengkap[lengkap.length - 1] ?? null;
   const minus = lengkap.filter((a) => (a.net ?? 0) < 0);
@@ -28,16 +32,22 @@ export default async function ArusKasPage() {
         description="Uang masuk dikurangi uang keluar, dari laporan posisi kas yang diisi tiap minggu."
       />
 
+      {/* Tanpa pilihan unit: posisi kas dilaporkan satu angka untuk seluruh
+          grup, jadi saringan per cabang hanya akan menjanjikan yang tidak ada. */}
+      <Suspense fallback={null}>
+        <ReportFilters units={[]} showUnit={false} />
+      </Suspense>
+
       {arus.length === 0 ? (
         <div className="mt-6">
           <EmptyState
-            title="Belum ada laporan posisi kas"
-            description="Isi saldo kas dan uang masuk kumulatif di Rencana Kas Mingguan. Begitu ada dua bulan yang terisi, arus kas bulanannya muncul sendiri di sini."
+            title={`Belum ada laporan posisi kas ${formatPeriod(from)} – ${formatPeriod(to)}`}
+            description="Geser rentang bulannya, atau isi saldo kas dan uang masuk kumulatif di Rencana Kas Mingguan. Begitu ada dua bulan berturut-turut yang terisi, arus kasnya muncul sendiri di sini."
           />
         </div>
       ) : (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               label={terbaru ? `Net cash ${formatPeriod(terbaru.period)}` : 'Net cash'}
               value={terbaru ? formatRupiah(terbaru.net ?? 0) : '—'}

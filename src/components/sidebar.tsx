@@ -62,7 +62,6 @@ const MENU: Entry[] = [
     icon: ICON.journal,
     items: [
       { href: '/kas', label: 'Ringkasan Saldo', desc: 'Posisi kas & bank tiap cabang', section: 'Kas & Bank' },
-      { href: '/kas/arus', label: 'Arus Kas Bulanan', desc: 'Masuk, keluar, dan selisihnya', section: 'Kas & Bank' },
       { href: '/kas/transfer', label: 'Transfer Money', desc: 'Pindah uang antar rekening', section: 'Kas & Bank' },
       { href: '/kas/terima', label: 'Receive Money', desc: 'Catat uang masuk', section: 'Kas & Bank' },
       { href: '/kas/bayar', label: 'Pay Money', desc: 'Catat uang keluar', section: 'Kas & Bank' },
@@ -96,9 +95,10 @@ const MENU: Entry[] = [
     label: 'Laporan',
     icon: ICON.report,
     items: [
-      { href: '/laporan', label: 'Laporan Keuangan', desc: 'Laba rugi, neraca, arus kas' },
-      { href: '/rab/laporan', label: 'Laporan RAB', desc: 'Anggaran vs realisasi' },
-      { href: '/logistik/laporan', label: 'Laporan Logistik', desc: 'Pemakaian & kenaikan harga', soon: true },
+      { href: '/laporan', label: 'Laporan Keuangan', desc: 'Laba rugi, neraca, arus kas', section: 'Finance' },
+      { href: '/laporan/arus-kas', label: 'Arus Kas Bulanan', desc: 'Masuk, keluar, dan selisihnya', section: 'Finance' },
+      { href: '/rab/laporan', label: 'Laporan RAB', desc: 'Anggaran vs realisasi', section: 'Finance' },
+      { href: '/logistik/laporan', label: 'Laporan Logistik', desc: 'Pemakaian & kenaikan harga', section: 'Logistik', soon: true },
     ],
   },
   {

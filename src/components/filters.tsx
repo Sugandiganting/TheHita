@@ -12,9 +12,16 @@ export type UnitOption = { id: string; code: string; name: string };
 export function ReportFilters({
   units,
   showRange = true,
+  showUnit = true,
 }: {
   units: UnitOption[];
   showRange?: boolean;
+  /**
+   * Beberapa laporan berlaku untuk seluruh grup dan tidak bisa dipecah per
+   * unit — posisi kas, misalnya, dilaporkan satu angka untuk semua cabang.
+   * Menampilkan pilihan unit di sana hanya menjanjikan saringan yang tidak ada.
+   */
+  showUnit?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -32,6 +39,7 @@ export function ReportFilters({
 
   return (
     <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      {showUnit && (
       <div className="min-w-[200px]">
         <label className="label" htmlFor="filter-unit">
           Unit usaha
@@ -50,6 +58,7 @@ export function ReportFilters({
           ))}
         </select>
       </div>
+      )}
 
       {showRange && (
         <>
