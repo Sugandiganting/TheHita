@@ -51,12 +51,17 @@ const AXIS_PROPS = {
  * batang terdesak ke bawah.
  */
 function sumbuRapi(tertinggi: number, maksTanda = 6): { maks: number; ticks: number[] } {
-  const kasar = Math.max(tertinggi, 1) / maksTanda;
+  // Angka yang bukan bilangan hingga akan membuat langkahnya NaN, dan gelung
+  // di bawah tidak akan pernah berhenti — satu baris data yang rusak cukup
+  // untuk membekukan seluruh halaman. Lebih baik sumbunya salah daripada
+  // layarnya mati.
+  const aman = Number.isFinite(tertinggi) && tertinggi > 0 ? tertinggi : 1;
+  const kasar = Math.max(aman, 1) / maksTanda;
   const pangkat = 10 ** Math.floor(Math.log10(kasar));
   const langkah = [1, 2, 2.5, 5, 10].map((m) => m * pangkat).find((l) => l >= kasar)
     ?? pangkat * 10;
 
-  const maks = Math.ceil(tertinggi / langkah) * langkah;
+  const maks = Math.ceil(aman / langkah) * langkah;
   const ticks: number[] = [];
   for (let v = 0; v <= maks + langkah / 2; v += langkah) ticks.push(v);
   return { maks, ticks };
