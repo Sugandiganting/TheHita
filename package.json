@@ -26,7 +26,8 @@
     "impor": "tsx scripts/impor.ts",
     "impor-kas": "tsx scripts/impor-kondisi-kas.ts",
     "pengguna": "node scripts/pengguna.mjs",
-    "cadangkan": "node scripts/cadangkan.mjs"
+    "cadangkan": "node scripts/cadangkan.mjs",
+    "ekspor": "tsx scripts/ekspor-analisis.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
