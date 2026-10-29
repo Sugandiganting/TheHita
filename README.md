@@ -131,6 +131,7 @@ proyek contoh yang dilewati.
 | `npm run db:studio` | Membuka database secara langsung bila perlu koreksi manual |
 | `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
 | `npm run impor-kas -- <Proyeksi.xlsx> <Kondisi_Keuangan.xlsx>` | Memuat posisi kas mingguan dari workbook kerja ke menu Rencana Kas |
+| `npm run impor-riwayat -- <Proyeksi.xlsx>` | Mengisi posisi kas bulan-bulan yang sudah lewat, untuk menu Arus Kas Bulanan |
 
 Jalankan semuanya lewat `npm run`, bukan `npx`. Perintah `npm run` memakai Prisma
 yang terpasang di folder projek ini (versi 5), sedangkan `npx prisma` akan mengunduh
@@ -163,6 +164,36 @@ Master Data.
 Angka belanja dicatat sebagai *setel ulang*, bukan tambah, karena workbook selalu
 menyimpan total sejak awal bulan — jadi berkas yang sama boleh diimpor berkali-kali
 tanpa menumpuk ganda. Jalankan dengan `--coba` dulu untuk melihat hasil bacaannya.
+
+### Mengisi riwayat untuk Arus Kas Bulanan
+
+`impor-kas` mengisi satu bulan berjalan secara lengkap. Untuk laporan **Arus Kas
+Bulanan** yang dibutuhkan hanya dua angka per bulan — saldo kas akhir bulan dan
+uang masuk — tetapi untuk seluruh bulan yang sudah lewat. Keduanya ada di sheet
+Combined Cashflow, jadi cukup satu berkas:
+
+```bash
+npm run impor-riwayat -- data/Proyeksi.xlsx --coba
+npm run impor-riwayat -- data/Proyeksi.xlsx
+```
+
+Yang dibaca: tiap kolom bulan yang sudah terjadi, yaitu kolom bertanda
+**(Berjalan)** dan kolom bulan sebelumnya. Kolom **(Projected)** dan bulan
+sesudah kolom berjalan terakhir dilewati. Saldo diambil dari baris **NET CASH
+CUMMULATIVE (Cash Basis)** dan uang masuk dari baris **CASHFLOW**. Tanggal
+laporan diambil dari baris tanggal di bawah judul kolom bila ada — "Saldo per 28
+Oktober" terbaca sebagai tanggal 28 — selebihnya hari terakhir bulan itu.
+
+Hasil bacaannya langsung diperiksa terhadap baris **NET CASH FLOW** di workbook
+dan ditandai `cocok` atau `BEDA` per bulan, jadi ketidakcocokan ketahuan di
+layar perintah, bukan baru setelah dibuka di aplikasi. Aman dijalankan
+berulang: laporan dengan tanggal yang sama diperbarui, bukan digandakan.
+
+Uang keluar tidak perlu diketik sama sekali. Saldo bank akhir bulan sudah
+mencerminkan semuanya, jadi aplikasi menurunkannya sendiri: `uang keluar = uang
+masuk − (saldo akhir − saldo akhir bulan lalu)`. Angka itu sudah termasuk
+cicilan bank, sehingga lebih besar daripada baris `TOTAL CASHOUTFLOW` di
+workbook sebesar `UTANG BANK`.
 
 ### Mengubah Sales Summary Report (PDF) menjadi jurnal
 
