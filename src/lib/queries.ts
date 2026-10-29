@@ -8,6 +8,7 @@ import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
 import { barisBulan, type BarisBulan } from './bulanan';
+import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
@@ -881,6 +882,29 @@ export async function getUnitPilihan(): Promise<{ id: string; code: string; name
     orderBy: { code: 'asc' },
     select: { id: true, code: true, name: true },
   });
+}
+
+/**
+ * Arus kas tiap bulan menurut laporan posisi kas.
+ *
+ * Diambil laporan terakhir tiap bulan, karena itulah yang mencakup paling
+ * banyak hari. Jurnal sengaja tidak dilibatkan: selama belum tuntas dirapikan,
+ * angka yang diketik sendiri justru yang bisa dipercaya.
+ */
+export async function getArusKas(batas = 12): Promise<ArusBulan[]> {
+  const plans = await prisma.cashPlan.findMany({
+    orderBy: { period: 'desc' },
+    take: batas,
+    select: { period: true, checkpoints: { orderBy: { date: 'desc' }, take: 1 } },
+  });
+
+  const laporan: LaporanBulan[] = plans.flatMap((p) => {
+    const c = p.checkpoints[0];
+    return c
+      ? [{ period: p.period, tanggal: c.date, saldo: c.cashOnHand, masuk: c.incomeToDate }]
+      : [];
+  });
+  return arusKasBulanan(laporan);
 }
 
 export async function getRencanaKasPeriods(): Promise<Period[]> {
