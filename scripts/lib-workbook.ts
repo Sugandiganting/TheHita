@@ -8,7 +8,8 @@
  * lambat yang satu diperbaiki dan yang lain tertinggal.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
 export type Sheet = import('exceljs').Worksheet;
 export type Workbook = import('exceljs').Workbook;
@@ -64,9 +65,39 @@ export function bacaTanggal(v: unknown): Date | null {
 }
 
 export async function bukaWorkbook(path: string): Promise<Workbook> {
+  let isi: Buffer;
+  try {
+    isi = await readFile(path);
+  } catch (e) {
+    // "ENOENT: no such file or directory" tidak memberi tahu hal yang paling
+    // sering jadi sebabnya: jalur ditulis relatif terhadap folder tempat
+    // perintah dijalankan, sedangkan berkasnya masih di Finder. Jadi di sini
+    // disebutkan jalur lengkap yang dicari dan isi folder yang dituju.
+    if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e;
+    const penuh = resolve(path);
+    const folder = dirname(penuh);
+    let petunjuk: string;
+    try {
+      const isiFolder = (await readdir(folder)).filter((f) => !f.startsWith('.'));
+      const excel = isiFolder.filter((f) => /\.xlsx?$|\.xlsm$/i.test(f));
+      petunjuk = excel.length > 0
+        ? `Berkas Excel yang ada di folder itu:\n  ${excel.join('\n  ')}`
+        : isiFolder.length === 0
+          ? `Folder ${folder} ada, tetapi kosong — berkasnya belum disalin ke situ.`
+          : `Tidak ada berkas Excel di folder itu. Isinya: ${isiFolder.slice(0, 10).join(', ')}`;
+    } catch {
+      petunjuk = `Folder ${folder} belum ada.`;
+    }
+    throw new Error(
+      `Berkas tidak ditemukan: ${penuh}\n\n${petunjuk}\n\n`
+      + 'Jalur ditulis relatif terhadap folder tempat perintah dijalankan. Cara '
+      + 'paling mudah tanpa mengetik jalur: ketik perintahnya sampai "-- ", lalu '
+      + 'seret berkasnya dari Finder ke jendela Terminal.',
+    );
+  }
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load((await readFile(path)).buffer as ArrayBuffer);
+  await wb.xlsx.load(isi.buffer as ArrayBuffer);
   return wb;
 }
 
