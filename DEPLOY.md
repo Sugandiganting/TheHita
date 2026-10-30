@@ -18,6 +18,22 @@ Perkiraan waktu: 20–30 menit.
 
 ## 0. Sebelum mulai
 
+**Belum punya domain? Boleh dilewati.** Aplikasinya bisa dipasang dan dipakai
+lewat alamat IP saja, dan domainnya menyusul kapan pun tanpa memasang ulang —
+yang berubah hanya satu berkas konfigurasi Caddy. Lewati bagian domain di bawah
+dan ikuti jalur "Tanpa domain" di langkah 7.
+
+Satu hal yang **tidak** boleh dilewati adalah HTTPS-nya. Cookie sesi aplikasi
+ini ditandai `Secure` di mode produksi, jadi lewat HTTP biasa login tidak akan
+pernah berhasil — peramban menolak mengirim cookienya kembali. Langkah 7 tetap
+wajib dikerjakan, hanya caranya yang berbeda.
+
+**Sebagian penyedia sudah membuatkan penggunanya.** Biznet NEO Lite, misalnya,
+menanyakan nama pengguna dan kunci SSH saat pemesanan, lalu membuatkannya
+untuk Anda. Kalau begitu, lewati `adduser` di langkah 1, dan jalankan perintah
+yang di bawah ini ditulis sebagai root dengan `sudo` di depannya. Periksa
+dengan `whoami` dan `sudo -v`.
+
 **Arahkan domainnya ke VPS.** Di pengelola DNS domain Anda, buat satu data
 `A` yang menunjuk alamat IP VPS:
 
@@ -55,6 +71,9 @@ apt install -y curl git ufw
 
 # Pengguna khusus untuk aplikasinya. Menjalankan aplikasi sebagai root berarti
 # satu celah di aplikasi langsung menjadi penguasaan penuh atas server.
+#
+# Lewati baris ini bila penyedia VPS sudah membuatkannya saat pemesanan —
+# `id hita` akan menjawab dengan nomor penggunanya, bukan "no such user".
 adduser --disabled-password --gecos "" hita
 ```
 
@@ -176,6 +195,40 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
   | tee /etc/apt/sources.list.d/caddy-stable.list
 apt update && apt install -y caddy
 ```
+
+### Tanpa domain, lewat alamat IP
+
+Pakai konfigurasi yang sudah disiapkan untuk ini:
+
+```bash
+IP=103.0.0.1        # GANTI dengan alamat IP VPS Anda
+
+cp /home/hita/app/deploy/Caddyfile-ip /etc/caddy/Caddyfile
+sed -i "s/GANTI_DENGAN_IP/$IP/g" /etc/caddy/Caddyfile
+
+# Keduanya harus 0 — yang pertama memastikan penggantiannya kena, yang kedua
+# memastikan berkasnya tidak rusak karena $IP ternyata kosong.
+grep -c GANTI_DENGAN_IP /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile > /dev/null && echo "konfigurasi sah"
+
+mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
+systemctl reload caddy
+```
+
+Buka `https://<alamat-ip>` di peramban. Peramban akan memperingatkan bahwa
+sertifikatnya tidak dikenal — itu wajar dan tidak berbahaya di sini: Let's
+Encrypt tidak menerbitkan sertifikat untuk alamat IP, jadi Caddy membuat
+sertifikatnya sendiri. Lalu lintasnya tetap terenkripsi penuh; yang tidak bisa
+dibuktikan hanyalah "server ini benar milik siapa", dan itu memang hanya bisa
+dijawab oleh nama domain.
+
+Di Chrome: **Advanced** lalu **Proceed**. Di Safari: **Show Details** lalu
+**visit this website**. Cukup sekali per peramban.
+
+Begitu domainnya siap, lanjutkan ke bagian berikutnya — tidak ada yang perlu
+diubah di sisi aplikasi maupun basis datanya.
+
+### Dengan domain
 
 Pasang konfigurasinya, lalu **ganti nama domain dan surelnya**:
 
