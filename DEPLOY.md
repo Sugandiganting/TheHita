@@ -28,11 +28,25 @@ ini ditandai `Secure` di mode produksi, jadi lewat HTTP biasa login tidak akan
 pernah berhasil — peramban menolak mengirim cookienya kembali. Langkah 7 tetap
 wajib dikerjakan, hanya caranya yang berbeda.
 
-**Sebagian penyedia sudah membuatkan penggunanya.** Biznet NEO Lite, misalnya,
-menanyakan nama pengguna dan kunci SSH saat pemesanan, lalu membuatkannya
-untuk Anda. Kalau begitu, lewati `adduser` di langkah 1, dan jalankan perintah
-yang di bawah ini ditulis sebagai root dengan `sudo` di depannya. Periksa
-dengan `whoami` dan `sudo -v`.
+**Ada dua pengguna di server ini, dan keduanya memang berbeda.**
+
+| | Siapa | Untuk apa |
+|---|---|---|
+| Pengguna masuk | yang Anda sebutkan saat memesan VPS, mis. `thehita` | masuk lewat SSH, menjalankan perintah `sudo` |
+| Pengguna layanan | `hita`, dibuat di langkah 1 | menjalankan aplikasinya, itu saja |
+
+Pemisahan ini disengaja. Pengguna layanan tidak perlu — dan tidak boleh —
+bisa masuk lewat SSH maupun memakai `sudo`: kalau suatu saat ada celah di
+aplikasi, yang didapat penyerang hanyalah satu akun tanpa kunci SSH dan tanpa
+hak apa pun di luar foldernya sendiri.
+
+Jadi walaupun penyedia VPS sudah membuatkan pengguna untuk Anda, `adduser`
+di langkah 1 tetap dijalankan — kecuali kebetulan nama yang Anda sebutkan
+saat memesan memang persis `hita`. Periksa dengan `id hita`.
+
+Perintah di panduan ini ditulis seolah dijalankan sebagai root. Kalau Anda
+masuk sebagai pengguna biasa, tambahkan `sudo` di depannya. Periksa dengan
+`whoami` dan `sudo -v`.
 
 **Arahkan domainnya ke VPS.** Di pengelola DNS domain Anda, buat satu data
 `A` yang menunjuk alamat IP VPS:
@@ -72,8 +86,9 @@ apt install -y curl git ufw
 # Pengguna khusus untuk aplikasinya. Menjalankan aplikasi sebagai root berarti
 # satu celah di aplikasi langsung menjadi penguasaan penuh atas server.
 #
-# Lewati baris ini bila penyedia VPS sudah membuatkannya saat pemesanan —
-# `id hita` akan menjawab dengan nomor penggunanya, bukan "no such user".
+# Ini pengguna LAYANAN, bukan pengguna untuk masuk lewat SSH. --disabled-password
+# memang disengaja: akun ini tidak punya kata sandi dan tidak bisa dimasuki.
+# Lewati hanya bila `id hita` sudah menjawab dengan nomor penggunanya.
 adduser --disabled-password --gecos "" hita
 ```
 
