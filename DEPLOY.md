@@ -293,7 +293,8 @@ pertama — beri waktu sekitar sepuluh detik. Halaman masuk akan muncul.
 
 ```bash
 mkdir -p /home/hita/cadangan && chown hita:hita /home/hita/cadangan
-cp /home/hita/app/deploy/hita-cadangan.* /etc/systemd/system/
+cp /home/hita/app/deploy/hita-cadangan.service \
+   /home/hita/app/deploy/hita-cadangan.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now hita-cadangan.timer
 ```
@@ -304,6 +305,12 @@ Uji sekali tanpa menunggu tengah malam:
 systemctl start hita-cadangan.service
 ls -lh /home/hita/cadangan
 ```
+
+Kalau Anda menjalankannya dengan `sudo` dari pengguna lain, `ls` terakhir juga
+perlu `sudo`: folder home `hita` tertutup untuk pengguna lain. Karena alasan
+yang sama, jangan pakai `hita-cadangan.*` di perintah `cp` — tanda bintang
+dimekarkan oleh shell pemanggil, bukan oleh `sudo`, jadi ia gagal mekar diam-diam
+dan `cp` menerima teksnya mentah-mentah.
 
 Harus muncul satu berkas `hita-<tanggal>.db.gz`. Lihat jadwal berikutnya dengan
 `systemctl list-timers hita-cadangan.timer`.
