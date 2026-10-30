@@ -12,11 +12,11 @@ keuangan.contoh.co.id {
 
 	encode zstd gzip
 
-	# Alamat asli pengunjung diteruskan ke aplikasi, dipakai membatasi
-	# percobaan menebak kata sandi.
-	reverse_proxy 127.0.0.1:3000 {
-		header_up X-Forwarded-For {remote_host}
-	}
+	# Alamat asli pengunjung sudah diteruskan Caddy sendiri lewat
+	# X-Forwarded-For, dan aplikasinya memakai itu untuk membatasi percobaan
+	# menebak kata sandi. Menyetelnya ulang di sini hanya menimbulkan
+	# peringatan "Unnecessary header_up X-Forwarded-For" saat Caddy dimuat.
+	reverse_proxy 127.0.0.1:3000
 
 	header {
 		# Peramban diminta hanya memakai HTTPS untuk domain ini.

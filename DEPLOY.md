@@ -218,6 +218,9 @@ Pakai konfigurasi yang sudah disiapkan untuk ini:
 ```bash
 IP=103.0.0.1        # GANTI dengan alamat IP VPS Anda
 
+# Dibuat lebih dulu: Caddy menolak menyala bila tidak bisa menulis log.
+mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
+
 cp /home/hita/app/deploy/Caddyfile-ip /etc/caddy/Caddyfile
 sed -i "s/GANTI_DENGAN_IP/$IP/g" /etc/caddy/Caddyfile
 
@@ -226,8 +229,8 @@ sed -i "s/GANTI_DENGAN_IP/$IP/g" /etc/caddy/Caddyfile
 grep -c GANTI_DENGAN_IP /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile > /dev/null && echo "konfigurasi sah"
 
-mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
-systemctl reload caddy
+systemctl restart caddy
+systemctl status caddy --no-pager | head -8
 ```
 
 Buka `https://<alamat-ip>` di peramban. Peramban akan memperingatkan bahwa
@@ -245,7 +248,16 @@ diubah di sisi aplikasi maupun basis datanya.
 
 ### Dengan domain
 
-Pasang konfigurasinya, lalu **ganti nama domain dan surelnya**:
+Folder lognya dibuat lebih dulu. Caddy menolak menyala bila tidak bisa
+menulis log, dan pesannya — `permission denied` di tengah gumpalan JSON —
+tidak terlihat seperti soal folder:
+
+```bash
+mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
+```
+
+Lalu pasang konfigurasinya. `cp` harus sesudah `apt install caddy`, karena
+pemasangan Caddy menimpa berkas ini dengan bawaannya sendiri:
 
 ```bash
 cp /home/hita/app/deploy/Caddyfile /etc/caddy/Caddyfile
@@ -259,12 +271,18 @@ keuangan.contoh.co.id      ->  domain Anda yang sebenarnya
 tls admin@contoh.co.id     ->  surel Anda
 ```
 
-Simpan (Ctrl+O, Enter, Ctrl+X), lalu:
+Simpan (Ctrl+O, Enter, Ctrl+X), lalu periksa hasilnya sebelum dimuat:
 
 ```bash
-mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
-systemctl reload caddy
+grep -n "contoh" /etc/caddy/Caddyfile     # harus kosong
+caddy validate --config /etc/caddy/Caddyfile
+systemctl restart caddy
+systemctl status caddy --no-pager | head -8
 ```
+
+`restart`, bukan `reload`: kalau Caddy sedang mati karena konfigurasi
+sebelumnya gagal, `reload` tidak menghidupkannya kembali dan seolah tidak
+terjadi apa-apa.
 
 Buka domain Anda di peramban. Sertifikat HTTPS diminta otomatis pada kunjungan
 pertama — beri waktu sekitar sepuluh detik. Halaman masuk akan muncul.
