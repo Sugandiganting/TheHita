@@ -10,6 +10,7 @@ import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type Ba
 import { barisBulan, type BarisBulan } from './bulanan';
 import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
 import { terpakaiDariTransfer, transferPerCabang, type BarisTransfer } from './transfer-departemen';
+import { rekapPenampung, type RekapPenampung } from './penampung';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
@@ -335,6 +336,50 @@ export type CashAccountBalance = {
  * Rekening yang belum pernah dipakai tetap ditampilkan dengan saldo nol supaya
  * bisa dipilih sebagai tujuan transfer.
  */
+/**
+ * Rekonsiliasi sebuah kas penampung untuk satu bulan.
+ *
+ * Seluruh bukti yang pernah menyentuh akun itu diambil, bukan hanya bulan yang
+ * diminta: saldo awal bulan ini adalah hasil seluruh mutasi sebelumnya, dan
+ * menghitungnya dari bulan berjalan saja akan menghasilkan saldo yang seolah
+ * mulai dari nol tiap bulan.
+ */
+export async function getRekapPenampung(accountId: string, period: Period): Promise<RekapPenampung> {
+  const entries = await prisma.journalEntry.findMany({
+    where: {
+      date: { lt: periodEndExclusive(period) },
+      lines: { some: { accountId } },
+    },
+    select: {
+      date: true,
+      lines: {
+        select: {
+          accountId: true,
+          debit: true,
+          credit: true,
+          unit: { select: { code: true } },
+          account: { select: { subtype: true } },
+        },
+      },
+    },
+  });
+
+  return rekapPenampung(
+    entries.map((e) => ({
+      tanggal: e.date,
+      baris: e.lines.map((l) => ({
+        accountId: l.accountId,
+        unit: l.unit.code,
+        debit: l.debit,
+        credit: l.credit,
+        antarUnit: l.account.subtype === 'INTERUNIT',
+      })),
+    })),
+    accountId,
+    { mulai: periodStart(period), selesaiEksklusif: periodEndExclusive(period) },
+  );
+}
+
 /** Daftar akun kas aktif, untuk menautkan kategori belanja ke kas departemennya. */
 export async function getCashAccounts(): Promise<{ id: string; label: string }[]> {
   const akun = await prisma.account.findMany({

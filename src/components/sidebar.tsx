@@ -97,6 +97,7 @@ const MENU: Entry[] = [
     items: [
       { href: '/laporan', label: 'Laporan Keuangan', desc: 'Laba rugi, neraca, arus kas', section: 'Finance' },
       { href: '/laporan/arus-kas', label: 'Arus Kas Bulanan', desc: 'Masuk, keluar, dan selisihnya', section: 'Finance' },
+      { href: '/laporan/penampung', label: 'Kas Penampung', desc: 'Cabang mana menalangi siapa', section: 'Finance' },
       { href: '/rab/laporan', label: 'Laporan RAB', desc: 'Anggaran vs realisasi', section: 'Finance' },
       { href: '/logistik/laporan', label: 'Laporan Logistik', desc: 'Pemakaian & kenaikan harga', section: 'Logistik', soon: true },
     ],
