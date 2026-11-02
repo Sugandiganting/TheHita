@@ -88,6 +88,7 @@ model Account {
   lines       JournalLine[]
   costItems   ProjectCostItem[]
   budgetLines BudgetLine[]
+  spendCategories SpendCategory[]
 
   createdAt DateTime @default(now())
 
@@ -374,9 +375,19 @@ model SpendCategory {
   /// lama yang belum sempat diberi jatah sendiri.
   weight Float  @default(1)
   sort   Int    @default(0)
+  /// Akun kas departemen ini. Bila diisi, uang yang ditransfer ke akun itu
+  /// dihitung sebagai terpakai — uang yang sudah diserahkan ke departemen
+  /// dianggap habis, dan memang begitu cara pembukuan ini berjalan: saldo kas
+  /// yang dilaporkan tiap minggu sudah tidak memuatnya lagi.
+  ///
+  /// null berarti kategori ini tidak diturunkan dari transfer dan angkanya
+  /// diketik manual — seperti pembayaran langsung dari rekening bank, yang
+  /// memang bukan perpindahan ke kas departemen.
+  cashAccountId String?
 
-  plan   CashPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  spends SpendEntry[]
+  plan        CashPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  spends      SpendEntry[]
+  cashAccount Account?     @relation(fields: [cashAccountId], references: [id])
 
   @@index([planId])
 }

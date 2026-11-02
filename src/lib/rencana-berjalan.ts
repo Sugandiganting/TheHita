@@ -55,6 +55,10 @@ export async function buatRencanaLanjutan(period: Period): Promise<Lanjutan> {
   const kategori = sebelumnya?.categories.length
     ? sebelumnya.categories.map((k) => ({
         label: k.label, weight: k.weight, budget: k.budget, sort: k.sort,
+        // Tautan ke kas departemen ikut dibawa. Tanpa ini, bulan baru lahir
+        // tanpa tautan dan "terpakai dari transfer" terbaca nol — bukan
+        // sebagai kesalahan, melainkan sebagai departemen yang belum belanja.
+        cashAccountId: k.cashAccountId,
       }))
     : KATEGORI_BAWAAN;
 

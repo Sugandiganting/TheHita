@@ -1080,6 +1080,42 @@ export async function updateCategoryBudget(_prev: ActionState, formData: FormDat
   return ok(`Jatah ${ada.label} diubah.`);
 }
 
+/**
+ * Menautkan sebuah kategori ke akun kas departemennya.
+ *
+ * Setelah ditautkan, uang yang ditransfer ke akun itu dihitung sebagai
+ * terpakai tanpa perlu diketik lagi — anggapannya uang yang sudah diserahkan
+ * ke departemen pasti habis.
+ */
+export async function updateCategoryAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const cashAccountId = String(formData.get('cashAccountId') ?? '').trim() || null;
+
+  const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { label: true } });
+  if (!ada) return fail('Kategori tidak ditemukan.');
+
+  if (cashAccountId) {
+    const akun = await prisma.account.findUnique({
+      where: { id: cashAccountId },
+      select: { code: true, name: true, isCash: true, isHeader: true, active: true },
+    });
+    if (!akun) return fail('Rekening tidak ditemukan.');
+    // Akun non-kas tidak pernah menerima transfer, jadi menautkannya hanya
+    // menghasilkan "terpakai nol" yang terbaca seperti departemen yang belum
+    // belanja — kekeliruan yang tidak menampakkan dirinya sendiri.
+    if (!akun.isCash || akun.isHeader || !akun.active) {
+      return fail(`${akun.code} ${akun.name} bukan akun kas aktif, jadi tidak akan pernah menerima transfer.`);
+    }
+    await prisma.spendCategory.update({ where: { id }, data: { cashAccountId } });
+    segarkanRencanaKas();
+    return ok(`${ada.label} ditautkan ke ${akun.code} ${akun.name}. Transfer ke rekening itu kini dihitung sebagai terpakai.`);
+  }
+
+  await prisma.spendCategory.update({ where: { id }, data: { cashAccountId: null } });
+  segarkanRencanaKas();
+  return ok(`Tautan rekening ${ada.label} dilepas. Terpakai kembali diketik manual.`);
+}
+
 export async function deleteCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { id: true } });

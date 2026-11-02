@@ -9,6 +9,7 @@ import { isProfitLoss, round, signedBalance } from './accounting';
 import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
 import { barisBulan, type BarisBulan } from './bulanan';
 import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
+import { terpakaiDariTransfer, transferPerCabang, type BarisTransfer } from './transfer-departemen';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
@@ -334,6 +335,16 @@ export type CashAccountBalance = {
  * Rekening yang belum pernah dipakai tetap ditampilkan dengan saldo nol supaya
  * bisa dipilih sebagai tujuan transfer.
  */
+/** Daftar akun kas aktif, untuk menautkan kategori belanja ke kas departemennya. */
+export async function getCashAccounts(): Promise<{ id: string; label: string }[]> {
+  const akun = await prisma.account.findMany({
+    where: { isCash: true, active: true, isHeader: false },
+    orderBy: { code: 'asc' },
+    select: { id: true, code: true, name: true },
+  });
+  return akun.map((a) => ({ id: a.id, label: `${a.code} ${a.name}` }));
+}
+
 export async function getCashAccountsByUnit(unitIds: UnitFilter = null): Promise<CashAccountBalance[]> {
   const [accounts, units, lines] = await Promise.all([
     prisma.account.findMany({
@@ -681,6 +692,18 @@ export type RencanaKasDetail = {
     id: string; label: string; weight: number;
     /** Jatah sebulan yang diketik sendiri; null berarti ikut porsi. */
     budget: number | null;
+    /**
+     * Akun kas departemen ini. Bila ada, uang yang ditransfer ke sana
+     * dihitung sebagai terpakai tanpa perlu diketik lagi.
+     */
+    cashAccountId: string | null;
+    cashAccountLabel: string | null;
+    /** Bagian yang dicatat manual lewat Catat belanja. */
+    manual: number;
+    /** Bagian yang berasal dari transfer ke kas departemen, sebulan penuh. */
+    transfer: number;
+    /** Transfer bulan ini dipecah per cabang pengirim. */
+    transferPerCabang: { unit: string; amount: number }[];
     /** Terpakai setelah tanggal posisi kas — yang mengurangi plafon. */
     terpakai: number;
     /** Terpakai sejak awal bulan, termasuk yang sudah tercermin di saldo. */
@@ -946,7 +969,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     where: { period },
     include: {
       commitments: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
-      categories: { orderBy: [{ sort: 'asc' }, { label: 'asc' }] },
+      categories: {
+        orderBy: [{ sort: 'asc' }, { label: 'asc' }],
+        include: { cashAccount: { select: { code: true, name: true } } },
+      },
       checkpoints: { orderBy: { date: 'desc' } },
       spends: { orderBy: [{ date: 'asc' }, { createdAt: 'asc' }], include: { category: true } },
     },
@@ -1063,13 +1089,59 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         .map((e) => ({ urut: e.urut, date: e.date, amount: e.amount, mode: e.mode })),
     );
 
+  // Uang yang ditransfer ke kas sebuah departemen dihitung sebagai terpakai.
+  // Anggapannya: begitu diserahkan, uang itu habis — dan memang begitu cara
+  // pembukuan ini berjalan, karena saldo kas yang dilaporkan tiap minggu sudah
+  // tidak memuat kas departemen lagi. Tanpa ini, uang yang sama akan terbaca
+  // dua kali: masih tersedia di plafon, sekaligus sudah dibelanjakan.
+  //
+  // Hanya kategori yang ditautkan ke sebuah akun kas yang diturunkan begini.
+  // Pembayaran langsung dari rekening bank bukan perpindahan ke kas
+  // departemen, jadi angkanya tetap diketik.
+  const akunDepartemen = plan.categories.flatMap((k) => (k.cashAccountId ? [k.cashAccountId] : []));
+  const transferMasuk = akunDepartemen.length > 0
+    ? await prisma.journalLine.findMany({
+        where: {
+          accountId: { in: akunDepartemen },
+          entry: {
+            source: 'TRANSFER',
+            date: { gte: periodStart(period), lt: periodEndExclusive(period) },
+          },
+        },
+        select: {
+          accountId: true,
+          debit: true,
+          credit: true,
+          entry: { select: { date: true, description: true } },
+          unit: { select: { code: true, name: true } },
+        },
+      })
+    : [];
+
+  const barisTransfer: BarisTransfer[] = transferMasuk.map((l) => ({
+    accountId: l.accountId,
+    debit: l.debit,
+    credit: l.credit,
+    tanggal: l.entry.date,
+    unit: l.unit.code,
+  }));
+
+  const transferKategori = (accountId: string | null, hanyaSetelahPosisi: boolean) =>
+    round(terpakaiDariTransfer(barisTransfer, accountId, { batasPosisi: batas, hanyaSetelahPosisi }));
+
   const kategori = plan.categories.map((k) => ({
     id: k.id,
     label: k.label,
     weight: k.weight,
     budget: k.budget,
-    terpakai: terpakaiKategori(k.id, true),
-    terpakaiBulanIni: terpakaiKategori(k.id, false),
+    cashAccountId: k.cashAccountId,
+    cashAccountLabel: k.cashAccount ? `${k.cashAccount.code} ${k.cashAccount.name}` : null,
+    manual: terpakaiKategori(k.id, false),
+    transfer: transferKategori(k.cashAccountId, false),
+    transferPerCabang: transferPerCabang(barisTransfer, k.cashAccountId)
+      .map((x) => ({ unit: x.unit, amount: round(x.amount) })),
+    terpakai: terpakaiKategori(k.id, true) + transferKategori(k.cashAccountId, true),
+    terpakaiBulanIni: terpakaiKategori(k.id, false) + transferKategori(k.cashAccountId, false),
   }));
   // Hanya rencana yang sudah disetujui yang memotong anggaran; yang masih draf
   // adalah hitung-hitungan, belum keputusan.

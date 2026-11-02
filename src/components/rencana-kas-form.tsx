@@ -1,11 +1,12 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
   deleteSpend, saveAssumptions, saveCashProjection, saveCategory, saveCheckpoint,
-  saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryBudget, type ActionState,
+  saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryAccount, updateCategoryBudget,
+  type ActionState,
 } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { MoneyInput } from './money-input';
@@ -293,6 +294,45 @@ export function CategoryBudget({ id, jatah }: { id: string; jatah: number }) {
       />
       {berubah && <Tautan label="Simpan" pendingLabel="…" />}
       {!state.ok && state.message && <span className="text-xs text-red-600">{state.message}</span>}
+    </form>
+  );
+}
+
+/**
+ * Menautkan kategori ke akun kas departemennya.
+ *
+ * Disimpan begitu pilihannya berubah, tanpa tombol simpan: pilihannya cuma
+ * satu dan akibatnya langsung terlihat di kolom sebelahnya, jadi tombol
+ * tambahan hanya menambah langkah tanpa menambah kejelasan.
+ */
+export function CategoryAccount({
+  id, cashAccountId, akun,
+}: {
+  id: string;
+  cashAccountId: string | null;
+  akun: { id: string; label: string }[];
+}) {
+  const [state, action] = useActionState(updateCategoryAccount, initial);
+  const form = useRef<HTMLFormElement>(null);
+
+  return (
+    <form action={action} ref={form} className="mt-0.5">
+      <input type="hidden" name="id" value={id} />
+      <select
+        name="cashAccountId"
+        defaultValue={cashAccountId ?? ''}
+        aria-label="Kas departemen"
+        onChange={() => form.current?.requestSubmit()}
+        className="w-full max-w-[13rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      >
+        <option value="">— diketik manual —</option>
+        {akun.map((a) => (
+          <option key={a.id} value={a.id}>{a.label}</option>
+        ))}
+      </select>
+      {!state.ok && state.message && (
+        <span className="mt-0.5 block text-[11px] text-red-600">{state.message}</span>
+      )}
     </form>
   );
 }

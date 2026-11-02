@@ -32,7 +32,7 @@ export default async function TransferPage() {
     <>
       <PageHeader
         title="Transfer Money"
-        description="Memindahkan uang antar rekening milik grup — misalnya dari Bank IGYT ke Bank The Hita Legian, atau dari bank ke Kas Kecil Purchasing. Transfer tidak menambah maupun mengurangi kekayaan grup, hanya memindahkan letaknya."
+        description="Memindahkan uang antar rekening milik grup — misalnya dari Bank IGYT ke Bank The Hita Legian, atau dari bank ke Petty Cash Purchasing. Transfer tidak menambah maupun mengurangi kekayaan grup, hanya memindahkan letaknya. Khusus transfer ke kas departemen yang sudah ditautkan di Rencana Kas, nominalnya langsung terhitung sebagai jatah departemen itu yang terpakai bulan ini — jadi tidak perlu diketik ulang di sana."
       />
 
       <div className="grid gap-6 lg:grid-cols-5">

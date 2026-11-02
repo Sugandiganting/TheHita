@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
+import { getCashAccounts, getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
@@ -15,7 +15,8 @@ import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryBudget, CategoryDelete, CategoryForm, CheckpointDelete, CheckpointForm,
+  AssumptionForm, CategoryAccount, CategoryBudget, CategoryDelete, CategoryForm, CheckpointDelete,
+  CheckpointForm,
   CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
 import { JadwalTersimpan, PurchaseActions, PurchaseCalculator } from '@/components/belanja-form';
@@ -87,6 +88,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   const daftar = await getRencanaKasPeriods();
   const dipilih = one(params.periode) ?? daftar[0] ?? currentPeriod();
   const data = await getRencanaKas(dipilih);
+  const akunKas = await getCashAccounts();
 
   const pemilih = (
     <Card className="card-pad">
@@ -705,7 +707,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.kategori.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Sudah dipakai diambil dari laporan belanja kategori itu sepanjang bulan ini. Sisa adalah jatah dikurangi yang sudah dipakai.">
+                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Sudah dipakai: untuk kategori yang ditautkan ke kas departemen, dijumlahkan sendiri dari transfer ke rekening itu sepanjang bulan — uang yang sudah diserahkan dianggap habis. Laporan belanja manual tetap ikut dijumlahkan, jadi jangan mencatat hal yang sama dua kali. Sisa adalah jatah dikurangi yang sudah dipakai.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
@@ -733,7 +735,16 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           const sisa = k.sisa;
                           return (
                             <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
-                              <td className="td">{k.label}</td>
+                              <td className="td">
+                                {k.label}
+                                {sumber && (
+                                  <CategoryAccount
+                                    id={sumber.id}
+                                    cashAccountId={sumber.cashAccountId}
+                                    akun={akunKas}
+                                  />
+                                )}
+                              </td>
                               <td className="td num">
                                 {sumber
                                   ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
@@ -746,6 +757,24 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                               </td>
                               <td className="td num">
                                 {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
+                                {sumber && sumber.transfer > 0 && sumber.manual > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    transfer {formatRupiahShort(sumber.transfer)} + manual{' '}
+                                    {formatRupiahShort(sumber.manual)}
+                                  </span>
+                                )}
+                                {sumber && sumber.transfer > 0 && sumber.manual === 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    dari transfer
+                                    {sumber.transferPerCabang.length > 1
+                                      && ` · ${sumber.transferPerCabang.length} cabang`}
+                                  </span>
+                                )}
+                                {sumber && sumber.cashAccountId !== null && sumber.transfer === 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    belum ada transfer bulan ini
+                                  </span>
+                                )}
                               </td>
                               <td className={`td num ${sisa < 0 ? 'font-semibold text-red-600' : ''}`}>
                                 {formatRupiah(sisa)}
