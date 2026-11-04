@@ -51,6 +51,12 @@ export function MoneyForm({
   const action = kind === 'RECEIVE' ? createReceiveMoney : createPayMoney;
   const [state, formAction] = useActionState(action, initial);
   const [cash, setCash] = useState('');
+  // Cabang disaring lebih dulu supaya daftar rekening tidak memuat seluruh
+  // kombinasi cabang x akun sekaligus — lima cabang dengan sebelas akun kas
+  // berarti lima puluh lima baris, dan yang dicari hampir selalu ada di satu
+  // cabang saja. Kosong berarti semua, jadi yang terbiasa mengetik langsung
+  // nama rekeningnya tidak kehilangan caranya.
+  const [unit, setUnit] = useState('');
 
   const byKey = useMemo(() => new Map(accounts.map((a) => [keyOf(a), a])), [accounts]);
   const cashAcc = byKey.get(cash);
@@ -68,15 +74,25 @@ export function MoneyForm({
   // Rekening kas dikelompokkan per cabang; saldonya ikut tampil di daftar.
   const cashOptions: PickerOption[] = useMemo(
     () =>
-      accounts.map((a) => ({
-        value: keyOf(a),
-        code: a.code,
-        label: a.name,
-        group: `${a.unitCode} — ${a.unitName}`,
-        meta: formatRupiah(a.balance),
-      })),
-    [accounts],
+      accounts
+        .filter((a) => !unit || a.unitId === unit)
+        .map((a) => ({
+          value: keyOf(a),
+          code: a.code,
+          label: a.name,
+          group: `${a.unitCode} — ${a.unitName}`,
+          meta: formatRupiah(a.balance),
+        })),
+    [accounts, unit],
   );
+
+  // Rekening yang terlanjur dipilih dilepas bila cabangnya berganti. Kalau
+  // dibiarkan, formulir menyimpan rekening yang tidak lagi terlihat di
+  // daftarnya — dan yang tersimpan bukan yang terbaca di layar.
+  const gantiUnit = (baru: string) => {
+    setUnit(baru);
+    if (baru && cashAcc && cashAcc.unitId !== baru) setCash('');
+  };
 
   const categoryOptions: PickerOption[] = useMemo(
     () =>
@@ -102,20 +118,41 @@ export function MoneyForm({
           <input id="m-date" name="date" type="date" defaultValue={defaultDate} className="input" required />
         </div>
         <div>
-          <label className="label" htmlFor="m-cash">
-            {isReceive ? 'Uang masuk ke rekening' : 'Uang dibayar dari rekening'}
-          </label>
-          <SearchableSelect
-            id="m-cash"
-            options={cashOptions}
-            value={cash}
-            onChange={setCash}
-            required
-            showGroup
-            placeholder="— Pilih rekening —"
-            searchPlaceholder="Ketik nama rekening atau cabang…"
-          />
+          <label className="label" htmlFor="m-unit-kas">Cabang pemilik rekening</label>
+          <select
+            id="m-unit-kas"
+            className="input"
+            value={unit}
+            onChange={(e) => gantiUnit(e.target.value)}
+          >
+            <option value="">— Semua cabang —</option>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>{u.code} — {u.name}</option>
+            ))}
+          </select>
         </div>
+      </div>
+
+      <div>
+        <label className="label" htmlFor="m-cash">
+          {isReceive ? 'Uang masuk ke rekening' : 'Uang dibayar dari rekening'}
+        </label>
+        <SearchableSelect
+          id="m-cash"
+          options={cashOptions}
+          value={cash}
+          onChange={setCash}
+          required
+          showGroup={!unit}
+          placeholder={unit ? '— Pilih rekening cabang ini —' : '— Pilih rekening —'}
+          searchPlaceholder={unit ? 'Ketik nama rekening…' : 'Ketik nama rekening atau cabang…'}
+        />
+        {unit && cashOptions.length === 0 && (
+          <p className="mt-1 text-xs text-amber-700">
+            Cabang ini belum punya rekening kas. Tandai akunnya sebagai kas/bank di menu
+            Chart of Account, atau pilih cabang lain.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
