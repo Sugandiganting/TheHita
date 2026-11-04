@@ -14,6 +14,7 @@ import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
 import { buatRencanaLanjutan } from '@/lib/rencana-berjalan';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
+import { randomBytes } from 'node:crypto';
 import { cocokKataSandi, sidikKataSandi } from '@/lib/auth';
 import { NAMA_KUKI, UMUR_SESI_HARI, buatToken } from '@/lib/sesi';
 import { sesiSekarang } from '@/lib/sesi-server';
@@ -1627,6 +1628,108 @@ export async function masuk(_prev: ActionState, formData: FormData): Promise<Act
 export async function keluar(): Promise<void> {
   (await cookies()).delete(NAMA_KUKI);
   redirect('/masuk');
+}
+
+/* ---------------------------------------------------------------------------
+ * Pengguna
+ *
+ * Selama belum ada pembedaan hak akses, siapa pun yang sudah masuk bisa
+ * membuat akun baru untuk siapa saja. Itu keputusan yang diambil sadar demi
+ * kemudahan menambah orang, dan disebut di layar supaya tidak terlupa.
+ *
+ * Yang tetap dijaga: jangan sampai ada yang mengunci dirinya sendiri atau
+ * mengunci semua orang. Memulihkannya hanya bisa lewat baris perintah di
+ * server, dan itu justru saat orangnya paling tidak bisa masuk.
+ * ------------------------------------------------------------------------ */
+
+/** Kata sandi acak yang masih bisa dibacakan lewat telepon. */
+function sandiAcak(): string {
+  return randomBytes(9).toString('base64url').replace(/[-_]/g, 'x');
+}
+
+/** Huruf kecil, angka, titik, garis bawah dan strip. Tanpa spasi. */
+const POLA_USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+
+function periksaSandi(sandi: string, ulangi: string | null): string | null {
+  if (sandi.length < 8) return 'Kata sandi minimal 8 karakter.';
+  if (ulangi !== null && sandi !== ulangi) return 'Ketikan ulang kata sandinya tidak sama.';
+  return null;
+}
+
+export async function tambahPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const sesi = await sesiSekarang();
+  if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
+
+  const username = String(formData.get('username') ?? '').trim().toLowerCase();
+  const name = String(formData.get('name') ?? '').trim();
+  const diketik = String(formData.get('password') ?? '');
+
+  if (!name) return fail('Nama lengkap wajib diisi.');
+  if (!POLA_USERNAME.test(username)) {
+    return fail('Nama pengguna: 3–32 karakter, huruf kecil/angka/titik/garis bawah/strip, '
+      + 'diawali huruf atau angka, tanpa spasi.');
+  }
+  if (await prisma.user.findUnique({ where: { username }, select: { id: true } })) {
+    return fail(`Nama pengguna "${username}" sudah dipakai.`);
+  }
+
+  // Dikosongkan berarti dibuatkan — lebih aman daripada kata sandi seadanya
+  // yang diketik buru-buru, dan penggunanya tetap bisa menggantinya sendiri.
+  const sandi = diketik || sandiAcak();
+  const salah = periksaSandi(sandi, diketik ? String(formData.get('ulangi') ?? '') : null);
+  if (salah) return fail(salah);
+
+  await prisma.user.create({ data: { username, name, password: await sidikKataSandi(sandi) } });
+  revalidatePath('/pengguna');
+
+  return ok(
+    diketik
+      ? `Pengguna ${username} dibuat.`
+      : `Pengguna ${username} dibuat. Kata sandinya: ${sandi} — catat sekarang, tidak akan ditampilkan lagi.`,
+  );
+}
+
+export async function setelSandiPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const sesi = await sesiSekarang();
+  if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
+
+  const id = String(formData.get('id') ?? '');
+  const user = await prisma.user.findUnique({ where: { id }, select: { username: true } });
+  if (!user) return fail('Pengguna tidak ditemukan.');
+
+  const sandi = sandiAcak();
+  await prisma.user.update({ where: { id }, data: { password: await sidikKataSandi(sandi) } });
+  revalidatePath('/pengguna');
+  return ok(`Kata sandi ${user.username} diganti menjadi: ${sandi} — catat sekarang, tidak akan ditampilkan lagi.`);
+}
+
+export async function setelAktifPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const sesi = await sesiSekarang();
+  if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
+
+  const id = String(formData.get('id') ?? '');
+  const aktif = String(formData.get('aktif') ?? '') === 'true';
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { username: true, active: true } });
+  if (!user) return fail('Pengguna tidak ditemukan.');
+
+  if (!aktif) {
+    // Mematikan akun sendiri memutus sesi yang sedang berjalan, dan yang
+    // melakukannya langsung kehilangan jalan untuk membatalkannya.
+    if (id === sesi.id) return fail('Tidak bisa menonaktifkan akun Anda sendiri.');
+
+    // Akun aktif terakhir: mematikannya mengunci semua orang, dan memulihkannya
+    // hanya bisa lewat baris perintah di server.
+    const aktifLain = await prisma.user.count({ where: { active: true, NOT: { id } } });
+    if (aktifLain === 0) {
+      return fail('Ini satu-satunya akun yang masih aktif. Mematikannya akan mengunci semua orang '
+        + 'dari sistem, dan hanya bisa dipulihkan lewat baris perintah di server.');
+    }
+  }
+
+  await prisma.user.update({ where: { id }, data: { active: aktif } });
+  revalidatePath('/pengguna');
+  return ok(`${user.username} ${aktif ? 'diaktifkan' : 'dinonaktifkan'}.`);
 }
 
 /** Mengganti kata sandi sendiri. */

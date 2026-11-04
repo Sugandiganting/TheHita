@@ -12,7 +12,17 @@ import { NAMA_KUKI, bacaToken } from '@/lib/sesi';
  */
 export async function middleware(request: NextRequest) {
   const sesi = await bacaToken(request.cookies.get(NAMA_KUKI)?.value);
-  if (sesi) return NextResponse.next();
+  if (sesi) {
+    // Alamat halaman dititipkan ke server component lewat header, karena
+    // layout tidak punya cara lain mengetahuinya. Dipakai tata letak untuk
+    // memeriksa akun yang sudah dinonaktifkan — pemeriksaan itu butuh basis
+    // data, dan middleware berjalan di runtime Edge yang tidak bisa
+    // menyentuhnya. Header hanya terpasang pada halaman yang dijaga, jadi
+    // ketiadaannya sendiri sudah menandakan halaman masuk.
+    const headers = new Headers(request.headers);
+    headers.set('x-hita-path', request.nextUrl.pathname);
+    return NextResponse.next({ request: { headers } });
+  }
 
   // Permintaan dari dalam halaman (aksi server, fetch) tidak boleh dialihkan:
   // yang kembali bukan halaman masuk melainkan kegagalan yang membingungkan.

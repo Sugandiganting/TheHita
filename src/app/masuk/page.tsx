@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
-import { sesiSekarang } from '@/lib/sesi-server';
+import { penggunaMasihAktif, sesiSekarang } from '@/lib/sesi-server';
 import { FormMasuk } from '@/components/masuk-form';
 import type { SearchParams } from '@/lib/search-params';
 
@@ -9,8 +9,12 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Masuk — The Hita Finance' };
 
 export default async function MasukPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  // Yang sudah masuk tidak perlu melihat halaman ini lagi.
-  if (await sesiSekarang()) redirect('/');
+  // Yang sudah masuk tidak perlu melihat halaman ini lagi — kecuali akunnya
+  // sudah dinonaktifkan. Tanpa kekecualian itu, ia terjebak berputar: halaman
+  // ini melemparnya ke "/", lalu tata letak melemparnya balik ke sini.
+  const sesi = await sesiSekarang();
+  const nonaktif = sesi !== null && !(await penggunaMasihAktif(sesi));
+  if (sesi && !nonaktif) redirect('/');
 
   // Salinan yang baru dipasang belum punya pengguna sama sekali. Tanpa
   // keterangan ini, layarnya hanya meminta kata sandi yang memang belum pernah
@@ -31,6 +35,13 @@ export default async function MasukPage({ searchParams }: { searchParams: Promis
           <h1 className="mt-3 text-xl font-semibold text-slate-800">The Hita Finance</h1>
           <p className="text-sm text-slate-500">Akuntansi &amp; Peramalan Kas</p>
         </div>
+
+        {nonaktif && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Akun Anda sudah dinonaktifkan, jadi sesinya dihentikan. Hubungi pengelola sistem
+            bila ini tidak semestinya.
+          </div>
+        )}
 
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           {belumAdaPengguna ? (
