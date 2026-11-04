@@ -22,6 +22,17 @@ PERIKSA="${HITA_HEALTH:-http://127.0.0.1:3000/masuk}"
 CADANGAN="${HITA_BACKUP_DIR:-/home/$PENGGUNA/cadangan}"
 
 sebagai_app() { su - "$PENGGUNA" -c "cd '$FOLDER' && $1"; }
+
+# Seluruh perintah git dijalankan sebagai pemilik foldernya, bukan sebagai
+# root. Git menolak membaca repositori milik pengguna lain — "detected dubious
+# ownership" — dan itu memang perlindungan yang benar: berkas konfigurasi di
+# dalam repositori bisa menyuruh git menjalankan perintah, jadi root yang
+# membaca repositori milik orang lain berarti menyerahkan root kepadanya.
+#
+# Memakai `git config --global --add safe.directory` akan mematikan
+# perlindungan itu untuk selamanya demi satu perintah. Menjalankannya sebagai
+# pemiliknya tidak perlu mematikan apa pun.
+git_app() { su - "$PENGGUNA" -c "git -C '$FOLDER' $1"; }
 kabar() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 gagal() { printf '\n\033[31mGAGAL: %s\033[0m\n' "$1" >&2; exit 1; }
 
@@ -31,12 +42,12 @@ gagal() { printf '\n\033[31mGAGAL: %s\033[0m\n' "$1" >&2; exit 1; }
 kabar "Mencadangkan basis data"
 sebagai_app "npm run cadangkan -- '$CADANGAN'" || gagal "Pencadangan gagal — pembaruan dihentikan sebelum apa pun berubah."
 
-SEBELUM="$(git -C "$FOLDER" rev-parse HEAD)"
-CABANG="$(git -C "$FOLDER" rev-parse --abbrev-ref HEAD)"
+SEBELUM="$(git_app "rev-parse HEAD")"
+CABANG="$(git_app "rev-parse --abbrev-ref HEAD")"
 
 kabar "Mengambil versi terbaru ($CABANG)"
 sebagai_app "git fetch --quiet origin '$CABANG'"
-SESUDAH="$(git -C "$FOLDER" rev-parse "origin/$CABANG")"
+SESUDAH="$(git_app "rev-parse origin/$CABANG")"
 
 if [ "$SEBELUM" = "$SESUDAH" ] && [ "${1:-}" != "--paksa" ]; then
   kabar "Sudah versi terbaru — tidak ada yang perlu dikerjakan."
@@ -48,7 +59,7 @@ fi
 # server, perintah ini berhenti dan mengeluh alih-alih membuang suntingannya
 # diam-diam. Berkas .env dan basis datanya sendiri tidak diikuti git.
 sebagai_app "git pull --ff-only --quiet origin '$CABANG'" \
-  || gagal "git pull ditolak. Periksa 'git -C $FOLDER status' — mungkin ada berkas yang disunting di server."
+  || gagal "git pull ditolak. Periksa 'sudo -u $PENGGUNA git -C $FOLDER status' — mungkin ada berkas yang disunting di server."
 
 kabar "Memasang pustaka"
 # Bukan --omit=dev: tailwind, typescript dan prisma ada di devDependencies, dan
@@ -72,8 +83,8 @@ systemctl restart "$LAYANAN"
 kabar "Memeriksa"
 for _ in $(seq 1 20); do
   if curl -fsS -o /dev/null "$PERIKSA"; then
-    git -C "$FOLDER" --no-pager log --oneline "$SEBELUM..$SESUDAH" | sed 's/^/  /' || true
-    printf '\n\033[32mSelesai. Aplikasi berjalan pada versi %s.\033[0m\n' "$(git -C "$FOLDER" rev-parse --short HEAD)"
+    git_app "--no-pager log --oneline $SEBELUM..$SESUDAH" | sed 's/^/  /' || true
+    printf '\n\033[32mSelesai. Aplikasi berjalan pada versi %s.\033[0m\n' "$(git_app "rev-parse --short HEAD")"
     exit 0
   fi
   sleep 1
