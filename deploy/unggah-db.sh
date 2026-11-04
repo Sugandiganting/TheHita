@@ -38,10 +38,22 @@ gagal() { printf '\n\033[31mGAGAL: %s\033[0m\n' "$1" >&2; exit 1; }
 kabar "Mencadangkan basis data di komputer ini"
 # VACUUM INTO, bukan menyalin berkasnya: salinan yang diambil di tengah
 # penulisan bisa rusak, dan rusaknya baru ketahuan justru saat dibutuhkan.
+SEBELUM="$(ls -t cadangan/*.db.gz 2>/dev/null | head -1 || true)"
 npm run cadangkan >/dev/null || gagal "Pencadangan gagal."
 
 BERKAS="$(ls -t cadangan/*.db.gz 2>/dev/null | head -1)"
 [ -n "$BERKAS" ] || gagal "Tidak ada berkas cadangan di folder cadangan/."
+
+# npm run cadangkan keluar dengan kode 0 walau tidak membuat apa pun, bila
+# sudah ada cadangan bernama sama (stempel waktunya sampai detik). Tanpa
+# pemeriksaan ini, yang terkirim ke server adalah cadangan LAMA — dan
+# kegagalannya tidak menampakkan diri sama sekali: perintahnya berhasil,
+# berkasnya ada, isinya saja yang bukan keadaan hari ini.
+[ "$BERKAS" != "$SEBELUM" ] || gagal "Pencadangan tidak menghasilkan berkas baru.
+  Cadangan terbaru masih $BERKAS, dan mengirimnya berarti menaikkan keadaan lama.
+  Biasanya karena perintah ini baru saja dijalankan pada detik yang sama — tunggu
+  sebentar lalu ulangi."
+
 gzip -t "$BERKAS" || gagal "$BERKAS rusak."
 printf '    %s (%s)\n' "$BERKAS" "$(du -h "$BERKAS" | cut -f1)"
 
