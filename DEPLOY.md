@@ -382,6 +382,57 @@ journalctl -u caddy -n 50        # Caddy
 tail -f /var/log/caddy/hita.log  # kunjungan
 ```
 
+### Mengunggah basis data dari komputer kerja ke server
+
+Dipakai saat data diolah dulu di komputer sendiri — impor dari workbook,
+koreksi, pemeriksaan — lalu hasilnya dinaikkan ke server. Satu perintah, dari
+folder projek di komputer kerja:
+
+```bash
+bash deploy/unggah-db.sh thehita@ALAMAT-IP-VPS
+```
+
+Supaya alamatnya tidak perlu diketik tiap kali, simpan sekali saja di
+`.env.local` — berkas itu diabaikan git, jadi alamat server tidak ikut
+tersebar lewat repositori yang publik:
+
+```bash
+echo 'HITA_SERVER=thehita@ALAMAT-IP-VPS' >> .env.local
+bash deploy/unggah-db.sh
+```
+
+Yang dikerjakannya berurutan: mencadangkan basis data di komputer kerja
+(`VACUUM INTO`, jadi utuh walau aplikasinya sedang jalan), memeriksanya,
+mengirim ke server, lalu menjalankan `deploy/pasang-db.sh` di sana.
+
+Di server, berkasnya diperiksa dan dibuka **lebih dulu** selagi aplikasi masih
+melayani; layanan baru dihentikan setelah semuanya terbukti baik. Berkas yang
+terpotong di jalan atau yang ternyata bukan basis data ditolak sebelum ada
+yang mati. Basis data server dicadangkan sendiri sebelum diganti, dan
+salinan persis sebelum penggantian ditinggalkan di
+`prisma/hita.db.sebelum-ganti` — perintah untuk kembali ke sana dicetak di
+akhir, tinggal disalin.
+
+**Isi basis data server terganti seluruhnya**, termasuk daftar pengguna. Akun
+yang hanya ada di server — misalnya `admin` yang dibuat saat pemasangan —
+ikut hilang, dan setelah itu yang berlaku adalah pengguna dari komputer kerja.
+Kalau sampai tidak bisa masuk, setel ulang dari server:
+
+```bash
+sudo -u hita -i
+cd app && npm run pengguna -- daftar
+npm run pengguna -- sandi <namapengguna>
+```
+
+Bila berkasnya sampai ke server lewat jalan lain, pemasangnya bisa dipanggil
+sendiri:
+
+```bash
+sudo bash /home/hita/app/deploy/pasang-db.sh /tmp/dbbaru.db.gz
+```
+
+---
+
 ### Memulihkan dari cadangan
 
 ```bash

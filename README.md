@@ -132,6 +132,7 @@ proyek contoh yang dilewati.
 | `npm run impor -- <berkas> --pms=PMS2 --unit=THL` | Impor lewat baris perintah, untuk banyak berkas sekaligus |
 | `npm run impor-kas -- <Proyeksi.xlsx> <Kondisi_Keuangan.xlsx>` | Memuat posisi kas mingguan dari workbook kerja ke menu Rencana Kas |
 | `npm run impor-riwayat -- <Proyeksi.xlsx>` | Mengisi posisi kas bulan-bulan yang sudah lewat, untuk menu Arus Kas Bulanan |
+| `bash deploy/unggah-db.sh` | Menaikkan basis data komputer ini ke server, menggantikan yang di sana |
 
 Jalankan semuanya lewat `npm run`, bukan `npx`. Perintah `npm run` memakai Prisma
 yang terpasang di folder projek ini (versi 5), sedangkan `npx prisma` akan mengunduh
