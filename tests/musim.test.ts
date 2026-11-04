@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
   MUSIM_BAWAAN, dasarAcuan, musimAcuan, pengali, polaBervariasi, proyeksiBulan,
-  proyeksiMusim, type Musim, type PolaMusim,
+  proyeksiDariBulanLain, proyeksiMusim, type Musim, type PolaMusim,
 } from '../src/lib/musim';
 
 const jt = (n: number) => n * 1_000_000;
@@ -87,4 +87,53 @@ test('musim bawaan punya tepat satu acuan dan kodenya unik', () => {
   // Urut dari paling sepi ke paling ramai.
   const delta = MUSIM_BAWAAN.map((m) => m.delta);
   assert.deepEqual(delta, [...delta].sort((a, b) => a - b));
+});
+
+/* ---------------------------------------------------------------------------
+ * Menurunkan proyeksi sebuah bulan dari bulan lain lewat musimnya
+ * ------------------------------------------------------------------------ */
+
+/** Pola nyata The Hita: Okt mid, Nov low, Agu high, Des peak. */
+const polaHita: PolaMusim = new Map([
+  [8, { code: 'HIGH', name: 'High', delta: 18.7 }],
+  [10, { code: 'MID', name: 'Mid', delta: 0 }],
+  [11, { code: 'LOW', name: 'Low', delta: -7.2 }],
+  [12, { code: 'PEAK', name: 'Peak', delta: 22 }],
+]);
+
+test('November diturunkan dari Oktober dengan pengali musimnya', () => {
+  // Oktober musim acuan (delta 0), November −7,2% → pengali 0,928.
+  const n = proyeksiDariBulanLain({ period: '2026-10', nilai: 400_000_000 }, '2026-11', polaHita);
+  assert.equal(n, 400_000_000 * 0.928);
+  assert.equal(Math.round(n!), 371_200_000);
+});
+
+test('musim bulan asal dilepas dulu, bukan ditumpuk', () => {
+  // Agustus high (+18,7%). Tanpa melepas musimnya, November akan terbaca
+  // 18,7% lebih tinggi daripada seharusnya — tingginya Agustus menular.
+  const dariAgustus = proyeksiDariBulanLain(
+    { period: '2026-08', nilai: 400_000_000 * 1.187 }, '2026-11', polaHita,
+  );
+  const dariOktober = proyeksiDariBulanLain(
+    { period: '2026-10', nilai: 400_000_000 }, '2026-11', polaHita,
+  );
+  assert.ok(Math.abs(dariAgustus! - dariOktober!) < 1, 'kedua pangkal sampai ke angka yang sama');
+});
+
+test('bulan yang belum diberi musim tidak ditebak', () => {
+  // Menebak dengan pola yang belum ada sama saja dengan mengarang.
+  assert.equal(
+    proyeksiDariBulanLain({ period: '2026-10', nilai: 400_000_000 }, '2027-03', polaHita),
+    null,
+  );
+  assert.equal(
+    proyeksiDariBulanLain({ period: '2026-10', nilai: 400_000_000 }, '2026-11', new Map()),
+    null,
+  );
+});
+
+test('melompati beberapa bulan tetap memakai musim bulan tujuan saja', () => {
+  // Desember dari Oktober: +22%, bukan −7,2% lalu +22% berurutan.
+  const des = proyeksiDariBulanLain({ period: '2026-10', nilai: 400_000_000 }, '2026-12', polaHita);
+  assert.equal(Math.round(des!), Math.round(400_000_000 * 1.22));
 });

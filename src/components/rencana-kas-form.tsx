@@ -8,7 +8,7 @@ import {
   saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryAccount, updateCategoryBudget,
   type ActionState,
 } from '@/app/actions';
-import { formatRupiah } from '@/lib/format';
+import { formatPeriod, formatRupiah } from '@/lib/format';
 import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
@@ -126,11 +126,17 @@ export function CheckpointForm({
 type TigaSkenario = { PESIMIS: number | null; NORMAL: number | null; OPTIMIS: number | null };
 
 export function ProjectionForm({
-  id, tersimpan, usulan, notes,
+  id, tersimpan, usulan, usulanMusim, notes,
 }: {
   id: string;
   tersimpan: TigaSkenario;
   usulan: { PESIMIS: number; NORMAL: number; OPTIMIS: number } | null;
+  /**
+   * Turunan pola musim dari bulan terakhir yang pernah diketik. Didahulukan
+   * daripada rata-rata riwayat: ia berpangkal pada angka yang pernah dipilih
+   * orang, sedangkan rata-rata riwayat tidak mengenal musim sama sekali.
+   */
+  usulanMusim: { dari: string; nilai: TigaSkenario } | null;
   notes: string | null;
 }) {
   const [state, action] = useActionState(saveCashProjection, initial);
@@ -146,7 +152,8 @@ export function ProjectionForm({
 
       {baris.map((b) => {
         const nilai = tersimpan[b.kunci];
-        const usul = usulan?.[b.kunci];
+        const dariMusim = usulanMusim?.nilai[b.kunci] ?? null;
+        const usul = dariMusim ?? usulan?.[b.kunci];
         return (
           <div key={b.name}>
             <label className="label" htmlFor={`rk-${b.name}`}>{b.label}</label>
@@ -159,11 +166,18 @@ export function ProjectionForm({
             <p className="mt-1 text-xs text-slate-500">
               {nilai === null
                 ? usul === undefined
-                  ? 'Belum ada riwayat untuk diusulkan.'
+                  ? 'Belum ada riwayat maupun pola musim untuk diusulkan.'
                   : `Kosong — memakai usulan ${formatRupiah(usul)}`
                 : usul === undefined
                   ? 'Angka Anda sendiri.'
                   : `Usulan sistem ${formatRupiah(usul)}`}
+              {usul !== undefined && (
+                <span className="mt-0.5 block text-slate-400">
+                  {dariMusim !== null
+                    ? `dari ${formatPeriod(usulanMusim!.dari)} menurut pola musim di Master Data`
+                    : 'rata-rata uang masuk beberapa bulan terakhir'}
+                </span>
+              )}
             </p>
           </div>
         );

@@ -19,7 +19,8 @@ import {
   type LajuOperasional, type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 import {
-  dasarAcuan, polaBervariasi, proyeksiBulan, type Musim, type PolaMusim,
+  dasarAcuan, polaBervariasi, proyeksiBulan, proyeksiDariBulanLain,
+  type Musim, type PolaMusim,
 } from './musim';
 import {
   cicilanPada, cicilanSetelah, jadwalCicilan, konteksPembelian, type Cicilan,
@@ -709,6 +710,15 @@ export type RencanaKasDetail = {
   /** Proyeksi yang tersimpan; null berarti memakai usulan. */
   tersimpan: Record<Skenario, number | null>;
   usulan: Record<Skenario, number> | null;
+  /**
+   * Usulan yang diturunkan dari bulan terakhir yang pernah diketik, lewat pola
+   * musim. null bila polanya belum disiapkan atau belum ada bulan yang diisi.
+   */
+  usulanMusim: {
+    /** Bulan yang jadi pangkalnya. */
+    dari: Period;
+    nilai: Record<Skenario, number | null>;
+  } | null;
   /** Yang benar-benar dipakai menghitung: tersimpan bila ada, selain itu usulan. */
   dipakai: Record<Skenario, number>;
   /** Yang dipakai untuk bulan tepat sesudah bulan berjalan. */
@@ -1032,15 +1042,56 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     NORMAL: plan.incomeNormal,
     OPTIMIS: plan.incomeOptimistic,
   };
-  // Usulan hanya mengisi yang dikosongkan; angka yang sudah diketik menang.
-  const dipakai = Object.fromEntries(
-    SKENARIO.map((s) => [s, tersimpan[s] ?? usulan?.[s] ?? 0]),
-  ) as Record<Skenario, number>;
 
-  // Bulan-bulan sesudah bulan berjalan mengikuti pola musim; bila polanya belum
-  // disiapkan, angkanya sama dengan bulan berjalan.
   const pola = await polaMusim();
   const musimAktif = polaBervariasi(pola);
+
+  /*
+   * Bulan yang belum pernah diisi diturunkan dari bulan terakhir yang memang
+   * pernah ditetapkan seseorang, lewat pola musim di Master Data.
+   *
+   * Tanpa ini, bulan baru lahir dengan proyeksi nol: angka yang diketik tidak
+   * ikut tersalin — itu memang disengaja, proyeksi harus keputusan sadar —
+   * sedangkan usulan dari riwayat diambil dari jurnal, yang selama belum
+   * dipakai berarti kosong. Akibatnya seluruh halaman bulan baru mati sampai
+   * ada yang mengetik, padahal sistem sudah punya segala yang diperlukan
+   * untuk menebaknya dengan masuk akal.
+   *
+   * Yang diambil bulan terakhir yang DIKETIK, bukan bulan sebelumnya begitu
+   * saja. Kalau yang diambil bulan sebelumnya, usulan akan bertumpu pada
+   * usulan, dan kekeliruan satu bulan menular ke seluruh bulan sesudahnya
+   * tanpa ada yang pernah memutuskannya.
+   */
+  const acuanDiketik = await prisma.cashPlan.findFirst({
+    where: { period: { lt: period }, incomeNormal: { not: null } },
+    orderBy: { period: 'desc' },
+    select: {
+      period: true, incomePessimistic: true, incomeNormal: true, incomeOptimistic: true,
+    },
+  });
+
+  const usulanMusim = musimAktif && acuanDiketik
+    ? (Object.fromEntries(
+        SKENARIO.map((sk) => {
+          const nilai = {
+            PESIMIS: acuanDiketik.incomePessimistic,
+            NORMAL: acuanDiketik.incomeNormal,
+            OPTIMIS: acuanDiketik.incomeOptimistic,
+          }[sk];
+          if (nilai === null) return [sk, null];
+          return [sk, proyeksiDariBulanLain({ period: acuanDiketik.period, nilai }, period, pola)];
+        }),
+      ) as Record<Skenario, number | null>)
+    : null;
+
+  // Yang diketik menang, lalu turunan musim, lalu rata-rata riwayat. Turunan
+  // musim didahulukan karena ia berpangkal pada angka yang pernah dipilih
+  // orang lalu disesuaikan dengan polanya; rata-rata riwayat tidak mengenal
+  // musim sama sekali, jadi bulan sepi dan bulan ramai diberinya angka sama.
+  const dipakai = Object.fromEntries(
+    SKENARIO.map((s) => [s, tersimpan[s] ?? usulanMusim?.[s] ?? usulan?.[s] ?? 0]),
+  ) as Record<Skenario, number>;
+
   const musimBulanIni = pola.get(monthOf(period)) ?? null;
   const dasar = Object.fromEntries(
     SKENARIO.map((s) => [s, musimAktif ? dasarAcuan(dipakai[s], musimBulanIni ?? undefined) : null]),
@@ -1356,6 +1407,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     notes: plan.notes,
     tersimpan,
     usulan,
+    usulanMusim: usulanMusim && acuanDiketik
+      ? { dari: acuanDiketik.period, nilai: usulanMusim }
+      : null,
     dipakai,
     dipakaiBerikutnya,
     musim: {

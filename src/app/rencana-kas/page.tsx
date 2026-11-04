@@ -1166,13 +1166,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
           </Card>
 
           <Card className="card-pad">
-            <SectionTitle hint="Untuk bulan berjalan. Bulan-bulan sesudahnya mengikuti pola musim.">
+            <SectionTitle hint="Untuk bulan berjalan. Bulan yang belum pernah diisi diusulkan sendiri dari bulan terakhir yang pernah diketik, disesuaikan dengan pola musim di Master Data — tinggal diubah bila memang ada yang berbeda. Bulan-bulan sesudahnya juga mengikuti pola yang sama.">
               Proyeksi uang masuk
             </SectionTitle>
             <ProjectionForm
               id={data.id}
               tersimpan={data.tersimpan}
               usulan={data.usulan}
+              usulanMusim={data.usulanMusim}
               notes={data.notes}
             />
             {data.riwayatMasuk.length > 0 && (

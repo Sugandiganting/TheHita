@@ -91,6 +91,31 @@ export function proyeksiBulan(period: Period, dasar: number, pola: PolaMusim): n
 }
 
 /**
+ * Proyeksi sebuah bulan, diturunkan dari proyeksi bulan lain lewat musimnya.
+ *
+ * Dipakai mengisi bulan yang belum pernah diisi: angkanya tidak dikarang,
+ * melainkan diturunkan dari bulan terakhir yang memang pernah ditetapkan
+ * seseorang. Musim bulan asal dilepas dulu sebelum musim bulan tujuan
+ * dipasang — tanpa itu, bulan high yang dipakai sebagai asal akan menularkan
+ * tingginya ke seluruh bulan sesudahnya.
+ *
+ *   November dari Oktober = 366 jt ÷ 1,000 × 0,928 = 339,6 jt
+ *                             (Oktober Mid)  (November Low −7,2%)
+ *
+ * Mengembalikan null bila polanya belum disiapkan atau salah satu bulannya
+ * belum diberi musim. Itu jawaban, bukan kegagalan: menebak dengan pola yang
+ * belum ada sama saja dengan mengarang.
+ */
+export function proyeksiDariBulanLain(
+  asal: { period: Period; nilai: number },
+  tujuan: Period,
+  pola: PolaMusim,
+): number | null {
+  const dasar = dasarAcuan(asal.nilai, pola.get(monthOf(asal.period)));
+  return proyeksiMusim(tujuan, dasar, pola);
+}
+
+/**
  * Pola dianggap berguna hanya bila ada bulan yang musimnya berbeda. Dua belas
  * bulan yang seluruhnya satu musim menghasilkan angka yang persis sama dengan
  * tidak memakai pola sama sekali, dan menampilkannya sebagai "mengikuti pola
