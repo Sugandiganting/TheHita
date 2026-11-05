@@ -8,6 +8,7 @@ import { deleteCostItem, deleteProject, toggleCostItemPaid } from '@/app/actions
 import { ProjectForm } from '@/components/project-form';
 import { CostItemForm } from '@/components/cost-item-form';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
         items: { orderBy: { plannedDate: 'asc' }, include: { account: { select: { code: true, name: true } } } },
       },
     }),
-    prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     prisma.account.findMany({
       where: { active: true, isHeader: false, OR: [{ subtype: 'FIXED_ASSET' }, { type: 'EXPENSE' }] },
       orderBy: { code: 'asc' },

@@ -48,6 +48,15 @@ model BusinessUnit {
   roomCount   Int     @default(0)
   /// Saldo kas awal saat sistem mulai dipakai (jika tidak diinput lewat jurnal pembuka).
   openingCash Float   @default(0)
+  /// Pemegang kas penampung, bukan cabang usaha.
+  ///
+  /// Kas penampung tetap butuh pemilik: tiap baris jurnal wajib membawa unit
+  /// supaya neraca tiap cabang seimbang sendiri. Menaruhnya di salah satu
+  /// cabang akan membuat neraca cabang itu memuat uang yang tidak
+  /// dikendalikannya, jadi pemegangnya dibuat tersendiri. Ia tidak menyusun
+  /// RAB, tidak punya kamar, dan tidak muncul di laporan per cabang — tetapi
+  /// kasnya nyata dan ikut terhitung di laporan kas.
+  isPool      Boolean @default(false)
   active      Boolean @default(true)
 
   group    BusinessGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -78,6 +87,12 @@ model Account {
   isHeader         Boolean @default(false)
   /// true = akun kas/bank; saldo akun ini yang dipakai mesin peramalan.
   isCash           Boolean @default(false)
+  /// true = kas penampung: satu pot untuk semua cabang, bukan satu per cabang.
+  ///
+  /// Dananya disetor beberapa cabang lalu dibelanjakan untuk cabang mana pun,
+  /// jadi menggandakannya per cabang justru melahirkan amplop yang tidak
+  /// pernah cocok di akhir bulan. Lihat src/lib/penampung.ts.
+  isPool           Boolean @default(false)
   /// OPERATING | INVESTING | FINANCING — klasifikasi laporan arus kas.
   cashflowCategory String?
   description      String?

@@ -19,7 +19,10 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
  */
 export default async function PenampungPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const akun = await getCashAccounts();
+  // Hanya rekening penampung. Rekening cabang biasa tidak memegang uang
+  // cabang lain, jadi pertanyaan "uangnya punya siapa" tidak berlaku di sana
+  // dan jawabannya selalu satu baris yang sama dengan saldonya.
+  const akun = await getCashAccounts({ hanyaPenampung: true });
   const dipilih = one(params.akun) ?? akun[0]?.id ?? '';
   const period = one(params.periode) ?? currentPeriod();
 
@@ -28,8 +31,8 @@ export default async function PenampungPage({ searchParams }: { searchParams: Pr
       <>
         <PageHeader title="Kas Penampung" />
         <EmptyState
-          title="Belum ada rekening kas"
-          description="Tandai akun sebagai kas/bank di menu Chart of Account terlebih dahulu."
+          title="Belum ada rekening penampung"
+          description="Penampung adalah kas yang dananya disetor beberapa cabang lalu dibelanjakan untuk cabang mana pun — kas Purchasing, kas HR, rekening proyek. Belum ada akun yang ditandai begitu."
           actionHref="/coa"
           actionLabel="Buka COA"
         />

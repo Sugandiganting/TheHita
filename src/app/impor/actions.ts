@@ -14,6 +14,7 @@ import {
 import { findHeaderRow, parseCsv, parseXlsx } from '@/lib/import/parse';
 import { buildImportPlan, entryToDraftLines, type ColumnMap } from '@/lib/import/build';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 /** Batas jumlah baris supaya satu berkas tidak membuat server kehabisan memori. */
 const MAX_ROWS = 20_000;
@@ -125,7 +126,7 @@ export async function commitImport(payload: {
 
   const [accounts, units] = await Promise.all([
     prisma.account.findMany({ where: { active: true, isHeader: false }, select: { id: true, code: true } }),
-    prisma.businessUnit.findMany({ where: { active: true }, select: { id: true, code: true } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, select: { id: true, code: true } }),
   ]);
 
   const accountIdByCode = new Map(accounts.map((a) => [a.code, a.id]));

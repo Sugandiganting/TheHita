@@ -16,6 +16,7 @@ import { buatRencanaLanjutan } from '@/lib/rencana-berjalan';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
 import { randomBytes } from 'node:crypto';
 import { normalKode, normalNama, periksaItem, pesanKembar } from '@/lib/barang';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 import { cocokKataSandi, sidikKataSandi } from '@/lib/auth';
 import { NAMA_KUKI, UMUR_SESI_HARI, buatToken } from '@/lib/sesi';
 import { sesiSekarang } from '@/lib/sesi-server';
@@ -662,7 +663,16 @@ export async function createTransfer(_prev: ActionState, formData: FormData): Pr
 }
 
 /** Baris rincian dari formulir uang masuk / uang keluar. */
-function readMoneyLines(formData: FormData, fallbackUnitId: string): MoneyLine[] {
+/**
+ * Cabang pada tiap baris rincian.
+ *
+ * `fallbackUnitId` null berarti tidak ada cabang yang masuk akal untuk
+ * ditebak — rekeningnya kas penampung, yang justru tidak dimiliki cabang mana
+ * pun. Barisnya keluar tanpa cabang, dan pemanggilnya yang menolak. Menebak
+ * dengan cabang pemilik rekening di situ akan membebankan belanja ke pemegang
+ * penampung, yang tidak menjalankan usaha apa pun.
+ */
+function readMoneyLines(formData: FormData, fallbackUnitId: string | null): MoneyLine[] {
   const accountIds = formData.getAll('lineAccountId').map(String);
   const unitIds = formData.getAll('lineUnitId').map(String);
   const amounts = formData.getAll('lineAmount');
@@ -672,7 +682,7 @@ function readMoneyLines(formData: FormData, fallbackUnitId: string): MoneyLine[]
   for (let i = 0; i < accountIds.length; i++) {
     const amount = parseAmount(amounts[i] ?? null);
     if (!accountIds[i] || amount <= 0) continue;
-    out.push({ accountId: accountIds[i], unitId: unitIds[i] || fallbackUnitId, amount, memo: memos[i] || null });
+    out.push({ accountId: accountIds[i], unitId: unitIds[i] || fallbackUnitId || '', amount, memo: memos[i] || null });
   }
   return out;
 }
@@ -696,8 +706,33 @@ async function saveMoneyEntry(
   const bad = await assertCashAccount(cashAccountId, label);
   if (bad) return fail(bad);
 
-  const lines = readMoneyLines(formData, cashUnitId);
+  const kas = await prisma.account.findUnique({
+    where: { id: cashAccountId },
+    select: { isPool: true, name: true },
+  });
+  const penampung = kas?.isPool ?? false;
+
+  const lines = readMoneyLines(formData, penampung ? null : cashUnitId);
   if (lines.length === 0) return fail('Isi minimal satu baris rincian dengan nominal di atas nol.');
+
+  /*
+   * Pada kas penampung, cabang tiap baris wajib disebut dan tidak boleh
+   * pemegang penampungnya sendiri.
+   *
+   * Penampung memegang uang beberapa cabang sekaligus, jadi tidak ada cabang
+   * yang bisa ditebak dari rekeningnya. Membiarkannya jatuh ke pemegang
+   * penampung akan menumpuk beban di unit yang tidak menjalankan usaha apa
+   * pun — dan laba rugi tiap cabang kehilangan justru biaya yang dibelanjakan
+   * untuknya.
+   */
+  if (penampung) {
+    if (lines.some((l) => !l.unitId)) {
+      return fail(`${kas?.name ?? 'Rekening ini'} adalah kas penampung. Pilih cabang pada tiap baris rincian.`);
+    }
+    if (lines.some((l) => l.unitId === cashUnitId)) {
+      return fail('Pemegang kas penampung bukan cabang usaha. Pilih cabang yang benar-benar memikul biayanya.');
+    }
+  }
 
   const interUnit = await getInterUnitAccounts();
   const built = kind === 'RECEIVE'
@@ -750,7 +785,7 @@ function segarkanRab() {
 
 /** Scope yang boleh dipakai: kode cabang aktif, atau kelompok penanggung yang ada. */
 async function scopeSah(): Promise<Set<string>> {
-  const units = await prisma.businessUnit.findMany({ where: { active: true }, select: { code: true } });
+  const units = await prisma.businessUnit.findMany({ where: CABANG_SAJA, select: { code: true } });
   const sah = new Set(units.map((u) => u.code));
   for (const pms of Object.keys(PMS_SOURCES) as PmsSource[]) {
     for (const code of new Set(COA_TEMPLATE.filter((a) => !a.isHeader).map((a) => a.code))) {

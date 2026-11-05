@@ -4,6 +4,7 @@ import { toDateInput } from '@/lib/format';
 import { MoneyForm } from '@/components/money-form';
 import { CashEntryList } from '@/components/cash-entry-list';
 import { Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export default async function ReceiveMoneyPage() {
       select: { id: true, code: true, name: true, type: true },
     }),
     prisma.businessUnit.findMany({
-      where: { active: true },
+      where: CABANG_SAJA,
       orderBy: { code: 'asc' },
       select: { id: true, code: true, name: true },
     }),

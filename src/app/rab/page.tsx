@@ -10,6 +10,7 @@ import { JENIS_RAB_LABEL } from '@/lib/rab';
 import { type ScopeOption } from '@/components/budget-form';
 import { RabBaruDialog } from '@/components/budget-dialog';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export const dynamic = 'force-dynamic';
  */
 async function daftarScope(): Promise<ScopeOption[]> {
   const units = await prisma.businessUnit.findMany({
-    where: { active: true },
+    where: CABANG_SAJA,
     orderBy: { code: 'asc' },
     select: { code: true, name: true },
   });

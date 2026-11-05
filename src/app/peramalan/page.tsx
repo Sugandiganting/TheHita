@@ -9,6 +9,7 @@ import type { SearchParams } from '@/lib/search-params';
 import { ForecastControls, type ForecastControlValues } from '@/components/forecast-controls';
 import { CashBalanceChart, NetCashChart } from '@/components/charts';
 import { Alert, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,7 @@ export default async function PeramalanPage({ searchParams }: { searchParams: Pr
   const unitIds = unit ? [unit] : null;
 
   const [units, allProjects] = await Promise.all([
-    prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     prisma.project.findMany({
       where: { status: { in: ['PLANNED', 'ONGOING'] } },
       include: { items: true, unit: { select: { code: true } } },

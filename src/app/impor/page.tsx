@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/db';
 import { ImportWizard } from '@/components/import-wizard';
 import { Alert, Card, PageHeader, SectionTitle } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImporPage() {
   const [units, accounts] = await Promise.all([
-    prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' }, select: { code: true, name: true } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' }, select: { code: true, name: true } }),
     prisma.account.findMany({ where: { active: true, isHeader: false }, select: { code: true } }),
   ]);
 

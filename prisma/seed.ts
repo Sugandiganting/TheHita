@@ -11,6 +11,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { COA_TEMPLATE } from '../src/lib/coa-template';
+import { KODE_PENAMPUNG, NAMA_PENAMPUNG } from '../src/lib/penampung-master';
 import { checkPerUnitBalance } from '../src/lib/accounting';
 
 const prisma = new PrismaClient();
@@ -83,6 +84,22 @@ async function seedMaster() {
     });
   }
 
+  // Pemegang kas penampung. Bukan cabang: ia tidak menyusun RAB, tidak punya
+  // kamar, dan tidak muncul di laporan per cabang — tetapi kasnya nyata.
+  await prisma.businessUnit.upsert({
+    where: { code: KODE_PENAMPUNG },
+    update: { name: NAMA_PENAMPUNG, isPool: true },
+    create: {
+      code: KODE_PENAMPUNG,
+      name: NAMA_PENAMPUNG,
+      type: 'OTHER',
+      groupId: group.id,
+      roomCount: 0,
+      openingCash: 0,
+      isPool: true,
+    },
+  });
+
   // COA dibuat dua tahap: akun dulu, lalu relasi induk-anak.
   for (const a of COA_TEMPLATE) {
     await prisma.account.upsert({
@@ -93,6 +110,7 @@ async function seedMaster() {
         subtype: a.subtype ?? null,
         isHeader: a.isHeader ?? false,
         isCash: a.isCash ?? false,
+        isPool: a.isPool ?? false,
         cashflowCategory: a.cashflow ?? null,
         description: a.description ?? null,
       },
@@ -103,6 +121,7 @@ async function seedMaster() {
         subtype: a.subtype ?? null,
         isHeader: a.isHeader ?? false,
         isCash: a.isCash ?? false,
+        isPool: a.isPool ?? false,
         cashflowCategory: a.cashflow ?? null,
         description: a.description ?? null,
       },

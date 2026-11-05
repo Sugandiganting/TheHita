@@ -20,6 +20,8 @@ export type CoaSeed = {
   subtype?: string;
   isHeader?: boolean;
   isCash?: boolean;
+  /** Kas penampung: satu pot untuk semua cabang. Lihat src/lib/penampung-master.ts. */
+  isPool?: boolean;
   cashflow?: 'OPERATING' | 'INVESTING' | 'FINANCING';
   parent?: string;
   description?: string;
@@ -31,16 +33,16 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '1110', name: 'Cash', type: 'ASSET', subtype: 'CASH_BANK', isHeader: true, parent: '1100' },
   { code: '1110.01', name: 'Kas Pemasukan', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110', description: 'Kas hasil penjualan harian sebelum disetor ke bank.' },
   { code: '1110.02', name: 'Petty Cash FO', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
-  { code: '1110.03', name: 'Petty Cash Purchasing', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
-  { code: '1110.04', name: 'Petty Cash HR', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
+  { code: '1110.03', name: 'Petty Cash Purchasing', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, isPool: true, cashflow: 'OPERATING', parent: '1110' },
+  { code: '1110.04', name: 'Petty Cash HR', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, isPool: true, cashflow: 'OPERATING', parent: '1110' },
   { code: '1110.05', name: 'Petty Cash Laundry', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
   { code: '1110.06', name: 'Shopee Pay', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
   { code: '1110.07', name: 'Grab Pay', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1110' },
   { code: '1120', name: 'Bank', type: 'ASSET', subtype: 'CASH_BANK', isHeader: true, parent: '1100' },
   { code: '1120.01', name: 'Bank Mandiri/BCA', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1120' },
-  { code: '1120.02', name: 'Bank BCA - Proyek', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1120', description: 'Rekening khusus dana proyek.' },
+  { code: '1120.02', name: 'Bank BCA - Proyek', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, isPool: true, cashflow: 'OPERATING', parent: '1120', description: 'Rekening khusus dana proyek.' },
   { code: '1120.03', name: 'Bank BRI', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1120' },
-  { code: '1120.04', name: 'Kas Property', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, cashflow: 'OPERATING', parent: '1120' },
+  { code: '1120.04', name: 'Kas Property', type: 'ASSET', subtype: 'CASH_BANK', isCash: true, isPool: true, cashflow: 'OPERATING', parent: '1120' },
   { code: '1130', name: 'Piutang Usaha', type: 'ASSET', subtype: 'RECEIVABLE', isHeader: true, parent: '1100' },
   { code: '1130.01', name: 'Piutang EDC', type: 'ASSET', subtype: 'RECEIVABLE', cashflow: 'OPERATING', parent: '1130' },
   { code: '1130.02', name: 'Piutang QRIS', type: 'ASSET', subtype: 'RECEIVABLE', cashflow: 'OPERATING', parent: '1130' },

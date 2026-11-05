@@ -17,6 +17,7 @@ CREATE TABLE "BusinessUnit" (
     "address" TEXT,
     "roomCount" INTEGER NOT NULL DEFAULT 0,
     "openingCash" REAL NOT NULL DEFAULT 0,
+    "isPool" BOOLEAN NOT NULL DEFAULT false,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "BusinessUnit_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "BusinessGroup" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -32,6 +33,7 @@ CREATE TABLE "Account" (
     "parentId" TEXT,
     "isHeader" BOOLEAN NOT NULL DEFAULT false,
     "isCash" BOOLEAN NOT NULL DEFAULT false,
+    "isPool" BOOLEAN NOT NULL DEFAULT false,
     "cashflowCategory" TEXT,
     "description" TEXT,
     "active" BOOLEAN NOT NULL DEFAULT true,

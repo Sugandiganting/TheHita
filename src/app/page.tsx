@@ -10,6 +10,7 @@ import { resolveRange, resolveUnit, type SearchParams } from '@/lib/search-param
 import { ReportFilters } from '@/components/filters';
 import { CashflowBarChart, UnitProfitChart } from '@/components/charts';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export default async function DashboardPage({
   const unitIds = resolveUnit(params);
 
   const [units, pl, cash, actuals, unitPerf, entryCount] = await Promise.all([
-    prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     getProfitLoss(from, to, unitIds),
     getCashBalance(to, unitIds),
     getMonthlyActuals(from, to, unitIds),

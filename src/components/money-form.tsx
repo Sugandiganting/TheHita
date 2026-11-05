@@ -71,27 +71,48 @@ export function MoneyForm({
   const filled = rows.filter((r) => r.accountId && Number(r.amount.replace(/[^\d]/g, '')) > 0);
   const crossUnit = filled.some((r) => (r.unitId || cashUnitId) !== cashUnitId);
 
-  // Rekening kas dikelompokkan per cabang; saldonya ikut tampil di daftar.
+  /*
+   * Rekening kas dikelompokkan per cabang; saldonya ikut tampil di daftar.
+   *
+   * Kas penampung tidak ikut disaring saat sebuah cabang dipilih. Ia memang
+   * bukan milik cabang mana pun — dananya disetor beberapa cabang lalu
+   * dibelanjakan untuk cabang mana pun — jadi menyembunyikannya di balik
+   * saringan cabang berarti menyembunyikannya dari semua cabang sekaligus.
+   */
   const cashOptions: PickerOption[] = useMemo(
     () =>
       accounts
-        .filter((a) => !unit || a.unitId === unit)
+        .filter((a) => !unit || a.unitId === unit || a.penampung)
         .map((a) => ({
           value: keyOf(a),
           code: a.code,
           label: a.name,
-          group: `${a.unitCode} — ${a.unitName}`,
+          group: a.penampung ? 'Penampung — bukan milik satu cabang' : `${a.unitCode} — ${a.unitName}`,
           meta: formatRupiah(a.balance),
         })),
     [accounts, unit],
   );
 
+  const adaPenampung = useMemo(() => accounts.some((a) => a.penampung), [accounts]);
+
+  /*
+   * Pada kas penampung, cabang tiap baris harus dipilih sendiri.
+   *
+   * Baris rincian biasanya mewarisi cabang pemilik rekening, dan itu benar
+   * untuk rekening cabang. Penampung tidak dimiliki cabang mana pun, jadi
+   * tidak ada yang bisa diwarisi — pemegangnya bahkan tidak ada di daftar
+   * cabang, sehingga kolomnya akan menampilkan cabang pertama sementara yang
+   * terkirim bukan itu.
+   */
+  const wajibPilihCabang = Boolean(cashAcc?.penampung);
+
   // Rekening yang terlanjur dipilih dilepas bila cabangnya berganti. Kalau
   // dibiarkan, formulir menyimpan rekening yang tidak lagi terlihat di
-  // daftarnya — dan yang tersimpan bukan yang terbaca di layar.
+  // daftarnya — dan yang tersimpan bukan yang terbaca di layar. Penampung
+  // dikecualikan: ia tetap terlihat berapa pun cabang yang disaring.
   const gantiUnit = (baru: string) => {
     setUnit(baru);
-    if (baru && cashAcc && cashAcc.unitId !== baru) setCash('');
+    if (baru && cashAcc && !cashAcc.penampung && cashAcc.unitId !== baru) setCash('');
   };
 
   const categoryOptions: PickerOption[] = useMemo(
@@ -143,7 +164,7 @@ export function MoneyForm({
           value={cash}
           onChange={setCash}
           required
-          showGroup={!unit}
+          showGroup={!unit || adaPenampung}
           placeholder={unit ? '— Pilih rekening cabang ini —' : '— Pilih rekening —'}
           searchPlaceholder={unit ? 'Ketik nama rekening…' : 'Ketik nama rekening atau cabang…'}
         />
@@ -212,9 +233,18 @@ export function MoneyForm({
                     <select
                       name="lineUnitId"
                       className="input"
-                      value={row.unitId || cashUnitId}
+                      /*
+                       * Hanya baris yang sudah menyebut akun. Formulir ini
+                       * selalu menyediakan baris kosong untuk diisi
+                       * berikutnya, dan mewajibkan cabang di sana membuat
+                       * formulirnya tidak pernah bisa disimpan — baris kosong
+                       * itu memang tidak ikut tersimpan.
+                       */
+                      required={wajibPilihCabang && Boolean(row.accountId)}
+                      value={row.unitId || (wajibPilihCabang ? '' : cashUnitId)}
                       onChange={(e) => update(row.key, { unitId: e.target.value })}
                     >
+                      {wajibPilihCabang && <option value="" disabled>— Pilih —</option>}
                       {units.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.code}
@@ -269,12 +299,26 @@ export function MoneyForm({
         + Tambah baris
       </button>
 
-      {crossUnit && cashAcc && (
+      {crossUnit && cashAcc && !cashAcc.penampung && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
           <p className="font-semibold">Ada baris milik cabang lain</p>
           <p className="mt-0.5">
             Rekening yang dipakai milik {cashAcc.unitCode}, tetapi sebagian rincian ditujukan ke cabang lain.
             Sistem otomatis mencatat piutang dan hutang antar unit agar neraca tiap cabang tetap seimbang.
+          </p>
+        </div>
+      )}
+
+      {/* Pada penampung, membebankan ke cabang lain bukan kekecualian — itu justru cara kerjanya. */}
+      {cashAcc?.penampung && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <p className="font-semibold">{cashAcc.name} adalah kas penampung</p>
+          <p className="mt-0.5">
+            Satu pot untuk semua cabang, jadi kolom <strong>Untuk cabang</strong> pada tiap baris
+            rincian di bawah wajib diisi sendiri — tidak ada cabang yang bisa diwarisi dari
+            rekeningnya. Piutang dan hutang antar unit tercatat sendiri,
+            dan rekapnya bisa dibaca di{' '}
+            <a href="/laporan/penampung" className="font-medium underline">Laporan Kas Penampung</a>.
           </p>
         </div>
       )}

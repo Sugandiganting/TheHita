@@ -34,6 +34,7 @@ import {
 } from './kewajiban';
 import { hitungTren, type Tren } from './tren-masuk';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
+import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -258,7 +259,7 @@ export async function getUnitPerformance(
   to: Period,
 ): Promise<UnitPerformance[]> {
   const [units, lines] = await Promise.all([
-    prisma.businessUnit.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
+    prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     linesInRange(from, to, null),
   ]);
 
@@ -330,6 +331,8 @@ export type CashAccountBalance = {
   unitCode: string;
   unitName: string;
   balance: number;
+  /** Kas penampung: satu pot untuk semua cabang, bukan satu per cabang. */
+  penampung: boolean;
 };
 
 /**
@@ -385,9 +388,14 @@ export async function getRekapPenampung(accountId: string, period: Period): Prom
 }
 
 /** Daftar akun kas aktif, untuk menautkan kategori belanja ke kas departemennya. */
-export async function getCashAccounts(): Promise<{ id: string; label: string }[]> {
+export async function getCashAccounts(
+  opsi: { hanyaPenampung?: boolean } = {},
+): Promise<{ id: string; label: string }[]> {
   const akun = await prisma.account.findMany({
-    where: { isCash: true, active: true, isHeader: false },
+    where: {
+      isCash: true, active: true, isHeader: false,
+      ...(opsi.hanyaPenampung ? { isPool: true } : {}),
+    },
     orderBy: { code: 'asc' },
     select: { id: true, code: true, name: true },
   });
@@ -399,12 +407,12 @@ export async function getCashAccountsByUnit(unitIds: UnitFilter = null): Promise
     prisma.account.findMany({
       where: { isCash: true, active: true, isHeader: false },
       orderBy: { code: 'asc' },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, isPool: true },
     }),
     prisma.businessUnit.findMany({
       where: { active: true, ...(unitIds && unitIds.length > 0 ? { id: { in: unitIds } } : {}) },
       orderBy: { code: 'asc' },
-      select: { id: true, code: true, name: true, openingCash: true },
+      select: { id: true, code: true, name: true, openingCash: true, isPool: true },
     }),
     prisma.journalLine.groupBy({
       by: ['accountId', 'unitId'],
@@ -417,9 +425,25 @@ export async function getCashAccountsByUnit(unitIds: UnitFilter = null): Promise
     lines.map((l) => [`${l.accountId}|${l.unitId}`, (l._sum.debit ?? 0) - (l._sum.credit ?? 0)]),
   );
 
+  const cabang = units.filter((u) => !u.isPool);
+  const pemegang = units.find((u) => u.isPool) ?? null;
+
   const out: CashAccountBalance[] = [];
-  for (const unit of units) {
+
+  /*
+   * Rekening biasa digandakan per cabang: satu nomor akun memang menjadi
+   * beberapa kantong uang yang berbeda, "Bank BCA milik IGYT" dan "Bank BCA
+   * milik Legian" bukan satu rekening.
+   *
+   * Penampung tidak. Ia satu pot yang dananya disetor beberapa cabang lalu
+   * dibelanjakan untuk cabang mana pun, jadi menggandakannya per cabang
+   * melahirkan lima baris untuk satu kantong yang sama — dan siapa pun yang
+   * memilih salah satunya sedang mengarang amplop yang tidak ada. Cabang yang
+   * memikul belanjanya ditentukan di baris bebannya, bukan di sini.
+   */
+  for (const unit of cabang) {
     for (const account of accounts) {
+      if (account.isPool) continue;
       out.push({
         accountId: account.id,
         code: account.code,
@@ -428,9 +452,27 @@ export async function getCashAccountsByUnit(unitIds: UnitFilter = null): Promise
         unitCode: unit.code,
         unitName: unit.name,
         balance: moved.get(`${account.id}|${unit.id}`) ?? 0,
+        penampung: false,
       });
     }
   }
+
+  if (pemegang) {
+    for (const account of accounts) {
+      if (!account.isPool) continue;
+      out.push({
+        accountId: account.id,
+        code: account.code,
+        name: account.name,
+        unitId: pemegang.id,
+        unitCode: pemegang.code,
+        unitName: pemegang.name,
+        balance: moved.get(`${account.id}|${pemegang.id}`) ?? 0,
+        penampung: true,
+      });
+    }
+  }
+
   return out;
 }
 
@@ -1099,7 +1141,7 @@ export async function getKendaraan(): Promise<KendaraanDetail[]> {
 /** Unit usaha untuk pemilih pada formulir kendaraan. */
 export async function getUnitPilihan(): Promise<{ id: string; code: string; name: string }[]> {
   return prisma.businessUnit.findMany({
-    where: { active: true },
+    where: CABANG_SAJA,
     orderBy: { code: 'asc' },
     select: { id: true, code: true, name: true },
   });

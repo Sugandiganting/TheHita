@@ -153,6 +153,18 @@ export function SearchableSelect({
   }, [siap]);
 
   /*
+   * Kata pencarian dibuang saat daftarnya ditutup.
+   *
+   * commit() sudah membuangnya setelah sebuah pilihan diambil, tetapi menutup
+   * tanpa memilih — Esc, atau klik di luar — tidak. Daftar yang dibuka lagi
+   * lalu tampil tersaring oleh kata yang sudah tidak relevan, dan paling
+   * menyesatkan tepat setelah saringan di luar daftar ini berubah.
+   */
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  /*
    * Esc menutup daftarnya dari mana pun fokus berada, bukan hanya dari kolom
    * cari. Penangan pada kolom itu saja membuat Esc diam begitu fokus bergeser
    * — dan yang menekannya lalu menekan sekali lagi, yang kedua kalinya

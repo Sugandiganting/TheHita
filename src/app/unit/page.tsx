@@ -27,7 +27,7 @@ export default async function UnitPage() {
     <>
       <PageHeader
         title="Unit usaha"
-        description="Daftar cabang dan jenis usaha dalam grup. Setiap transaksi wajib menunjuk salah satu unit, itulah yang memungkinkan laporan dipisah per cabang."
+        description="Daftar cabang dan jenis usaha dalam grup. Setiap transaksi wajib menunjuk salah satu unit, itulah yang memungkinkan laporan dipisah per cabang. Pemegang kas penampung ikut di sini karena baris jurnalnya butuh pemilik, tetapi ia bukan cabang: tidak menyusun RAB, tidak punya kamar, dan tidak muncul di laporan per cabang."
       />
 
       <div className="mb-6">
@@ -63,11 +63,22 @@ export default async function UnitPage() {
                   {units.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50">
                       <td className="td font-mono text-xs text-slate-500">{u.code}</td>
-                      <td className="td font-medium text-slate-900">{u.name}</td>
+                      <td className="td font-medium text-slate-900">
+                        {u.name}
+                        {u.isPool && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
+                            pemegang kas penampung, bukan cabang
+                          </span>
+                        )}
+                      </td>
                       <td className="td">
-                        <Badge tone={u.type === 'HOTEL' ? 'brand' : u.type === 'CAFE' ? 'amber' : 'blue'}>
-                          {UNIT_TYPE_LABEL[u.type] ?? u.type}
-                        </Badge>
+                        {u.isPool ? (
+                          <Badge tone="slate">Penampung</Badge>
+                        ) : (
+                          <Badge tone={u.type === 'HOTEL' ? 'brand' : u.type === 'CAFE' ? 'amber' : 'blue'}>
+                            {UNIT_TYPE_LABEL[u.type] ?? u.type}
+                          </Badge>
+                        )}
                       </td>
                       <td className="td num">{u.roomCount > 0 ? u.roomCount : '—'}</td>
                       <td className="td num">{formatRupiah(u.openingCash)}</td>
