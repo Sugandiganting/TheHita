@@ -262,14 +262,23 @@ model Budget {
   period String
   /// DRAFT | ACTIVE — hanya yang ACTIVE ikut dihitung di laporan dan peramalan.
   status String  @default("DRAFT")
+  /// UMUM | PURCHASING — menentukan bentuk isian RAB-nya. RAB Purchasing
+  /// disusun per barang (BudgetItemLine) karena yang dianggarkan Purchasing
+  /// adalah jumlah kali harga satuan; RAB umum disusun per akun (BudgetLine)
+  /// karena gaji dan listrik tidak punya satuan maupun harga satuan.
+  kind   String  @default("UMUM")
   notes  String?
 
-  lines BudgetLine[]
+  lines     BudgetLine[]
+  itemLines BudgetItemLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([scope, period])
+  // Satu cabang boleh punya dua RAB sebulan: satu Purchasing, satu umum.
+  // Lebih dari itu tidak, karena anggaran yang terpecah di beberapa dokumen
+  // sejenis tidak bisa dijumlahkan tanpa menebak mana yang berlaku.
+  @@unique([scope, period, kind])
   @@index([period])
 }
 
@@ -286,6 +295,30 @@ model BudgetLine {
   @@unique([budgetId, accountId])
   @@index([budgetId])
   @@index([accountId])
+}
+
+/// Satu baris RAB Purchasing: barangnya, berapa banyak, dan harga satuannya.
+///
+/// Dipisah dari BudgetLine, bukan ditumpangkan dengan kolom yang boleh kosong,
+/// karena keunikannya berbeda. RAB umum tidak boleh menganggarkan satu akun
+/// dua kali; RAB Purchasing justru harus boleh, karena beberapa barang bisa
+/// bermuara ke akun yang sama. Dua aturan itu tidak bisa hidup di satu indeks.
+model BudgetItemLine {
+  id       String @id @default(cuid())
+  budgetId String
+  itemId   String
+  /// Jumlah yang direncanakan, dalam satuan barangnya.
+  quantity Float  @default(0)
+  /// Harga satuan yang diperkirakan.
+  unitPrice Float @default(0)
+  notes    String?
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  @@unique([budgetId, itemId])
+  @@index([budgetId])
+  @@index([itemId])
 }
 
 /// Rencana kas satu bulan: proyeksi uang masuk, komitmen yang harus dibayar,
@@ -363,6 +396,7 @@ model Item {
   subCategory ItemSubCategory? @relation(fields: [subCategoryId], references: [id])
   unit        ItemUnit         @relation(fields: [unitId], references: [id])
   account     Account          @relation(fields: [accountId], references: [id])
+  budgetLines BudgetItemLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

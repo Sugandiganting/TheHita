@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { periodeBerikutnya } from '@/lib/rab';
+import { JENIS_RAB_LABEL, jenisRabSah, periodeBerikutnya, type JenisRab } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
@@ -766,23 +766,33 @@ export async function saveBudget(_prev: ActionState, formData: FormData): Promis
   const scope = String(formData.get('scope') ?? '').trim().toUpperCase();
   const period = String(formData.get('period') ?? '').trim();
   const notes = String(formData.get('notes') ?? '').trim();
+  const kind = String(formData.get('kind') ?? '').trim().toUpperCase();
 
   if (!/^\d{4}-\d{2}$/.test(period)) return fail('Bulan wajib diisi.');
   if (!scope) return fail('Pemilik RAB wajib dipilih.');
   if (!(await scopeSah()).has(scope)) return fail(`Pemilik RAB "${scope}" tidak dikenal.`);
+  if (!jenisRabSah(kind)) return fail('Jenis RAB wajib dipilih: Purchasing atau selain Purchasing.');
 
-  const kembar = await prisma.budget.findUnique({ where: { scope_period: { scope, period } }, select: { id: true } });
+  const kembar = await prisma.budget.findUnique({
+    where: { scope_period_kind: { scope, period, kind } },
+    select: { id: true },
+  });
   if (kembar && kembar.id !== id) {
-    return fail(`RAB ${scope} untuk ${period} sudah ada. Buka yang itu, jangan dibuat dua kali.`);
+    return fail(
+      `RAB ${JENIS_RAB_LABEL[kind]} untuk ${scope} bulan ${period} sudah ada. Buka yang itu, jangan dibuat dua kali.`,
+    );
   }
 
   if (id) {
+    // Jenisnya tidak ikut diubah: isinya tersimpan di tabel yang berbeda, jadi
+    // berganti jenis berarti meninggalkan baris-baris yang tidak lagi terbaca
+    // di mana pun. Yang salah jenis lebih baik dihapus lalu dibuat ulang.
     await prisma.budget.update({ where: { id }, data: { scope, period, notes: notes || null } });
     segarkanRab();
     return ok('RAB diperbarui.');
   }
 
-  const dibuat = await prisma.budget.create({ data: { scope, period, notes: notes || null } });
+  const dibuat = await prisma.budget.create({ data: { scope, period, kind, notes: notes || null } });
   segarkanRab();
   // RAB yang baru dibuat masih kosong, dan satu-satunya hal yang masuk akal
   // berikutnya adalah mengisi anggarannya per akun. Daripada meninggalkan
@@ -796,9 +806,12 @@ export async function setBudgetStatus(_prev: ActionState, formData: FormData): P
   const status = String(formData.get('status') ?? '');
   if (!['DRAFT', 'ACTIVE'].includes(status)) return fail('Status tidak dikenal.');
 
-  const budget = await prisma.budget.findUnique({ where: { id }, include: { lines: true } });
+  const budget = await prisma.budget.findUnique({
+    where: { id },
+    include: { lines: { select: { id: true } }, itemLines: { select: { id: true } } },
+  });
   if (!budget) return fail('RAB tidak ditemukan.');
-  if (status === 'ACTIVE' && budget.lines.length === 0) {
+  if (status === 'ACTIVE' && budget.lines.length + budget.itemLines.length === 0) {
     return fail('RAB kosong tidak bisa disahkan. Isi rinciannya dulu.');
   }
 
@@ -833,10 +846,13 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
   if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal anggaran harus lebih dari nol.');
 
   const [budget, account] = await Promise.all([
-    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true } }),
+    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true, kind: true } }),
     prisma.account.findUnique({ where: { id: accountId }, select: { type: true, isHeader: true, name: true } }),
   ]);
   if (!budget) return fail('RAB tidak ditemukan.');
+  if (budget.kind === 'PURCHASING') {
+    return fail('RAB Purchasing diisi per barang, bukan per akun. Pakai formulir barangnya.');
+  }
   if (budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
   if (!account) return fail('Akun tidak ditemukan.');
   if (account.isHeader) return fail('Akun induk tidak bisa dianggarkan, pilih akun rinciannya.');
@@ -851,6 +867,66 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
   });
   segarkanRab();
   return ok('Anggaran disimpan.');
+}
+
+/**
+ * Menyimpan satu baris barang di RAB Purchasing.
+ *
+ * Yang disimpan jumlah dan harga satuannya; nilai anggarannya dihitung dari
+ * keduanya setiap kali dibaca. Akunnya tidak ikut disimpan juga — ia melekat
+ * pada barangnya di master item, jadi satu kali perbaikan di sana langsung
+ * berlaku untuk semua RAB yang memakai barang itu.
+ */
+export async function saveBudgetItemLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const budgetId = String(formData.get('budgetId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const notes = String(formData.get('notes') ?? '').trim();
+  const quantity = Number(String(formData.get('quantity') ?? '').replace(/[^\d.-]/g, ''));
+  const unitPrice = round(Number(String(formData.get('unitPrice') ?? '').replace(/[^\d.-]/g, '')));
+
+  if (!itemId) return fail('Barang wajib dipilih.');
+  if (!Number.isFinite(quantity) || quantity <= 0) return fail('Jumlah harus lebih dari nol.');
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) return fail('Harga satuan harus lebih dari nol.');
+
+  const [budget, item] = await Promise.all([
+    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true, kind: true } }),
+    prisma.item.findUnique({
+      where: { id: itemId },
+      select: { active: true, name: true, account: { select: { name: true, isHeader: true } } },
+    }),
+  ]);
+  if (!budget) return fail('RAB tidak ditemukan.');
+  if (budget.kind !== 'PURCHASING') {
+    return fail('RAB ini diisi per akun, bukan per barang. Pakai formulir akunnya.');
+  }
+  if (budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
+  if (!item) return fail('Barang tidak ditemukan.');
+  if (!item.active) return fail(`${item.name} sudah tidak aktif. Aktifkan dulu di master barang.`);
+  if (item.account.isHeader) {
+    return fail(`Akun ${item.account.name} adalah akun induk. Perbaiki akun barang ini dulu di master barang.`);
+  }
+
+  await prisma.budgetItemLine.upsert({
+    where: { budgetId_itemId: { budgetId, itemId } },
+    update: { quantity, unitPrice, notes: notes || null },
+    create: { budgetId, itemId, quantity, unitPrice, notes: notes || null },
+  });
+  segarkanRab();
+  return ok(`Anggaran ${item.name} disimpan.`);
+}
+
+export async function deleteBudgetItemLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const line = await prisma.budgetItemLine.findUnique({
+    where: { id },
+    include: { budget: { select: { status: true } }, item: { select: { name: true } } },
+  });
+  if (!line) return fail('Baris barang tidak ditemukan.');
+  if (line.budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
+
+  await prisma.budgetItemLine.delete({ where: { id } });
+  segarkanRab();
+  return ok(`${line.item.name} dikeluarkan dari RAB.`);
 }
 
 export async function deleteBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -872,24 +948,41 @@ export async function deleteBudgetLine(_prev: ActionState, formData: FormData): 
  */
 export async function duplicateBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
-  const budget = await prisma.budget.findUnique({ where: { id }, include: { lines: true } });
+  const budget = await prisma.budget.findUnique({ where: { id }, include: { lines: true, itemLines: true } });
   if (!budget) return fail('RAB tidak ditemukan.');
-  if (budget.lines.length === 0) return fail('RAB kosong, tidak ada yang bisa disalin.');
+  if (budget.lines.length + budget.itemLines.length === 0) {
+    return fail('RAB kosong, tidak ada yang bisa disalin.');
+  }
 
   const period = periodeBerikutnya(budget.period);
   const sudahAda = await prisma.budget.findUnique({
-    where: { scope_period: { scope: budget.scope, period } },
+    where: { scope_period_kind: { scope: budget.scope, period, kind: budget.kind } },
     select: { id: true },
   });
-  if (sudahAda) return fail(`RAB ${budget.scope} untuk ${period} sudah ada.`);
+  if (sudahAda) {
+    return fail(`RAB ${JENIS_RAB_LABEL[budget.kind as JenisRab]} untuk ${budget.scope} bulan ${period} sudah ada.`);
+  }
 
   const salinan = await prisma.budget.create({
     data: {
       scope: budget.scope,
       period,
+      kind: budget.kind,
       status: 'DRAFT',
       notes: budget.notes,
       lines: { create: budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes })) },
+      // Jumlah dan harga satuan disalin apa adanya. Harga tahun depan memang
+      // belum tentu sama, tetapi menaikkannya sendiri berarti menebak — dan
+      // tebakan yang muncul tanpa diminta sulit dibedakan dari angka yang
+      // sudah disepakati.
+      itemLines: {
+        create: budget.itemLines.map((l) => ({
+          itemId: l.itemId,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          notes: l.notes,
+        })),
+      },
     },
   });
   segarkanRab();

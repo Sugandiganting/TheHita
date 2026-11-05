@@ -6,7 +6,10 @@
 
 import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
-import { barisMasukScope, cabangDalamScope, ringkasRab, scopeBersamaKah, type BarisRab, type RingkasanRab } from './rab';
+import {
+  anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, ringkasRab, scopeBersamaKah,
+  type BarisBarangRab, type BarisRab, type JenisRab, type RingkasanRab,
+} from './rab';
 import { barisBulan, type BarisBulan } from './bulanan';
 import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
 import { terpakaiDariTransfer, transferPerCabang, type BarisTransfer } from './transfer-departemen';
@@ -563,18 +566,24 @@ export type RabRingkas = {
   scope: string;
   period: Period;
   status: string;
+  kind: JenisRab;
   bersama: boolean;
   jumlahBaris: number;
   totalAnggaran: number;
   totalRealisasi: number;
+  /** Akun yang juga dianggarkan RAB satunya di cabang dan bulan yang sama. */
+  akunTumpang: string[];
 };
 
 /** Daftar RAB beserta total anggaran dan realisasinya. */
 export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
   const budgets = await prisma.budget.findMany({
     where: period ? { period } : {},
-    include: { lines: true },
-    orderBy: [{ period: 'desc' }, { scope: 'asc' }],
+    include: {
+      lines: true,
+      itemLines: { include: { item: { select: { accountId: true } } } },
+    },
+    orderBy: [{ period: 'desc' }, { scope: 'asc' }, { kind: 'asc' }],
   });
   if (budgets.length === 0) return [];
 
@@ -582,18 +591,72 @@ export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
   const realisasi = await realisasiPerScope(periods[0] as Period, periods[periods.length - 1] as Period);
 
   return budgets.map((b) => {
+    const purchasing = b.kind === 'PURCHASING';
     const kunciRealisasi = realisasi.get(`${b.scope}|${b.period}`) ?? new Map<string, number>();
+    const sendiri = akunDianggarkan(b);
+    const sebelah = budgets.find((x) => x.scope === b.scope && x.period === b.period && x.kind !== b.kind);
+
     return {
       id: b.id,
       scope: b.scope,
       period: b.period as Period,
       status: b.status,
+      kind: b.kind as JenisRab,
       bersama: scopeBersamaKah(b.scope),
-      jumlahBaris: b.lines.length,
-      totalAnggaran: b.lines.reduce((s, l) => s + l.amount, 0),
-      totalRealisasi: [...kunciRealisasi.values()].reduce((s, v) => s + v, 0),
+      jumlahBaris: purchasing ? b.itemLines.length : b.lines.length,
+      totalAnggaran: purchasing
+        ? b.itemLines.reduce((s, l) => s + nilaiBarisBarang(l, round), 0)
+        : b.lines.reduce((s, l) => s + l.amount, 0),
+      ...rekapRealisasi(kunciRealisasi, sendiri, sebelah ? akunDianggarkan(sebelah) : null, b.kind),
     };
   });
+}
+
+/** Akun-akun yang dianggarkan sebuah RAB, dari baris akun maupun baris barang. */
+function akunDianggarkan(budget: {
+  kind: string;
+  lines: { accountId: string }[];
+  itemLines: { item: { accountId: string } }[];
+}): Set<string> {
+  return new Set(
+    budget.kind === 'PURCHASING'
+      ? budget.itemLines.map((l) => l.item.accountId)
+      : budget.lines.map((l) => l.accountId),
+  );
+}
+
+/**
+ * Akun mana saja yang realisasinya dihitung sebuah RAB, dan jumlahnya.
+ *
+ * Sebuah cabang boleh punya dua RAB sebulan, dan jurnal tidak mencatat RAB
+ * mana yang dimaksud sebuah beban. Dua aturan dipakai supaya totalnya tetap
+ * bisa dipercaya:
+ *
+ * 1. Akun yang dianggarkan sebuah RAB selalu menampilkan realisasinya penuh.
+ *    Membaginya menurut porsi anggaran akan melahirkan angka yang tidak
+ *    pernah terjadi, dan menolkannya di salah satu RAB membuat belanja yang
+ *    sungguh terjadi terbaca sebagai nol.
+ * 2. Akun yang terpakai tanpa pernah dianggarkan hanya ditampilkan satu kali,
+ *    di RAB umum — atau di RAB Purchasing bila RAB umumnya belum ada. Tanpa
+ *    satu pemilik yang pasti, akun semacam itu terhitung dua kali.
+ *
+ * Akun yang kena aturan pertama di kedua RAB sekaligus dikembalikan sebagai
+ * `akunTumpang`, supaya halamannya bisa mengatakannya terus terang.
+ */
+function rekapRealisasi(
+  realisasi: Map<string, number>,
+  sendiri: Set<string>,
+  sebelah: Set<string> | null,
+  kind: string,
+): { totalRealisasi: number; akunTumpang: string[] } {
+  const ambilSisa = kind === 'UMUM' || sebelah === null;
+  const akun = [...realisasi.keys()].filter(
+    (id) => sendiri.has(id) || (ambilSisa && !(sebelah?.has(id) ?? false)),
+  );
+  return {
+    totalRealisasi: round(akun.reduce((s, id) => s + (realisasi.get(id) ?? 0), 0)),
+    akunTumpang: sebelah ? [...sendiri].filter((id) => sebelah.has(id)) : [],
+  };
 }
 
 /**
@@ -632,20 +695,55 @@ export type RabRinci = {
   scope: string;
   period: Period;
   status: string;
+  kind: JenisRab;
   notes: string | null;
   bersama: boolean;
   /** Cabang yang tercakup scope ini. */
   cabang: string[];
   ringkasan: RingkasanRab;
+  /** Rincian per barang; hanya terisi untuk RAB Purchasing. */
+  barang: BarisBarangRab[];
+  /** Akun yang juga dianggarkan RAB satunya di cabang dan bulan yang sama. */
+  akunTumpang: { code: string; name: string }[];
 };
 
 /** Satu RAB lengkap dengan realisasinya, siap ditampilkan. */
 export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
   const budget = await prisma.budget.findUnique({
     where: { id },
-    include: { lines: { include: { account: true } } },
+    include: {
+      lines: { include: { account: true } },
+      itemLines: {
+        include: {
+          item: {
+            include: {
+              account: { select: { id: true, code: true, name: true } },
+              unit: { select: { code: true } },
+              category: { select: { name: true } },
+              subCategory: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { item: { code: 'asc' } },
+      },
+    },
   });
   if (!budget) return null;
+
+  const purchasing = budget.kind === 'PURCHASING';
+  const sebelah = await prisma.budget.findUnique({
+    where: {
+      scope_period_kind: {
+        scope: budget.scope,
+        period: budget.period,
+        kind: purchasing ? 'UMUM' : 'PURCHASING',
+      },
+    },
+    include: {
+      lines: { select: { accountId: true } },
+      itemLines: { select: { item: { select: { accountId: true } } } },
+    },
+  });
 
   const lines = await prisma.journalLine.findMany({
     where: {
@@ -675,19 +773,52 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     realisasi.set(l.accountId, cur);
   }
 
-  const baris: BarisRab[] = budget.lines.map((l) => ({
-    accountId: l.accountId,
-    accountCode: l.account.code,
-    accountName: l.account.name,
-    anggaran: l.amount,
-    realisasi: realisasi.get(l.accountId)?.nilai ?? 0,
+  const barang: BarisBarangRab[] = budget.itemLines.map((l) => ({
+    lineId: l.id,
+    itemId: l.itemId,
+    itemCode: l.item.code,
+    itemName: l.item.name,
+    satuan: l.item.unit.code,
+    kategori: l.item.category.name,
+    subKategori: l.item.subCategory?.name ?? null,
+    accountId: l.item.accountId,
+    accountCode: l.item.account.code,
+    accountName: l.item.account.name,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    anggaran: nilaiBarisBarang(l, round),
   }));
 
-  // Akun yang terpakai tetapi tidak pernah dianggarkan tetap ditampilkan.
-  const dianggarkan = new Set(budget.lines.map((l) => l.accountId));
-  for (const [accountId, r] of realisasi) {
-    if (dianggarkan.has(accountId) || r.nilai === 0) continue;
-    baris.push({ accountId, accountCode: r.code, accountName: r.name, anggaran: 0, realisasi: r.nilai });
+  // Baris anggaran RAB ini, selalu di tingkat akun supaya bisa dibandingkan
+  // dengan jurnal — jurnal tidak mencatat barangnya, hanya akunnya.
+  const perAkun = purchasing
+    ? anggaranPerAkun(barang, round)
+    : new Map(budget.lines.map((l) => [l.accountId, { code: l.account.code, name: l.account.name, anggaran: l.amount }]));
+
+  const baris: BarisRab[] = [...perAkun].map(([accountId, a]) => ({
+    accountId,
+    accountCode: a.code,
+    accountName: a.name,
+    anggaran: a.anggaran,
+    realisasi: realisasi.get(accountId)?.nilai ?? 0,
+  }));
+
+  // Akun yang terpakai tetapi tidak pernah dianggarkan tetap ditampilkan —
+  // tetapi hanya di satu RAB, lihat rekapRealisasi() di atas.
+  const akunSebelah = sebelah
+    ? new Set(
+        sebelah.kind === 'PURCHASING'
+          ? sebelah.itemLines.map((l) => l.item.accountId)
+          : sebelah.lines.map((l) => l.accountId),
+      )
+    : null;
+  const ambilSisa = !purchasing || akunSebelah === null;
+  if (ambilSisa) {
+    for (const [accountId, r] of realisasi) {
+      if (perAkun.has(accountId) || r.nilai === 0) continue;
+      if (akunSebelah?.has(accountId)) continue;
+      baris.push({ accountId, accountCode: r.code, accountName: r.name, anggaran: 0, realisasi: r.nilai });
+    }
   }
   baris.sort((a, b) => a.accountCode.localeCompare(b.accountCode));
 
@@ -696,10 +827,15 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     scope: budget.scope,
     period: budget.period as Period,
     status: budget.status,
+    kind: budget.kind as JenisRab,
     notes: budget.notes,
     bersama: scopeBersamaKah(budget.scope),
     cabang: cabangDalamScope(budget.scope),
     ringkasan: ringkasRab(baris, round),
+    barang,
+    akunTumpang: [...perAkun]
+      .filter(([accountId]) => akunSebelah?.has(accountId))
+      .map(([, a]) => ({ code: a.code, name: a.name })),
   };
 }
 

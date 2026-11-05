@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { getBudgetDetail, getBudgetList } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
-import { Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
+import { JENIS_RAB_LABEL } from '@/lib/rab';
+import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +38,26 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
   const terisi = rinci.filter((r): r is NonNullable<typeof r> => r !== null);
 
   const totalAnggaran = terisi.reduce((s, r) => s + r.ringkasan.totalAnggaran, 0);
-  const totalRealisasi = terisi.reduce((s, r) => s + r.ringkasan.totalRealisasi, 0);
+
+  /*
+   * Realisasi dijumlahkan per akun, bukan per RAB.
+   *
+   * Sebuah cabang boleh punya RAB Purchasing dan RAB umum dalam satu bulan,
+   * dan bila keduanya menganggarkan akun yang sama, akun itu menampilkan
+   * realisasinya penuh di kedua RAB — jurnal tidak mencatat RAB mana yang
+   * dimaksud sebuah beban. Menjumlahkan total tiap RAB karena itu akan
+   * menghitung akun tersebut dua kali, dan totalnya menjadi lebih besar
+   * daripada beban yang benar-benar terjadi.
+   */
+  const perAkun = new Map<string, number>();
+  for (const r of terisi) {
+    for (const b of r.ringkasan.baris) perAkun.set(`${r.scope}|${b.accountId}`, b.realisasi);
+  }
+  const totalRealisasi = [...perAkun.values()].reduce((s, v) => s + v, 0);
   const totalSisa = totalAnggaran - totalRealisasi;
   const totalLewat = terisi.reduce((s, r) => s + r.ringkasan.jumlahLewat, 0);
   const totalTak = terisi.reduce((s, r) => s + r.ringkasan.jumlahTakDianggarkan, 0);
+  const adaTumpang = terisi.some((r) => r.akunTumpang.length > 0);
 
   return (
     <>
@@ -77,6 +94,17 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
         />
       </div>
 
+      {adaTumpang && (
+        <div className="mt-4">
+          <Alert tone="warning">
+          Sebagian akun dianggarkan di RAB Purchasing dan RAB selain Purchasing sekaligus. Realisasi
+          di kartu masing-masing RAB menampilkannya penuh, sedangkan total di atas menghitungnya
+          satu kali — jadi total realisasi lebih kecil daripada jumlah angka tiap kartu, dan itu
+            yang benar.
+          </Alert>
+        </div>
+      )}
+
       {terisi.map((r) => (
         <Card key={r.id} className="card-pad mt-6 min-w-0">
           <SectionTitle
@@ -86,7 +114,7 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
                 : `Biaya yang dikendalikan ${r.scope} sendiri.`
             }
           >
-            {r.scope}
+            {r.scope} — {JENIS_RAB_LABEL[r.kind]}
           </SectionTitle>
 
           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">

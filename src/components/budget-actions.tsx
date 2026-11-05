@@ -3,7 +3,8 @@
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
-  deleteBudget, deleteBudgetLine, duplicateBudget, setBudgetStatus, type ActionState,
+  deleteBudget, deleteBudgetItemLine, deleteBudgetLine, duplicateBudget, setBudgetStatus,
+  type ActionState,
 } from '@/app/actions';
 
 const initial: ActionState = { ok: false, message: '' };
@@ -91,9 +92,17 @@ export function BudgetActions({
   );
 }
 
-/** Hapus satu baris anggaran. */
-export function BudgetLineDelete({ id, disabled }: { id: string; disabled: boolean }) {
-  const [state, action] = useActionState(deleteBudgetLine, initial);
+/** Hapus satu baris anggaran — per akun maupun per barang. */
+function HapusBaris({
+  id,
+  disabled,
+  server,
+}: {
+  id: string;
+  disabled: boolean;
+  server: (prev: ActionState, formData: FormData) => Promise<ActionState>;
+}) {
+  const [state, action] = useActionState(server, initial);
   const [konfirmasi, setKonfirmasi] = useState(false);
 
   if (disabled) return <span className="text-xs text-slate-400">—</span>;
@@ -122,4 +131,14 @@ export function BudgetLineDelete({ id, disabled }: { id: string; disabled: boole
       {state.message && !state.ok && <span className="text-xs text-red-600">{state.message}</span>}
     </span>
   );
+}
+
+/** Hapus satu baris anggaran per akun. */
+export function BudgetLineDelete({ id, disabled }: { id: string; disabled: boolean }) {
+  return <HapusBaris id={id} disabled={disabled} server={deleteBudgetLine} />;
+}
+
+/** Hapus satu baris anggaran per barang. */
+export function BudgetItemLineDelete({ id, disabled }: { id: string; disabled: boolean }) {
+  return <HapusBaris id={id} disabled={disabled} server={deleteBudgetItemLine} />;
 }

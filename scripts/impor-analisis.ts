@@ -67,8 +67,13 @@ async function main() {
   await prisma.cashPlan.deleteMany();
   await prisma.seasonMonth.deleteMany();
   await prisma.season.deleteMany();
+  await prisma.budgetItemLine.deleteMany();
   await prisma.budgetLine.deleteMany();
   await prisma.budget.deleteMany();
+  await prisma.item.deleteMany();
+  await prisma.itemSubCategory.deleteMany();
+  await prisma.itemCategory.deleteMany();
+  await prisma.itemUnit.deleteMany();
   await prisma.projectCostItem.deleteMany();
   await prisma.project.deleteMany();
   await prisma.monthlyStat.deleteMany();
@@ -113,9 +118,21 @@ async function main() {
   }
   catat('kewajiban', isi.kewajiban?.length ?? 0);
 
+  // Master barang didahulukan: baris RAB Purchasing menunjuk ke barangnya.
+  await prisma.itemUnit.createMany({ data: isi.satuanBarang ?? [] });
+  catat('satuanBarang', isi.satuanBarang?.length ?? 0);
+  for (const k of isi.kategoriBarang ?? []) {
+    await prisma.itemCategory.create({ data: tanpaAnak(k, 'subs') });
+    await prisma.itemSubCategory.createMany({ data: k.subs ?? [] });
+  }
+  catat('kategoriBarang', isi.kategoriBarang?.length ?? 0);
+  await prisma.item.createMany({ data: isi.barang ?? [] });
+  catat('barang', isi.barang?.length ?? 0);
+
   for (const b of isi.anggaran ?? []) {
-    await prisma.budget.create({ data: tanpaAnak(b, 'lines') });
+    await prisma.budget.create({ data: tanpaAnak(b, 'lines', 'itemLines') });
     await prisma.budgetLine.createMany({ data: b.lines ?? [] });
+    await prisma.budgetItemLine.createMany({ data: b.itemLines ?? [] });
   }
   catat('anggaran', isi.anggaran?.length ?? 0);
 

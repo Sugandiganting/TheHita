@@ -141,6 +141,7 @@ CREATE TABLE "Budget" (
     "scope" TEXT NOT NULL,
     "period" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "kind" TEXT NOT NULL DEFAULT 'UMUM',
     "notes" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
@@ -155,6 +156,18 @@ CREATE TABLE "BudgetLine" (
     "notes" TEXT,
     CONSTRAINT "BudgetLine_budgetId_fkey" FOREIGN KEY ("budgetId") REFERENCES "Budget" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "BudgetLine_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "BudgetItemLine" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "budgetId" TEXT NOT NULL,
+    "itemId" TEXT NOT NULL,
+    "quantity" REAL NOT NULL DEFAULT 0,
+    "unitPrice" REAL NOT NULL DEFAULT 0,
+    "notes" TEXT,
+    CONSTRAINT "BudgetItemLine_budgetId_fkey" FOREIGN KEY ("budgetId") REFERENCES "Budget" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "BudgetItemLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -418,7 +431,7 @@ CREATE UNIQUE INDEX "MonthlyStat_unitId_period_key" ON "MonthlyStat"("unitId", "
 CREATE INDEX "Budget_period_idx" ON "Budget"("period");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Budget_scope_period_key" ON "Budget"("scope", "period");
+CREATE UNIQUE INDEX "Budget_scope_period_kind_key" ON "Budget"("scope", "period", "kind");
 
 -- CreateIndex
 CREATE INDEX "BudgetLine_budgetId_idx" ON "BudgetLine"("budgetId");
@@ -428,6 +441,15 @@ CREATE INDEX "BudgetLine_accountId_idx" ON "BudgetLine"("accountId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "BudgetLine_budgetId_accountId_key" ON "BudgetLine"("budgetId", "accountId");
+
+-- CreateIndex
+CREATE INDEX "BudgetItemLine_budgetId_idx" ON "BudgetItemLine"("budgetId");
+
+-- CreateIndex
+CREATE INDEX "BudgetItemLine_itemId_idx" ON "BudgetItemLine"("itemId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BudgetItemLine_budgetId_itemId_key" ON "BudgetItemLine"("budgetId", "itemId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "CashPlan_period_key" ON "CashPlan"("period");

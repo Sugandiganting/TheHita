@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  barisMasukScope, cabangDalamScope, periodeBerikutnya, ringkasRab,
-  scopeBersamaKah, type BarisRab, type BarisRealisasi,
+  anggaranPerAkun, barisMasukScope, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
+  periodeBerikutnya, ringkasRab, scopeBersamaKah,
+  type BarisBarangRab, type BarisRab, type BarisRealisasi,
 } from '../src/lib/rab.ts';
 
 /**
@@ -111,4 +112,82 @@ test('bulan berikutnya, termasuk lompat tahun', () => {
   assert.equal(periodeBerikutnya('2026-01'), '2026-02');
   assert.equal(periodeBerikutnya('2026-09'), '2026-10');
   assert.equal(periodeBerikutnya('2026-12'), '2027-01');
+});
+
+/* ------------------------------------------------------------------ */
+/* RAB Purchasing: per barang                                          */
+/* ------------------------------------------------------------------ */
+
+const barang = (o: Partial<BarisBarangRab>): BarisBarangRab => ({
+  lineId: 'l1', itemId: 'i1', itemCode: 'BTN', itemName: 'Beton Instan',
+  satuan: 'SAK', kategori: 'Operasional', subKategori: null,
+  accountId: 'a1', accountCode: '6150.01', accountName: 'Biaya Pemeliharaan',
+  quantity: 0, unitPrice: 0, anggaran: 0, ...o,
+});
+
+test('nilai baris barang adalah jumlah kali harga satuan', () => {
+  assert.equal(nilaiBarisBarang({ quantity: 20, unitPrice: 65_000 }), 1_300_000);
+});
+
+test('jumlah pecahan tetap terhitung, tidak dibulatkan dulu', () => {
+  // Satuan seperti meter kubik dan liter sering tidak bulat. Membulatkan
+  // jumlahnya lebih dulu akan menggeser anggarannya tanpa terlihat.
+  assert.equal(nilaiBarisBarang({ quantity: 2.5, unitPrice: 400_000 }), 1_000_000);
+  assert.equal(nilaiBarisBarang({ quantity: 0.5, unitPrice: 1_000_001 }), 500_000.5);
+});
+
+test('beberapa barang dengan akun yang sama dijumlahkan menjadi satu baris akun', () => {
+  // Inilah sebabnya baris barang tidak bisa memakai keunikan per akun seperti
+  // RAB umum: semen dan besi sama-sama bermuara ke Biaya Pemeliharaan.
+  const per = anggaranPerAkun([
+    barang({ itemId: 'semen', anggaran: 1_300_000 }),
+    barang({ itemId: 'besi', anggaran: 2_000_000 }),
+    barang({ itemId: 'cat', accountId: 'a2', accountCode: '6160.01', accountName: 'Biaya Perlengkapan', anggaran: 450_000 }),
+  ]);
+
+  assert.equal(per.size, 2);
+  assert.equal(per.get('a1')?.anggaran, 3_300_000);
+  assert.equal(per.get('a2')?.anggaran, 450_000);
+  assert.equal(per.get('a1')?.code, '6150.01');
+});
+
+test('akun dari barang pertama yang dipakai, bukan tertimpa yang terakhir', () => {
+  const per = anggaranPerAkun([
+    barang({ itemId: 'semen', anggaran: 100 }),
+    barang({ itemId: 'besi', anggaran: 200 }),
+  ]);
+  assert.equal(per.get('a1')?.name, 'Biaya Pemeliharaan');
+});
+
+test('daftar barang kosong menghasilkan rekap kosong, bukan baris nol', () => {
+  assert.equal(anggaranPerAkun([]).size, 0);
+});
+
+test('hanya dua jenis RAB yang dikenal', () => {
+  assert.equal(jenisRabSah('PURCHASING'), true);
+  assert.equal(jenisRabSah('UMUM'), true);
+  // Huruf kecil ditolak: pemanggilnya yang membesarkan huruf lebih dulu, jadi
+  // yang lolos di sini sudah pasti sama bentuknya dengan yang tersimpan.
+  assert.equal(jenisRabSah('purchasing'), false);
+  assert.equal(jenisRabSah('PROYEK'), false);
+  assert.equal(jenisRabSah(''), false);
+});
+
+test('rekap per akun dari RAB Purchasing bisa langsung diringkas seperti RAB umum', () => {
+  // Pembuktian bahwa kedua jenis RAB berakhir di satu jalur perbandingan yang
+  // sama — kalau tidak, laporannya akan punya dua definisi "sisa".
+  const per = anggaranPerAkun([
+    barang({ itemId: 'semen', anggaran: 1_300_000 }),
+    barang({ itemId: 'besi', anggaran: 700_000 }),
+  ]);
+  const ringkas = ringkasRab(
+    [...per].map(([accountId, a]) => ({
+      accountId, accountCode: a.code, accountName: a.name, anggaran: a.anggaran, realisasi: 2_500_000,
+    })),
+  );
+
+  assert.equal(ringkas.totalAnggaran, 2_000_000);
+  assert.equal(ringkas.totalRealisasi, 2_500_000);
+  assert.equal(ringkas.totalSisa, -500_000);
+  assert.equal(ringkas.jumlahLewat, 1);
 });

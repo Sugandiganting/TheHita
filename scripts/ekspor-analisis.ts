@@ -72,7 +72,14 @@ async function main() {
     kendaraan: await prisma.vehicle.findMany(),
     kewajiban: await prisma.scheduledObligation.findMany({ include: { payments: true } }),
 
-    anggaran: await prisma.budget.findMany({ include: { lines: true } }),
+    satuanBarang: await prisma.itemUnit.findMany({ orderBy: { code: 'asc' } }),
+    kategoriBarang: await prisma.itemCategory.findMany({
+      include: { subs: true },
+      orderBy: { code: 'asc' },
+    }),
+    barang: await prisma.item.findMany({ orderBy: [{ categoryId: 'asc' }, { code: 'asc' }] }),
+
+    anggaran: await prisma.budget.findMany({ include: { lines: true, itemLines: true } }),
     proyek: await prisma.project.findMany({ include: { items: true } }),
     statistikBulanan: await prisma.monthlyStat.findMany({ orderBy: { period: 'asc' } }),
     skenarioRamalan: await prisma.forecastScenario.findMany(),

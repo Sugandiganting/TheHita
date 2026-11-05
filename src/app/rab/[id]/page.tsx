@@ -3,15 +3,16 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getBudgetDetail } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
-import { BudgetLineForm } from '@/components/budget-form';
-import { BudgetActions, BudgetLineDelete } from '@/components/budget-actions';
+import { JENIS_RAB_LABEL } from '@/lib/rab';
+import { BudgetItemLineForm, BudgetLineForm, type BarangOption } from '@/components/budget-form';
+import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RabDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [rab, accounts, lines] = await Promise.all([
+  const [rab, accounts, lines, barang] = await Promise.all([
     getBudgetDetail(id),
     prisma.account.findMany({
       where: { isHeader: false, active: true, type: { in: ['EXPENSE', 'COGS'] } },
@@ -19,18 +20,41 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
       select: { id: true, code: true, name: true, type: true },
     }),
     prisma.budgetLine.findMany({ where: { budgetId: id }, select: { id: true, accountId: true } }),
+    prisma.item.findMany({
+      where: { active: true },
+      orderBy: [{ category: { name: 'asc' } }, { code: 'asc' }],
+      select: {
+        id: true, code: true, name: true,
+        unit: { select: { code: true } },
+        category: { select: { name: true } },
+        subCategory: { select: { name: true } },
+        account: { select: { code: true, name: true } },
+      },
+    }),
   ]);
 
   if (!rab) notFound();
 
   const disahkan = rab.status === 'ACTIVE';
+  const purchasing = rab.kind === 'PURCHASING';
   const lineIdByAccount = new Map(lines.map((l) => [l.accountId, l.id]));
   const r = rab.ringkasan;
+
+  const opsiBarang: BarangOption[] = barang.map((b) => ({
+    id: b.id,
+    code: b.code,
+    name: b.name,
+    satuan: b.unit.code,
+    kategori: b.category.name,
+    subKategori: b.subCategory?.name ?? null,
+    accountCode: b.account.code,
+    accountName: b.account.name,
+  }));
 
   return (
     <>
       <PageHeader
-        title={`RAB ${rab.scope} — ${formatPeriod(rab.period)}`}
+        title={`RAB ${JENIS_RAB_LABEL[rab.kind]} ${rab.scope} — ${formatPeriod(rab.period)}`}
         description={
           rab.bersama
             ? `Biaya yang ditanggung ${rab.cabang.join(' dan ')} bersama-sama. Tidak masuk RAB cabang mana pun.`
@@ -58,8 +82,17 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         />
       </div>
 
-      {(r.jumlahLewat > 0 || r.jumlahTakDianggarkan > 0) && (
+      {(r.jumlahLewat > 0 || r.jumlahTakDianggarkan > 0 || rab.akunTumpang.length > 0) && (
         <div className="mt-4 space-y-2">
+          {rab.akunTumpang.length > 0 && (
+            <Alert tone="warning">
+              Akun {rab.akunTumpang.map((a) => `${a.code} ${a.name}`).join(', ')} juga dianggarkan di
+              RAB {JENIS_RAB_LABEL[purchasing ? 'UMUM' : 'PURCHASING']} cabang dan bulan yang sama.
+              Realisasinya ditampilkan penuh di kedua RAB, karena jurnal tidak mencatat RAB mana yang
+              dimaksud sebuah beban — jadi sisa di masing-masing RAB lebih kecil dari yang sebenarnya.
+              Bandingkan totalnya di Laporan RAB, yang menghitung tiap akun satu kali.
+            </Alert>
+          )}
           {r.jumlahLewat > 0 && (
             <Alert tone="warning">
               {r.jumlahLewat} akun sudah melewati anggarannya.
@@ -75,20 +108,95 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
       )}
 
       <Card className="card-pad mt-6">
-        <BudgetActions id={rab.id} status={rab.status} lineCount={r.baris.filter((b) => b.anggaran > 0).length} />
+        <BudgetActions
+          id={rab.id}
+          status={rab.status}
+          lineCount={purchasing ? rab.barang.length : r.baris.filter((b) => b.anggaran > 0).length}
+        />
       </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
+          {purchasing && (
+            <Card className="card-pad min-w-0">
+              <SectionTitle hint="Akun bebannya ikut dari master barang, jadi satu barang tidak bisa masuk ke dua akun yang berbeda.">
+                Rincian per barang
+              </SectionTitle>
+
+              {rab.barang.length === 0 ? (
+                <p className="py-6 text-sm text-slate-500">
+                  Belum ada barang. Isi lewat formulir <strong>Tambah barang</strong>: pilih
+                  barangnya, isi jumlah dan harga satuannya, lalu simpan.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[860px]">
+                    <thead className="border-b border-slate-200">
+                      <tr>
+                        <th className="th">Barang</th>
+                        <th className="th">Akun beban</th>
+                        <th className="th num">Jumlah</th>
+                        <th className="th num">Harga satuan</th>
+                        <th className="th num">Dianggarkan</th>
+                        <th className="th num">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rab.barang.map((b) => (
+                        <tr key={b.lineId} className="hover:bg-slate-50">
+                          <td className="td">
+                            <span className="mr-2 font-mono text-xs text-slate-500">{b.itemCode}</span>
+                            {b.itemName}
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              {b.subKategori ? `${b.kategori} › ${b.subKategori}` : b.kategori}
+                            </span>
+                          </td>
+                          <td className="td">
+                            <span className="mr-2 font-mono text-xs text-slate-500">{b.accountCode}</span>
+                            {b.accountName}
+                          </td>
+                          <td className="td num">
+                            {b.quantity.toLocaleString('id-ID')} <span className="text-xs text-slate-500">{b.satuan}</span>
+                          </td>
+                          <td className="td num">{formatRupiah(b.unitPrice)}</td>
+                          <td className="td num">{formatRupiah(b.anggaran)}</td>
+                          <td className="td num">
+                            <BudgetItemLineDelete id={b.lineId} disabled={disahkan} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 font-semibold">
+                      <tr>
+                        <td className="td" colSpan={4}>Total</td>
+                        <td className="td num">
+                          {formatRupiah(rab.barang.reduce((s, b) => s + b.anggaran, 0))}
+                        </td>
+                        <td className="td num">—</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+
           <Card className="card-pad min-w-0">
-            <SectionTitle hint="Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.">
-              Rincian anggaran
+            <SectionTitle
+              hint={
+                purchasing
+                  ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya.'
+                  : 'Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.'
+              }
+            >
+              {purchasing ? 'Anggaran dan realisasi per akun' : 'Rincian anggaran'}
             </SectionTitle>
 
             {r.baris.length === 0 ? (
               <p className="py-6 text-sm text-slate-500">
-                Belum ada baris. Isi lewat formulir <strong>Tambah anggaran</strong>: pilih akun
-                beban, isi nominalnya, lalu simpan. Ulangi untuk tiap akun yang dianggarkan.
+                {purchasing
+                  ? 'Belum ada yang bisa dibandingkan. Isi rincian barangnya dulu di atas.'
+                  : 'Belum ada baris. Isi lewat formulir Tambah anggaran: pilih akun beban, isi nominalnya, lalu simpan. Ulangi untuk tiap akun yang dianggarkan.'}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -100,7 +208,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <th className="th num">Realisasi</th>
                       <th className="th num">Sisa</th>
                       <th className="th num">Terpakai</th>
-                      <th className="th num">Aksi</th>
+                      {!purchasing && <th className="th num">Aksi</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -119,13 +227,15 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                           {formatRupiah(b.sisa)}
                         </td>
                         <td className="td num">{b.terpakaiPct === null ? '—' : formatPercent(b.terpakaiPct)}</td>
-                        <td className="td num">
-                          {lineIdByAccount.has(b.accountId) ? (
-                            <BudgetLineDelete id={lineIdByAccount.get(b.accountId)!} disabled={disahkan} />
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </td>
+                        {!purchasing && (
+                          <td className="td num">
+                            {lineIdByAccount.has(b.accountId) ? (
+                              <BudgetLineDelete id={lineIdByAccount.get(b.accountId)!} disabled={disahkan} />
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -138,7 +248,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         {formatRupiah(r.totalSisa)}
                       </td>
                       <td className="td num">{r.terpakaiPct === null ? '—' : formatPercent(r.terpakaiPct)}</td>
-                      <td className="td num">—</td>
+                      {!purchasing && <td className="td num">—</td>}
                     </tr>
                   </tfoot>
                 </table>
@@ -148,8 +258,12 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         </div>
 
         <Card className="card-pad sticky top-6 max-h-[calc(100vh-6rem)] self-start overflow-y-auto">
-          <SectionTitle>Tambah anggaran</SectionTitle>
-          <BudgetLineForm budgetId={rab.id} accounts={accounts} disabled={disahkan} />
+          <SectionTitle>{purchasing ? 'Tambah barang' : 'Tambah anggaran'}</SectionTitle>
+          {purchasing ? (
+            <BudgetItemLineForm budgetId={rab.id} items={opsiBarang} disabled={disahkan} />
+          ) : (
+            <BudgetLineForm budgetId={rab.id} accounts={accounts} disabled={disahkan} />
+          )}
         </Card>
       </div>
     </>

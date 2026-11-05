@@ -6,6 +6,7 @@ import { formatPeriod, formatRupiah } from '@/lib/format';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
+import { JENIS_RAB_LABEL } from '@/lib/rab';
 import { BudgetForm, type ScopeOption } from '@/components/budget-form';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
 
@@ -55,27 +56,28 @@ export default async function RabPage() {
     <>
       <PageHeader
         title="Input RAB"
-        description="Rencana Anggaran Biaya per bulan. Satu RAB dimiliki satu cabang, atau satu kelompok cabang untuk biaya yang ditanggung bersama."
+        description="Rencana Anggaran Biaya per bulan. Satu RAB dimiliki satu cabang, atau satu kelompok cabang untuk biaya yang ditanggung bersama. RAB Purchasing disusun per barang, yang lain per akun."
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card className="card-pad min-w-0">
-            <SectionTitle hint="Anggaran diisi per akun di dalam RAB — klik nama pemiliknya untuk membuka.">
+            <SectionTitle hint="Rincian anggaran diisi di dalam RAB — klik nama pemiliknya untuk membuka.">
               Daftar RAB
             </SectionTitle>
 
             {daftar.length === 0 ? (
               <EmptyState
                 title="Belum ada RAB"
-                description="Buat RAB pertama lewat formulir di samping, lalu isi rinciannya per akun beban."
+                description="Buat RAB pertama lewat formulir di samping, lalu isi rinciannya — per barang untuk Purchasing, per akun untuk yang lain."
               />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px]">
+                <table className="w-full min-w-[820px]">
                   <thead className="border-b border-slate-200">
                     <tr>
                       <th className="th">Pemilik</th>
+                      <th className="th">Jenis</th>
                       <th className="th">Bulan</th>
                       <th className="th">Status</th>
                       <th className="th num">Baris</th>
@@ -92,6 +94,16 @@ export default async function RabPage() {
                             {r.scope}
                           </Link>
                           {r.bersama && <span className="ml-2 text-xs text-slate-500">ditanggung bersama</span>}
+                          {r.akunTumpang.length > 0 && (
+                            <span className="mt-0.5 block text-xs text-amber-700">
+                              {r.akunTumpang.length} akun juga dianggarkan di RAB satunya
+                            </span>
+                          )}
+                        </td>
+                        <td className="td">
+                          <Badge tone={r.kind === 'PURCHASING' ? 'brand' : 'slate'}>
+                            {JENIS_RAB_LABEL[r.kind]}
+                          </Badge>
                         </td>
                         <td className="td">{formatPeriod(r.period)}</td>
                         <td className="td">

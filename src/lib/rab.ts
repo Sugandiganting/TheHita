@@ -57,6 +57,90 @@ export function cabangDalamScope(scope: string): string[] {
   return scope.split('+');
 }
 
+/* ------------------------------------------------------------------ */
+/* Jenis RAB                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Dua bentuk RAB, karena yang dianggarkan memang berbeda bentuknya.
+ *
+ * Purchasing menganggarkan barang: semen berapa sak, dengan harga satuan
+ * berapa. Yang lain menganggarkan akun: gaji sebulan, listrik sebulan —
+ * tidak ada satuan dan tidak ada harga satuan yang masuk akal di sana.
+ * Memaksakan satu formulir untuk keduanya berarti setengah kolomnya selalu
+ * kosong, dan yang kosong tidak pernah jelas apakah memang tidak berlaku
+ * atau sekadar belum diisi.
+ */
+export const JENIS_RAB = ['UMUM', 'PURCHASING'] as const;
+export type JenisRab = (typeof JENIS_RAB)[number];
+
+export const JENIS_RAB_LABEL: Record<JenisRab, string> = {
+  UMUM: 'Selain Purchasing',
+  PURCHASING: 'Purchasing',
+};
+
+export function jenisRabSah(nilai: string): nilai is JenisRab {
+  return (JENIS_RAB as readonly string[]).includes(nilai);
+}
+
+/* ------------------------------------------------------------------ */
+/* Baris RAB Purchasing                                                */
+/* ------------------------------------------------------------------ */
+
+/** Satu barang di dalam RAB Purchasing, lengkap dengan akun bebannya. */
+export type BarisBarangRab = {
+  lineId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  satuan: string;
+  kategori: string;
+  subKategori: string | null;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  quantity: number;
+  unitPrice: number;
+  /** Jumlah kali harga satuan. Tidak disimpan, supaya tidak pernah berbeda. */
+  anggaran: number;
+};
+
+/**
+ * Nilai anggaran satu baris barang.
+ *
+ * Hasilnya dihitung, bukan disimpan. Menyimpan jumlah, harga satuan, dan
+ * hasil kalinya sekaligus berarti menyimpan satu angka yang bisa bertentangan
+ * dengan dua angka lainnya — dan yang bertentangan itu baru terlihat saat
+ * seseorang menjumlahkan ulang dengan tangan.
+ */
+export function nilaiBarisBarang(
+  baris: { quantity: number; unitPrice: number },
+  pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
+): number {
+  return pembulatan(baris.quantity * baris.unitPrice);
+}
+
+/**
+ * Menjumlahkan baris-baris barang menjadi anggaran per akun.
+ *
+ * Beberapa barang boleh bermuara ke akun yang sama — semen dan besi keduanya
+ * bisa masuk "Biaya Pemeliharaan". Perbandingan dengan jurnal hanya mungkin
+ * di tingkat akun, karena jurnal tidak mencatat barangnya.
+ */
+export function anggaranPerAkun(
+  barang: BarisBarangRab[],
+  pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
+): Map<string, { code: string; name: string; anggaran: number }> {
+  const per = new Map<string, { code: string; name: string; anggaran: number }>();
+  for (const b of barang) {
+    const cur = per.get(b.accountId) ?? { code: b.accountCode, name: b.accountName, anggaran: 0 };
+    cur.anggaran += b.anggaran;
+    per.set(b.accountId, cur);
+  }
+  for (const v of per.values()) v.anggaran = pembulatan(v.anggaran);
+  return per;
+}
+
 export type BarisRab = {
   accountId: string;
   accountCode: string;
