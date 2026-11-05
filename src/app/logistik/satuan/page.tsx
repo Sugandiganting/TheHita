@@ -1,0 +1,76 @@
+import Link from 'next/link';
+import { prisma } from '@/lib/db';
+import { FormSatuan, HapusSatuan } from '@/components/barang-form';
+import { Card, PageHeader, SectionTitle } from '@/components/ui';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * Satuan barang.
+ *
+ * Dibuat jadi daftar tersendiri supaya ejaannya tidak bercabang — kg, Kg dan
+ * kilogram pada tiga barang berbeda membuat rekap pemakaiannya tidak bisa
+ * dijumlahkan, dan selisih semacam itu tidak terlihat sampai seseorang
+ * mencoba menjumlahkannya.
+ */
+export default async function SatuanBarangPage() {
+  const satuan = await prisma.itemUnit.findMany({
+    orderBy: { code: 'asc' },
+    select: { id: true, code: true, name: true, _count: { select: { items: true } } },
+  });
+
+  return (
+    <>
+      <PageHeader
+        title="Satuan Barang"
+        description="Satuan yang dipakai master barang — sak, liter, kilogram. Satu ejaan untuk satu satuan, supaya pemakaiannya bisa dijumlahkan."
+      />
+
+      <Card className="card-pad mt-6">
+        <SectionTitle hint="Kode dirapikan sendiri jadi huruf besar tanpa spasi.">
+          Tambah satuan
+        </SectionTitle>
+        <div className="mt-3"><FormSatuan /></div>
+      </Card>
+
+      <Card className="card-pad mt-6">
+        <SectionTitle hint="Satuan yang sudah dipakai barang tidak bisa dihapus.">
+          Daftar satuan
+        </SectionTitle>
+
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[460px]">
+            <thead className="border-b border-slate-200">
+              <tr>
+                <th className="th">Kode</th>
+                <th className="th">Nama</th>
+                <th className="th num">Dipakai</th>
+                <th className="th">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {satuan.length === 0 && (
+                <tr><td className="td text-slate-500" colSpan={4}>Belum ada satuan.</td></tr>
+              )}
+              {satuan.map((s) => (
+                <tr key={s.id}>
+                  <td className="td font-mono">{s.code}</td>
+                  <td className="td">{s.name}</td>
+                  <td className="td num text-slate-500">{s._count.items} barang</td>
+                  <td className="td"><HapusSatuan id={s.id} kode={s.code} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-500">
+          Lihat juga{' '}
+          <Link href="/logistik/kategori" className="font-medium text-brand-600 hover:underline">Kategori</Link>,{' '}
+          <Link href="/logistik/sub-kategori" className="font-medium text-brand-600 hover:underline">Sub Kategori</Link>, dan{' '}
+          <Link href="/logistik/barang" className="font-medium text-brand-600 hover:underline">Master Barang</Link>.
+        </p>
+      </Card>
+    </>
+  );
+}

@@ -77,7 +77,9 @@ const MENU: Entry[] = [
       { href: '/logistik/receiving', label: 'Receiving', desc: 'Barang masuk dari pemasok', soon: true },
       { href: '/logistik/issuing', label: 'Issuing', desc: 'Barang keluar ke departemen', soon: true },
       { href: '/logistik/barang', label: 'Master Barang', desc: 'Daftar item, satuan & COA-nya' },
-      { href: '/logistik/barang/klasifikasi', label: 'Klasifikasi Barang', desc: 'Kategori, sub kategori, satuan' },
+      { href: '/logistik/kategori', label: 'Kategori Barang', desc: 'Pengunci keunikan kode barang' },
+      { href: '/logistik/sub-kategori', label: 'Sub Kategori Barang', desc: 'Perincian di dalam kategori' },
+      { href: '/logistik/satuan', label: 'Satuan Barang', desc: 'Sak, liter, kilogram' },
     ],
   },
   {

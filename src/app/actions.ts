@@ -1857,9 +1857,14 @@ export async function gantiKataSandi(_prev: ActionState, formData: FormData): Pr
  * kehilangan itu tidak menampakkan diri sampai laporannya dibaca.
  * ------------------------------------------------------------------------ */
 
+// Keempat halaman saling menampilkan hitungan yang lain — daftar barang
+// menyebut jumlah kategorinya, kategori menyebut jumlah barangnya — jadi
+// satu perubahan di mana pun membuat yang lain ikut usang.
 const segarkanBarang = () => {
   revalidatePath('/logistik/barang');
-  revalidatePath('/logistik/barang/klasifikasi');
+  revalidatePath('/logistik/kategori');
+  revalidatePath('/logistik/sub-kategori');
+  revalidatePath('/logistik/satuan');
 };
 
 /** Nama kolom yang bentrok pada galat keunikan Prisma. */

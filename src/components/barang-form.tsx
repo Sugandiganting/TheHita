@@ -1,16 +1,22 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   hapusKategoriBarang, hapusSatuan, hapusSubKategori, setelAktifItem, simpanItem,
   simpanKategoriBarang, simpanSatuan, simpanSubKategori, type ActionState,
 } from '@/app/actions';
+import { SearchableSelect, type PickerOption } from './searchable-select';
 
 const initial: ActionState = { ok: false, message: '' };
 
-type Pilihan = { id: string; label: string };
-type Sub = { id: string; label: string; categoryId: string };
+export type Pilihan = { id: string; code: string; name: string };
+export type Sub = Pilihan & { categoryId: string };
+
+/** Kode dicari sekaligus dengan namanya, jadi keduanya masuk ke pilihan. */
+function opsi(daftar: Pilihan[]): PickerOption[] {
+  return daftar.map((d) => ({ value: d.id, code: d.code, label: d.name }));
+}
 
 function Tombol({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -115,12 +121,16 @@ export function FormSubKategori({ kategori }: { kategori: Pilihan[] }) {
   const [state, action] = useActionState(simpanSubKategori, initial);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
-      <div className="min-w-[10rem] flex-1">
+      <div className="min-w-[14rem] flex-1">
         <label className="label" htmlFor="sub-kat">Kategori induk</label>
-        <select id="sub-kat" name="categoryId" className="input" required defaultValue="">
-          <option value="" disabled>— Pilih —</option>
-          {kategori.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-        </select>
+        <SearchableSelect
+          id="sub-kat"
+          name="categoryId"
+          options={opsi(kategori)}
+          required
+          placeholder="— Pilih kategori —"
+          searchPlaceholder="Ketik kode atau nama kategori…"
+        />
       </div>
       <div className="w-32">
         <label className="label" htmlFor="sub-code">Kode</label>
@@ -152,71 +162,124 @@ export function FormItem({
 }) {
   const [state, action] = useActionState(simpanItem, initial);
   const [kat, setKat] = useState('');
+  const [subTerpilih, setSubTerpilih] = useState('');
 
   // Sub kategori milik kategori lain akan menghasilkan barang yang terbaca di
   // dua tempat sekaligus, jadi daftarnya disempitkan — bukan hanya ditolak
   // setelah disimpan.
   const subTersedia = useMemo(() => sub.filter((s) => s.categoryId === kat), [sub, kat]);
 
+  // Tanpa ini, sub kategori yang sudah terpilih tetap terkirim setelah
+  // kategorinya diganti — dan yang tersimpan bukan yang terbaca di layar.
+  const gantiKategori = (v: string) => {
+    setKat(v);
+    setSubTerpilih('');
+  };
+
+  /*
+   * Dikosongkan sendiri setelah tersimpan.
+   *
+   * Kode, nama, satuan dan akun sudah kosong dengan sendirinya karena `key`
+   * pada <form> melahirkan ulang isinya. Kategori dan sub kategori tidak:
+   * keduanya terkendali oleh state di sini, yang hidup di luar form itu.
+   * Membiarkannya terisi memang menghemat dua klik saat mendaftarkan beberapa
+   * barang sekaligus, tetapi sub kategori yang tertinggal dari barang
+   * sebelumnya akan ikut tersimpan pada barang berikutnya tanpa ada yang
+   * terlihat salah — dan itu harganya jauh lebih mahal daripada dua klik.
+   */
+  useEffect(() => {
+    if (!state.ok) return;
+    setKat('');
+    setSubTerpilih('');
+  }, [state]);
+
+  /*
+   * Pilihan "tanpa sub kategori" ikut masuk daftar, bukan dibiarkan sebagai
+   * keadaan kosong yang hanya bisa dicapai dengan tidak menyentuh kolomnya.
+   * Begitu seseorang sudah memilih satu sub kategori, tanpa pilihan ini ia
+   * tidak punya cara membatalkannya lagi.
+   */
+  const opsiSub: PickerOption[] = useMemo(
+    () => [
+      { value: '', code: '—', label: 'Tanpa sub kategori' },
+      ...opsi(subTersedia),
+    ],
+    [subTersedia],
+  );
+
   return (
     <form action={action} className="space-y-3" key={state.ok ? state.message : 'isi'}>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label className="label" htmlFor="it-code">Kode barang</label>
           <input id="it-code" name="code" className="input font-mono" placeholder="CHEM-01"
             autoCapitalize="off" spellCheck={false} required />
         </div>
-        <div>
+        <div className="sm:col-span-2">
           <label className="label" htmlFor="it-name">Nama barang</label>
           <input id="it-name" name="name" className="input" placeholder="Chemical Lantai" required />
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <label className="label" htmlFor="it-kat">Kategori</label>
-          <select id="it-kat" name="categoryId" className="input" required value={kat}
-            onChange={(e) => setKat(e.target.value)}>
-            <option value="" disabled>— Pilih —</option>
-            {kategori.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Kode dan nama hanya perlu unik di dalam kategorinya. Barang yang sama boleh didaftarkan
-            lagi di kategori lain dengan akun COA yang berbeda.
-          </p>
+          <SearchableSelect
+            id="it-kat"
+            name="categoryId"
+            options={opsi(kategori)}
+            value={kat}
+            onChange={gantiKategori}
+            required
+            placeholder="— Pilih kategori —"
+            searchPlaceholder="Ketik kode atau nama kategori…"
+          />
         </div>
         <div>
           <label className="label" htmlFor="it-sub">Sub kategori</label>
-          <select id="it-sub" name="subCategoryId" className="input" defaultValue=""
-            disabled={!kat || subTersedia.length === 0}>
-            <option value="">— Tanpa sub kategori —</option>
-            {subTersedia.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
+          <SearchableSelect
+            id="it-sub"
+            name="subCategoryId"
+            options={opsiSub}
+            value={subTerpilih}
+            onChange={setSubTerpilih}
+            disabled={!kat || subTersedia.length === 0}
+            placeholder="— Tanpa sub kategori —"
+            searchPlaceholder="Ketik kode atau nama sub kategori…"
+          />
           {kat && subTersedia.length === 0 && (
             <p className="mt-1 text-xs text-slate-500">Kategori ini belum punya sub kategori.</p>
           )}
         </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="it-sat">Satuan</label>
-          <select id="it-sat" name="unitId" className="input" required defaultValue="">
-            <option value="" disabled>— Pilih —</option>
-            {satuan.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
+          <SearchableSelect
+            id="it-sat"
+            name="unitId"
+            options={opsi(satuan)}
+            required
+            placeholder="— Pilih satuan —"
+            searchPlaceholder="Ketik kode atau nama satuan…"
+          />
         </div>
         <div>
           <label className="label" htmlFor="it-akun">Akun COA</label>
-          <select id="it-akun" name="accountId" className="input" required defaultValue="">
-            <option value="" disabled>— Pilih —</option>
-            {akun.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Penyusun RAB cukup memilih barangnya; akun ini yang mengikuti.
-          </p>
+          <SearchableSelect
+            id="it-akun"
+            name="accountId"
+            options={opsi(akun)}
+            required
+            placeholder="— Pilih akun —"
+            searchPlaceholder="Ketik nomor atau nama akun…"
+          />
         </div>
       </div>
+
+      <p className="text-xs text-slate-500">
+        Kode dan nama hanya perlu unik di dalam kategorinya — barang yang sama boleh didaftarkan
+        lagi di kategori lain dengan akun COA yang berbeda. Penyusun RAB cukup memilih barangnya;
+        akun COA inilah yang mengikuti.
+      </p>
 
       <Tombol label="Simpan barang" />
       <Pesan state={state} />
