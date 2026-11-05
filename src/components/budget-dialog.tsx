@@ -1,6 +1,6 @@
 'use client';
 
-import { DialogTambah } from './dialog';
+import { DialogTombol } from './dialog';
 import {
   BudgetForm, BudgetItemLineForm, BudgetLineForm,
   type AkunOption, type BarangOption, type ScopeOption,
@@ -13,13 +13,13 @@ export function RabBaruDialog({
   defaultPeriod: string;
 }) {
   return (
-    <DialogTambah
+    <DialogTombol
       label="+ RAB baru"
       judul="RAB baru"
       keterangan="Pilih jenis, pemilik, dan bulannya. Rinciannya diisi di halaman RAB-nya sendiri, yang langsung terbuka setelah ini."
     >
       {(tutup) => <BudgetForm scopes={scopes} defaultPeriod={defaultPeriod} onTutup={tutup} />}
-    </DialogTambah>
+    </DialogTombol>
   );
 }
 
@@ -31,7 +31,7 @@ export function TambahAnggaranDialog({
   disabled: boolean;
 }) {
   return (
-    <DialogTambah
+    <DialogTombol
       label="+ Tambah anggaran"
       judul="Tambah anggaran"
       lebar="sm"
@@ -40,7 +40,7 @@ export function TambahAnggaranDialog({
       keterangan="Satu baris per akun beban. Akunnya bisa dicari — ketik nomor atau namanya."
     >
       {(tutup) => <BudgetLineForm budgetId={budgetId} accounts={accounts} onTutup={tutup} />}
-    </DialogTambah>
+    </DialogTombol>
   );
 }
 
@@ -52,7 +52,7 @@ export function TambahBarangRabDialog({
   disabled: boolean;
 }) {
   return (
-    <DialogTambah
+    <DialogTombol
       label="+ Tambah barang"
       judul="Tambah barang ke RAB"
       disabled={disabled}
@@ -60,6 +60,6 @@ export function TambahBarangRabDialog({
       keterangan="Akun bebannya ikut dari master barang, dan nilainya dihitung dari jumlah kali harga satuan."
     >
       {(tutup) => <BudgetItemLineForm budgetId={budgetId} items={items} onTutup={tutup} />}
-    </DialogTambah>
+    </DialogTombol>
   );
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { HapusKategori } from '@/components/barang-form';
-import { TambahKategoriDialog } from '@/components/barang-dialog';
+import { TambahKategoriDialog, UbahKategoriDialog } from '@/components/barang-dialog';
 import { Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export default async function KategoriBarangPage() {
       />
 
       <Card className="card-pad">
-        <SectionTitle hint="Kategori yang sudah dipakai barang tidak bisa dihapus — barangnya akan kehilangan tempatnya.">
+        <SectionTitle hint="Kategori yang sudah dipakai barang atau sub kategori tidak bisa dihapus — isinya akan kehilangan tempatnya. Namanya tetap boleh diubah.">
           Daftar kategori
         </SectionTitle>
 
@@ -54,7 +54,12 @@ export default async function KategoriBarangPage() {
                   <td className="td">{k.name}</td>
                   <td className="td num text-slate-500">{k._count.items}</td>
                   <td className="td num text-slate-500">{k._count.subs}</td>
-                  <td className="td"><HapusKategori id={k.id} kode={k.code} /></td>
+                  <td className="td">
+                    <span className="flex items-center gap-3">
+                      <UbahKategoriDialog nilai={{ id: k.id, code: k.code, name: k.name }} />
+                      <HapusKategori id={k.id} kode={k.code} barang={k._count.items} sub={k._count.subs} />
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

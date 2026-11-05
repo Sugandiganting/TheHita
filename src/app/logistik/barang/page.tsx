@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { AktifItem } from '@/components/barang-form';
-import { TambahBarangDialog } from '@/components/barang-dialog';
+import { AktifItem, HapusItem } from '@/components/barang-form';
+import { TambahBarangDialog, UbahBarangDialog } from '@/components/barang-dialog';
 import { SaringKategori } from '@/components/barang-saring';
 import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 
@@ -56,10 +56,12 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
       orderBy: [{ active: 'desc' }, { category: { code: 'asc' } }, { code: 'asc' }],
       select: {
         id: true, code: true, name: true, active: true,
+        categoryId: true, subCategoryId: true, unitId: true, accountId: true,
         category: { select: { code: true, name: true } },
         subCategory: { select: { code: true } },
         unit: { select: { code: true } },
         account: { select: { code: true, name: true } },
+        _count: { select: { budgetLines: true } },
       },
     }),
   ]);
@@ -88,7 +90,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
       )}
 
       <Card className="card-pad">
-        <SectionTitle hint={`${barang.length} barang ditampilkan. Barang tidak dihapus, hanya dinonaktifkan — RAB bulan-bulan lalu tetap bisa menyebut barang yang sudah tidak dibeli lagi.`}>
+        <SectionTitle hint={`${barang.length} barang ditampilkan. Yang sudah pernah masuk RAB tidak bisa dihapus, hanya dinonaktifkan — RAB bulan-bulan lalu tetap bisa menyebut barang yang sudah tidak dibeli lagi.`}>
           Daftar barang
         </SectionTitle>
 
@@ -142,7 +144,23 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
                     <span className="font-mono text-xs">{b.account.code}</span>
                     <span className="block text-[11px] text-slate-400">{b.account.name}</span>
                   </td>
-                  <td className="td"><AktifItem id={b.id} kode={b.code} aktif={b.active} /></td>
+                  <td className="td">
+                    <span className="flex flex-wrap items-center gap-3">
+                      <UbahBarangDialog
+                        kategori={kategori}
+                        sub={sub}
+                        satuan={satuan}
+                        akun={akun}
+                        nilai={{
+                          id: b.id, code: b.code, name: b.name,
+                          categoryId: b.categoryId, subCategoryId: b.subCategoryId,
+                          unitId: b.unitId, accountId: b.accountId,
+                        }}
+                      />
+                      <AktifItem id={b.id} kode={b.code} aktif={b.active} />
+                      <HapusItem id={b.id} kode={b.code} dipakai={b._count.budgetLines} />
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

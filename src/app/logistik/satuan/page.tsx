@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { HapusSatuan } from '@/components/barang-form';
-import { TambahSatuanDialog } from '@/components/barang-dialog';
+import { TambahSatuanDialog, UbahSatuanDialog } from '@/components/barang-dialog';
 import { Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export default async function SatuanBarangPage() {
       />
 
       <Card className="card-pad">
-        <SectionTitle hint="Satuan yang sudah dipakai barang tidak bisa dihapus.">
+        <SectionTitle hint="Satuan yang sudah dipakai barang tidak bisa dihapus, tetapi namanya tetap boleh diubah.">
           Daftar satuan
         </SectionTitle>
 
@@ -52,7 +52,12 @@ export default async function SatuanBarangPage() {
                   <td className="td font-mono">{s.code}</td>
                   <td className="td">{s.name}</td>
                   <td className="td num text-slate-500">{s._count.items} barang</td>
-                  <td className="td"><HapusSatuan id={s.id} kode={s.code} /></td>
+                  <td className="td">
+                    <span className="flex items-center gap-3">
+                      <UbahSatuanDialog nilai={{ id: s.id, code: s.code, name: s.name }} />
+                      <HapusSatuan id={s.id} kode={s.code} dipakai={s._count.items} />
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

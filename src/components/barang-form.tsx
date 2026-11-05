@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   buatKategoriCepat, buatSatuanCepat, buatSubKategoriCepat,
-  hapusKategoriBarang, hapusSatuan, hapusSubKategori, setelAktifItem, simpanItem,
+  hapusItem, hapusKategoriBarang, hapusSatuan, hapusSubKategori, setelAktifItem, simpanItem,
   simpanKategoriBarang, simpanSatuan, simpanSubKategori,
   type ActionState, type PilihanBaru,
 } from '@/app/actions';
@@ -29,6 +29,19 @@ function Tombol({ label }: { label: string }) {
   );
 }
 
+/*
+ * Kunci yang melahirkan ulang isi formulir.
+ *
+ * Saat menambah, tiap kali tersimpan isiannya dikosongkan supaya yang
+ * berikutnya mulai dari bersih. Saat mengubah, isiannya justru harus bertahan:
+ * yang baru saja disimpan adalah keadaan yang benar, dan mengosongkannya
+ * membuat dialog yang masih terbuka menampilkan baris kosong seolah-olah
+ * datanya hilang.
+ */
+function kunci(state: ActionState, nilai?: { id: string }): string {
+  return nilai ? `ubah-${nilai.id}` : (state.ok ? state.message : 'isi');
+}
+
 /** Tombol tutup, hanya muncul bila formulirnya berada di dalam dialog. */
 function Tutup({ onTutup }: { onTutup?: () => void }) {
   if (!onTutup) return null;
@@ -48,17 +61,30 @@ function Pesan({ state }: { state: ActionState }) {
   );
 }
 
-/** Tombol hapus dua langkah: sekali untuk bertanya, sekali untuk sungguhan. */
+/**
+ * Tombol hapus dua langkah: sekali untuk bertanya, sekali untuk sungguhan.
+ *
+ * Terkunci begitu ada riwayat pemakaian. Aksi di servernya tetap menolak
+ * sendiri — pemeriksaan di layar bukan penggantinya, karena yang menentukan
+ * adalah keadaan saat tombolnya ditekan, bukan saat halamannya dimuat. Tetapi
+ * tombol yang terlihat bisa ditekan lalu menolak di ujung membuat orang
+ * mengira ada yang salah dengan aplikasinya, bukan dengan yang dimintanya.
+ */
 function Hapus({
-  id, aksi, tanya,
+  id, aksi, tanya, terkunci,
 }: {
   id: string;
   aksi: (p: ActionState, f: FormData) => Promise<ActionState>;
   tanya: string;
+  /** Alasannya tidak bisa dihapus; kosong berarti boleh. */
+  terkunci?: string;
 }) {
   const [state, action] = useActionState(aksi, initial);
   const [yakin, setYakin] = useState(false);
 
+  if (terkunci) {
+    return <span className="text-[11px] text-slate-400" title={terkunci}>sudah dipakai</span>;
+  }
   if (!state.ok && state.message) {
     return <span className="text-[11px] text-red-600">{state.message}</span>;
   }
@@ -83,89 +109,138 @@ function Hapus({
 
 /* ---------------------------------------------------------------- klasifikasi */
 
-export function FormSatuan({ onTutup }: { onTutup?: () => void }) {
+export function FormSatuan({ nilai, onTutup }: { nilai?: Pilihan; onTutup?: () => void }) {
   const [state, action] = useActionState(simpanSatuan, initial);
   return (
-    <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
+    <form action={action} className="flex flex-wrap items-end gap-2" key={kunci(state, nilai)}>
+      {nilai && <input type="hidden" name="id" value={nilai.id} />}
       <div className="w-28">
         <label className="label" htmlFor="sat-code">Kode</label>
-        <input id="sat-code" name="code" className="input font-mono" placeholder="KG" required />
+        <input id="sat-code" name="code" className="input font-mono" placeholder="KG"
+          defaultValue={nilai?.code} required />
       </div>
       <div className="min-w-[10rem] flex-1">
         <label className="label" htmlFor="sat-name">Nama</label>
-        <input id="sat-name" name="name" className="input" placeholder="Kilogram" required />
+        <input id="sat-name" name="name" className="input" placeholder="Kilogram"
+          defaultValue={nilai?.name} required />
       </div>
-      <Tombol label="Tambah" />
+      <Tombol label={nilai ? 'Simpan perubahan' : 'Tambah'} />
       <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
 }
 
-export function HapusSatuan({ id, kode }: { id: string; kode: string }) {
-  return <Hapus id={id} aksi={hapusSatuan} tanya={`Hapus satuan ${kode}?`} />;
+export function HapusSatuan({ id, kode, dipakai }: { id: string; kode: string; dipakai: number }) {
+  return (
+    <Hapus
+      id={id}
+      aksi={hapusSatuan}
+      tanya={`Hapus satuan ${kode}?`}
+      terkunci={dipakai > 0 ? `Dipakai ${dipakai} barang. Ubah satuan barang-barang itu dulu bila memang hendak dibuang.` : undefined}
+    />
+  );
 }
 
-export function FormKategori({ onTutup }: { onTutup?: () => void }) {
+export function FormKategori({ nilai, onTutup }: { nilai?: Pilihan; onTutup?: () => void }) {
   const [state, action] = useActionState(simpanKategoriBarang, initial);
   return (
-    <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
+    <form action={action} className="flex flex-wrap items-end gap-2" key={kunci(state, nilai)}>
+      {nilai && <input type="hidden" name="id" value={nilai.id} />}
       <div className="w-32">
         <label className="label" htmlFor="kat-code">Kode</label>
-        <input id="kat-code" name="code" className="input font-mono" placeholder="OPEX" required />
+        <input id="kat-code" name="code" className="input font-mono" placeholder="OPEX"
+          defaultValue={nilai?.code} required />
       </div>
       <div className="min-w-[10rem] flex-1">
         <label className="label" htmlFor="kat-name">Nama</label>
-        <input id="kat-name" name="name" className="input" placeholder="Operasional" required />
+        <input id="kat-name" name="name" className="input" placeholder="Operasional"
+          defaultValue={nilai?.name} required />
       </div>
-      <Tombol label="Tambah" />
+      <Tombol label={nilai ? 'Simpan perubahan' : 'Tambah'} />
       <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
 }
 
-export function HapusKategori({ id, kode }: { id: string; kode: string }) {
-  return <Hapus id={id} aksi={hapusKategoriBarang} tanya={`Hapus kategori ${kode}?`} />;
+export function HapusKategori({
+  id, kode, barang, sub,
+}: {
+  id: string;
+  kode: string;
+  barang: number;
+  sub: number;
+}) {
+  const alasan = barang > 0
+    ? `Memuat ${barang} barang. Kategori inilah yang menentukan keunikan kode barang-barang itu.`
+    : sub > 0
+      ? `Punya ${sub} sub kategori. Hapus sub kategorinya lebih dulu.`
+      : undefined;
+  return <Hapus id={id} aksi={hapusKategoriBarang} tanya={`Hapus kategori ${kode}?`} terkunci={alasan} />;
 }
 
 export function FormSubKategori({
-  kategori, onTutup,
+  kategori, nilai, onTutup,
 }: {
   kategori: Pilihan[];
+  nilai?: Sub;
   onTutup?: () => void;
 }) {
   const [state, action] = useActionState(simpanSubKategori, initial);
   return (
-    <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
+    <form action={action} className="flex flex-wrap items-end gap-2" key={kunci(state, nilai)}>
+      {nilai && <input type="hidden" name="id" value={nilai.id} />}
       <div className="min-w-[14rem] flex-1">
         <label className="label" htmlFor="sub-kat">Kategori induk</label>
         <SearchableSelect
           id="sub-kat"
           name="categoryId"
           options={opsi(kategori)}
+          defaultValue={nilai?.categoryId}
           required
           placeholder="— Pilih kategori —"
           searchPlaceholder="Ketik kode atau nama kategori…"
+          noun="kategori"
         />
       </div>
       <div className="w-32">
         <label className="label" htmlFor="sub-code">Kode</label>
-        <input id="sub-code" name="code" className="input font-mono" placeholder="CHEM" required />
+        <input id="sub-code" name="code" className="input font-mono" placeholder="CHEM"
+          defaultValue={nilai?.code} required />
       </div>
       <div className="min-w-[10rem] flex-1">
         <label className="label" htmlFor="sub-name">Nama</label>
-        <input id="sub-name" name="name" className="input" placeholder="Chemical" required />
+        <input id="sub-name" name="name" className="input" placeholder="Chemical"
+          defaultValue={nilai?.name} required />
       </div>
-      <Tombol label="Tambah" />
+      <Tombol label={nilai ? 'Simpan perubahan' : 'Tambah'} />
       <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
 }
 
-export function HapusSubKategori({ id, kode }: { id: string; kode: string }) {
-  return <Hapus id={id} aksi={hapusSubKategori} tanya={`Hapus sub kategori ${kode}?`} />;
+export function HapusSubKategori({ id, kode, dipakai }: { id: string; kode: string; dipakai: number }) {
+  return (
+    <Hapus
+      id={id}
+      aksi={hapusSubKategori}
+      tanya={`Hapus sub kategori ${kode}?`}
+      terkunci={dipakai > 0 ? `Dipakai ${dipakai} barang. Kosongkan sub kategori barang-barang itu dulu.` : undefined}
+    />
+  );
+}
+
+export function HapusItem({ id, kode, dipakai }: { id: string; kode: string; dipakai: number }) {
+  return (
+    <Hapus
+      id={id}
+      aksi={hapusItem}
+      tanya={`Hapus barang ${kode}?`}
+      terkunci={dipakai > 0 ? `Dipakai ${dipakai} baris RAB. Nonaktifkan saja bila sudah tidak dibeli lagi — RAB lama tetap terbaca utuh.` : undefined}
+    />
+  );
 }
 
 /* ----------------------------------------------------------------- item */
@@ -323,20 +398,32 @@ function PilihAtauBuat({
 
 /* ----------------------------------------------------------------- item */
 
+export type NilaiItem = {
+  id: string;
+  code: string;
+  name: string;
+  categoryId: string;
+  subCategoryId: string | null;
+  unitId: string;
+  accountId: string;
+};
+
 export function FormItem({
-  kategori, sub, satuan, akun, onTutup,
+  kategori, sub, satuan, akun, nilai, onTutup,
 }: {
   kategori: Pilihan[];
   sub: Sub[];
   satuan: Pilihan[];
   akun: Pilihan[];
+  /** Diisi saat mengubah barang yang sudah ada. */
+  nilai?: NilaiItem;
   /** Ditampilkan sebagai tombol tutup bila formulir ini berada di dalam dialog. */
   onTutup?: () => void;
 }) {
   const [state, action] = useActionState(simpanItem, initial);
-  const [kat, setKat] = useState('');
-  const [subTerpilih, setSubTerpilih] = useState('');
-  const [sat, setSat] = useState('');
+  const [kat, setKat] = useState(nilai?.categoryId ?? '');
+  const [subTerpilih, setSubTerpilih] = useState(nilai?.subCategoryId ?? '');
+  const [sat, setSat] = useState(nilai?.unitId ?? '');
 
   // Yang dibuat lewat tombol "Baru" disimpan terpisah lalu digabung, bukan
   // menimpa daftar dari server. Dengan begitu daftar yang disegarkan server
@@ -372,13 +459,17 @@ export function FormItem({
    * barang sekaligus, tetapi sub kategori yang tertinggal dari barang
    * sebelumnya akan ikut tersimpan pada barang berikutnya tanpa ada yang
    * terlihat salah — dan itu harganya jauh lebih mahal daripada dua klik.
+   *
+   * Saat mengubah, tidak ada yang dikosongkan: yang baru saja disimpan adalah
+   * keadaan yang benar, dan membersihkannya membuat dialog yang masih terbuka
+   * menampilkan barang kosong seolah-olah datanya hilang.
    */
   useEffect(() => {
-    if (!state.ok) return;
+    if (!state.ok || nilai) return;
     setKat('');
     setSubTerpilih('');
     setSat('');
-  }, [state]);
+  }, [state, nilai]);
 
   /*
    * Pilihan "tanpa sub kategori" ikut masuk daftar, bukan dibiarkan sebagai
@@ -392,16 +483,18 @@ export function FormItem({
   );
 
   return (
-    <form action={action} className="space-y-3" key={state.ok ? state.message : 'isi'}>
+    <form action={action} className="space-y-3" key={kunci(state, nilai)}>
+      {nilai && <input type="hidden" name="id" value={nilai.id} />}
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <label className="label" htmlFor="it-code">Kode barang</label>
           <input id="it-code" name="code" className="input font-mono" placeholder="CHEM-01"
-            autoCapitalize="off" spellCheck={false} required />
+            defaultValue={nilai?.code} autoCapitalize="off" spellCheck={false} required />
         </div>
         <div className="sm:col-span-2">
           <label className="label" htmlFor="it-name">Nama barang</label>
-          <input id="it-name" name="name" className="input" placeholder="Chemical Lantai" required />
+          <input id="it-name" name="name" className="input" placeholder="Chemical Lantai"
+            defaultValue={nilai?.name} required />
         </div>
       </div>
 
@@ -473,6 +566,7 @@ export function FormItem({
             id="it-akun"
             name="accountId"
             options={opsi(akun)}
+            defaultValue={nilai?.accountId}
             required
             placeholder="— Pilih akun —"
             searchPlaceholder="Ketik nomor atau nama akun…"
@@ -489,7 +583,7 @@ export function FormItem({
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tombol label="Simpan barang" />
+        <Tombol label={nilai ? 'Simpan perubahan' : 'Simpan barang'} />
         <Tutup onTutup={onTutup} />
       </div>
       <Pesan state={state} />

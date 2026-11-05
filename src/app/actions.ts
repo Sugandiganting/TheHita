@@ -1890,7 +1890,7 @@ export async function simpanSatuan(_prev: ActionState, formData: FormData): Prom
     throw e;
   }
   segarkanBarang();
-  return ok(`Satuan ${code} disimpan.`);
+  return ok(`Satuan ${code} ${id ? 'diperbarui' : 'disimpan'}.`);
 }
 
 export async function hapusSatuan(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -1920,7 +1920,7 @@ export async function simpanKategoriBarang(_prev: ActionState, formData: FormDat
     throw e;
   }
   segarkanBarang();
-  return ok(`Kategori ${code} disimpan.`);
+  return ok(`Kategori ${code} ${id ? 'diperbarui' : 'disimpan'}.`);
 }
 
 export async function hapusKategoriBarang(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -1956,7 +1956,7 @@ export async function simpanSubKategori(_prev: ActionState, formData: FormData):
     throw e;
   }
   segarkanBarang();
-  return ok(`Sub kategori ${code} disimpan.`);
+  return ok(`Sub kategori ${code} ${id ? 'diperbarui' : 'disimpan'}.`);
 }
 
 export async function hapusSubKategori(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -2071,7 +2071,31 @@ export async function simpanItem(_prev: ActionState, formData: FormData): Promis
     throw e;
   }
   segarkanBarang();
-  return ok(`Barang ${code} — ${name} disimpan.`);
+  return ok(`Barang ${code} — ${name} ${id ? 'diperbarui' : 'disimpan'}.`);
+}
+
+/**
+ * Menghapus barang yang belum pernah dipakai.
+ *
+ * Begitu sebuah barang pernah masuk RAB, menghapusnya akan membuat baris RAB
+ * itu kehilangan barangnya — dan kehilangan itu tidak menampakkan diri sampai
+ * laporan bulan bersangkutan dibaca kembali. Barang semacam itu dinonaktifkan
+ * saja: ia berhenti muncul di pilihan, tetapi RAB lama tetap terbaca utuh.
+ */
+export async function hapusItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const barang = await prisma.item.findUnique({ where: { id }, select: { code: true } });
+  if (!barang) return fail('Barang tidak ditemukan.');
+
+  const dipakai = await prisma.budgetItemLine.count({ where: { itemId: id } });
+  if (dipakai > 0) {
+    return fail(`${barang.code} dipakai ${dipakai} baris RAB, jadi tidak bisa dihapus. `
+      + 'Nonaktifkan saja bila sudah tidak dibeli lagi — RAB lama tetap terbaca utuh.');
+  }
+
+  await prisma.item.delete({ where: { id } });
+  segarkanBarang();
+  return ok(`${barang.code} dihapus.`);
 }
 
 export async function setelAktifItem(_prev: ActionState, formData: FormData): Promise<ActionState> {

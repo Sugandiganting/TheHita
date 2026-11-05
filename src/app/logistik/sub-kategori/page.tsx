@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { HapusSubKategori } from '@/components/barang-form';
-import { TambahSubKategoriDialog } from '@/components/barang-dialog';
+import { TambahSubKategoriDialog, UbahSubKategoriDialog } from '@/components/barang-dialog';
 import { Alert, Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export default async function SubKategoriBarangPage() {
     prisma.itemSubCategory.findMany({
       orderBy: [{ category: { code: 'asc' } }, { code: 'asc' }],
       select: {
-        id: true, code: true, name: true,
+        id: true, code: true, name: true, categoryId: true,
         category: { select: { code: true, name: true } },
         _count: { select: { items: true } },
       },
@@ -45,7 +45,7 @@ export default async function SubKategoriBarangPage() {
       )}
 
       <Card className={kategori.length === 0 ? 'card-pad mt-6' : 'card-pad'}>
-        <SectionTitle hint="Sub kategori yang sudah dipakai barang tidak bisa dihapus.">
+        <SectionTitle hint="Sub kategori yang sudah dipakai barang tidak bisa dihapus, tetapi namanya dan kategori induknya tetap boleh diubah.">
           Daftar sub kategori
         </SectionTitle>
 
@@ -73,7 +73,15 @@ export default async function SubKategoriBarangPage() {
                   <td className="td font-mono">{s.code}</td>
                   <td className="td">{s.name}</td>
                   <td className="td num text-slate-500">{s._count.items} barang</td>
-                  <td className="td"><HapusSubKategori id={s.id} kode={s.code} /></td>
+                  <td className="td">
+                    <span className="flex items-center gap-3">
+                      <UbahSubKategoriDialog
+                        kategori={kategori}
+                        nilai={{ id: s.id, code: s.code, name: s.name, categoryId: s.categoryId }}
+                      />
+                      <HapusSubKategori id={s.id} kode={s.code} dipakai={s._count.items} />
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

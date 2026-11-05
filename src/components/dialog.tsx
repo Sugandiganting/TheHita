@@ -17,11 +17,12 @@ import { createPortal } from 'react-dom';
  * yang dikirim lewat portal ke body — jadi setiap daftar yang dibuka di
  * dalamnya akan tersembunyi di belakang dialognya sendiri.
  */
-export function DialogTambah({
+export function DialogTombol({
   label,
   judul,
   keterangan,
   lebar = 'md',
+  varian = 'tombol',
   disabled,
   title,
   children,
@@ -31,6 +32,11 @@ export function DialogTambah({
   judul: string;
   keterangan?: ReactNode;
   lebar?: 'sm' | 'md' | 'lg';
+  /**
+   * "tombol" untuk aksi utama di kepala halaman; "tautan" untuk aksi per baris
+   * di dalam tabel, di mana tombol penuh akan menenggelamkan isi barisnya.
+   */
+  varian?: 'tombol' | 'tautan';
   disabled?: boolean;
   /** Alasan tombolnya mati, ditampilkan sebagai tooltip. */
   title?: string;
@@ -98,7 +104,9 @@ export function DialogTambah({
       <button
         ref={pemicuRef}
         type="button"
-        className="btn-primary"
+        className={varian === 'tautan'
+          ? 'text-xs font-medium text-brand-600 hover:underline disabled:text-slate-400 disabled:no-underline'
+          : 'btn-primary'}
         onClick={() => setBuka(true)}
         disabled={disabled}
         title={title}
