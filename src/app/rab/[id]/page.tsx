@@ -4,7 +4,8 @@ import { prisma } from '@/lib/db';
 import { getBudgetDetail } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import { JENIS_RAB_LABEL } from '@/lib/rab';
-import { BudgetItemLineForm, BudgetLineForm, type BarangOption } from '@/components/budget-form';
+import { type BarangOption } from '@/components/budget-form';
+import { TambahAnggaranDialog, TambahBarangRabDialog } from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -59,6 +60,13 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
           rab.bersama
             ? `Biaya yang ditanggung ${rab.cabang.join(' dan ')} bersama-sama. Tidak masuk RAB cabang mana pun.`
             : `Biaya yang dikendalikan ${rab.scope} sendiri. Porsi beban bersama punya RAB tersendiri.`
+        }
+        action={
+          purchasing ? (
+            <TambahBarangRabDialog budgetId={rab.id} items={opsiBarang} disabled={disahkan} />
+          ) : (
+            <TambahAnggaranDialog budgetId={rab.id} accounts={accounts} disabled={disahkan} />
+          )
         }
       />
 
@@ -115,154 +123,143 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         />
       </Card>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          {purchasing && (
-            <Card className="card-pad min-w-0">
-              <SectionTitle hint="Akun bebannya ikut dari master barang, jadi satu barang tidak bisa masuk ke dua akun yang berbeda.">
-                Rincian per barang
-              </SectionTitle>
-
-              {rab.barang.length === 0 ? (
-                <p className="py-6 text-sm text-slate-500">
-                  Belum ada barang. Isi lewat formulir <strong>Tambah barang</strong>: pilih
-                  barangnya, isi jumlah dan harga satuannya, lalu simpan.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[860px]">
-                    <thead className="border-b border-slate-200">
-                      <tr>
-                        <th className="th">Barang</th>
-                        <th className="th">Akun beban</th>
-                        <th className="th num">Jumlah</th>
-                        <th className="th num">Harga satuan</th>
-                        <th className="th num">Dianggarkan</th>
-                        <th className="th num">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {rab.barang.map((b) => (
-                        <tr key={b.lineId} className="hover:bg-slate-50">
-                          <td className="td">
-                            <span className="mr-2 font-mono text-xs text-slate-500">{b.itemCode}</span>
-                            {b.itemName}
-                            <span className="mt-0.5 block text-xs text-slate-500">
-                              {b.subKategori ? `${b.kategori} › ${b.subKategori}` : b.kategori}
-                            </span>
-                          </td>
-                          <td className="td">
-                            <span className="mr-2 font-mono text-xs text-slate-500">{b.accountCode}</span>
-                            {b.accountName}
-                          </td>
-                          <td className="td num">
-                            {b.quantity.toLocaleString('id-ID')} <span className="text-xs text-slate-500">{b.satuan}</span>
-                          </td>
-                          <td className="td num">{formatRupiah(b.unitPrice)}</td>
-                          <td className="td num">{formatRupiah(b.anggaran)}</td>
-                          <td className="td num">
-                            <BudgetItemLineDelete id={b.lineId} disabled={disahkan} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="border-t-2 border-slate-200 font-semibold">
-                      <tr>
-                        <td className="td" colSpan={4}>Total</td>
-                        <td className="td num">
-                          {formatRupiah(rab.barang.reduce((s, b) => s + b.anggaran, 0))}
-                        </td>
-                        <td className="td num">—</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </Card>
-          )}
-
+      <div className="mt-6 space-y-6">
+        {purchasing && (
           <Card className="card-pad min-w-0">
-            <SectionTitle
-              hint={
-                purchasing
-                  ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya.'
-                  : 'Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.'
-              }
-            >
-              {purchasing ? 'Anggaran dan realisasi per akun' : 'Rincian anggaran'}
+            <SectionTitle hint="Akun bebannya ikut dari master barang, jadi satu barang tidak bisa masuk ke dua akun yang berbeda.">
+              Rincian per barang
             </SectionTitle>
 
-            {r.baris.length === 0 ? (
+            {rab.barang.length === 0 ? (
               <p className="py-6 text-sm text-slate-500">
-                {purchasing
-                  ? 'Belum ada yang bisa dibandingkan. Isi rincian barangnya dulu di atas.'
-                  : 'Belum ada baris. Isi lewat formulir Tambah anggaran: pilih akun beban, isi nominalnya, lalu simpan. Ulangi untuk tiap akun yang dianggarkan.'}
+                Belum ada barang. Isi lewat tombol <strong>Tambah barang</strong> di atas: pilih
+                barangnya, isi jumlah dan harga satuannya, lalu simpan.
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px]">
+                <table className="w-full min-w-[860px]">
                   <thead className="border-b border-slate-200">
                     <tr>
-                      <th className="th">Akun</th>
+                      <th className="th">Barang</th>
+                      <th className="th">Akun beban</th>
+                      <th className="th num">Jumlah</th>
+                      <th className="th num">Harga satuan</th>
                       <th className="th num">Dianggarkan</th>
-                      <th className="th num">Realisasi</th>
-                      <th className="th num">Sisa</th>
-                      <th className="th num">Terpakai</th>
-                      {!purchasing && <th className="th num">Aksi</th>}
+                      <th className="th num">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {r.baris.map((b) => (
-                      <tr key={b.accountId} className={b.takDianggarkan ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                    {rab.barang.map((b) => (
+                      <tr key={b.lineId} className="hover:bg-slate-50">
+                        <td className="td">
+                          <span className="mr-2 font-mono text-xs text-slate-500">{b.itemCode}</span>
+                          {b.itemName}
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {b.subKategori ? `${b.kategori} › ${b.subKategori}` : b.kategori}
+                          </span>
+                        </td>
                         <td className="td">
                           <span className="mr-2 font-mono text-xs text-slate-500">{b.accountCode}</span>
                           {b.accountName}
-                          {b.takDianggarkan && (
-                            <span className="mt-0.5 block text-xs text-amber-700">tidak dianggarkan</span>
-                          )}
                         </td>
-                        <td className="td num">{b.anggaran > 0 ? formatRupiah(b.anggaran) : '—'}</td>
-                        <td className="td num">{formatRupiah(b.realisasi)}</td>
-                        <td className={`td num ${b.sisa < 0 ? 'font-medium text-red-600' : ''}`}>
-                          {formatRupiah(b.sisa)}
+                        <td className="td num">
+                          {b.quantity.toLocaleString('id-ID')} <span className="text-xs text-slate-500">{b.satuan}</span>
                         </td>
-                        <td className="td num">{b.terpakaiPct === null ? '—' : formatPercent(b.terpakaiPct)}</td>
-                        {!purchasing && (
-                          <td className="td num">
-                            {lineIdByAccount.has(b.accountId) ? (
-                              <BudgetLineDelete id={lineIdByAccount.get(b.accountId)!} disabled={disahkan} />
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                          </td>
-                        )}
+                        <td className="td num">{formatRupiah(b.unitPrice)}</td>
+                        <td className="td num">{formatRupiah(b.anggaran)}</td>
+                        <td className="td num">
+                          <BudgetItemLineDelete id={b.lineId} disabled={disahkan} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="border-t-2 border-slate-200 font-semibold">
                     <tr>
-                      <td className="td">Total</td>
-                      <td className="td num">{formatRupiah(r.totalAnggaran)}</td>
-                      <td className="td num">{formatRupiah(r.totalRealisasi)}</td>
-                      <td className={`td num ${r.totalSisa < 0 ? 'text-red-600' : ''}`}>
-                        {formatRupiah(r.totalSisa)}
+                      <td className="td" colSpan={4}>Total</td>
+                      <td className="td num">
+                        {formatRupiah(rab.barang.reduce((s, b) => s + b.anggaran, 0))}
                       </td>
-                      <td className="td num">{r.terpakaiPct === null ? '—' : formatPercent(r.terpakaiPct)}</td>
-                      {!purchasing && <td className="td num">—</td>}
+                      <td className="td num">—</td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             )}
           </Card>
-        </div>
+        )}
 
-        <Card className="card-pad sticky top-6 max-h-[calc(100vh-6rem)] self-start overflow-y-auto">
-          <SectionTitle>{purchasing ? 'Tambah barang' : 'Tambah anggaran'}</SectionTitle>
-          {purchasing ? (
-            <BudgetItemLineForm budgetId={rab.id} items={opsiBarang} disabled={disahkan} />
+        <Card className="card-pad min-w-0">
+          <SectionTitle
+            hint={
+              purchasing
+                ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya.'
+                : 'Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.'
+            }
+          >
+            {purchasing ? 'Anggaran dan realisasi per akun' : 'Rincian anggaran'}
+          </SectionTitle>
+
+          {r.baris.length === 0 ? (
+            <p className="py-6 text-sm text-slate-500">
+              {purchasing
+                ? 'Belum ada yang bisa dibandingkan. Isi rincian barangnya dulu di atas.'
+                : 'Belum ada baris. Isi lewat formulir Tambah anggaran: pilih akun beban, isi nominalnya, lalu simpan. Ulangi untuk tiap akun yang dianggarkan.'}
+            </p>
           ) : (
-            <BudgetLineForm budgetId={rab.id} accounts={accounts} disabled={disahkan} />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px]">
+                <thead className="border-b border-slate-200">
+                  <tr>
+                    <th className="th">Akun</th>
+                    <th className="th num">Dianggarkan</th>
+                    <th className="th num">Realisasi</th>
+                    <th className="th num">Sisa</th>
+                    <th className="th num">Terpakai</th>
+                    {!purchasing && <th className="th num">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {r.baris.map((b) => (
+                    <tr key={b.accountId} className={b.takDianggarkan ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                      <td className="td">
+                        <span className="mr-2 font-mono text-xs text-slate-500">{b.accountCode}</span>
+                        {b.accountName}
+                        {b.takDianggarkan && (
+                          <span className="mt-0.5 block text-xs text-amber-700">tidak dianggarkan</span>
+                        )}
+                      </td>
+                      <td className="td num">{b.anggaran > 0 ? formatRupiah(b.anggaran) : '—'}</td>
+                      <td className="td num">{formatRupiah(b.realisasi)}</td>
+                      <td className={`td num ${b.sisa < 0 ? 'font-medium text-red-600' : ''}`}>
+                        {formatRupiah(b.sisa)}
+                      </td>
+                      <td className="td num">{b.terpakaiPct === null ? '—' : formatPercent(b.terpakaiPct)}</td>
+                      {!purchasing && (
+                        <td className="td num">
+                          {lineIdByAccount.has(b.accountId) ? (
+                            <BudgetLineDelete id={lineIdByAccount.get(b.accountId)!} disabled={disahkan} />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-slate-200 font-semibold">
+                  <tr>
+                    <td className="td">Total</td>
+                    <td className="td num">{formatRupiah(r.totalAnggaran)}</td>
+                    <td className="td num">{formatRupiah(r.totalRealisasi)}</td>
+                    <td className={`td num ${r.totalSisa < 0 ? 'text-red-600' : ''}`}>
+                      {formatRupiah(r.totalSisa)}
+                    </td>
+                    <td className="td num">{r.terpakaiPct === null ? '—' : formatPercent(r.terpakaiPct)}</td>
+                    {!purchasing && <td className="td num">—</td>}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           )}
         </Card>
       </div>

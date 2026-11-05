@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { FormSatuan, HapusSatuan } from '@/components/barang-form';
+import { HapusSatuan } from '@/components/barang-form';
+import { TambahSatuanDialog } from '@/components/barang-dialog';
 import { Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -24,16 +25,10 @@ export default async function SatuanBarangPage() {
       <PageHeader
         title="Satuan Barang"
         description="Satuan yang dipakai master barang — sak, liter, kilogram. Satu ejaan untuk satu satuan, supaya pemakaiannya bisa dijumlahkan."
+        action={<TambahSatuanDialog />}
       />
 
-      <Card className="card-pad mt-6">
-        <SectionTitle hint="Kode dirapikan sendiri jadi huruf besar tanpa spasi.">
-          Tambah satuan
-        </SectionTitle>
-        <div className="mt-3"><FormSatuan /></div>
-      </Card>
-
-      <Card className="card-pad mt-6">
+      <Card className="card-pad">
         <SectionTitle hint="Satuan yang sudah dipakai barang tidak bisa dihapus.">
           Daftar satuan
         </SectionTitle>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { FormKategori, HapusKategori } from '@/components/barang-form';
+import { HapusKategori } from '@/components/barang-form';
+import { TambahKategoriDialog } from '@/components/barang-dialog';
 import { Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -24,16 +25,10 @@ export default async function KategoriBarangPage() {
       <PageHeader
         title="Kategori Barang"
         description="Kategori mengunci keunikan barang: kode dan nama yang sama boleh dipakai lagi asal kategorinya berbeda. Ditetapkan sekali, lalu jarang disentuh lagi."
+        action={<TambahKategoriDialog />}
       />
 
-      <Card className="card-pad mt-6">
-        <SectionTitle hint="Kode dirapikan sendiri jadi huruf besar tanpa spasi.">
-          Tambah kategori
-        </SectionTitle>
-        <div className="mt-3"><FormKategori /></div>
-      </Card>
-
-      <Card className="card-pad mt-6">
+      <Card className="card-pad">
         <SectionTitle hint="Kategori yang sudah dipakai barang tidak bisa dihapus — barangnya akan kehilangan tempatnya.">
           Daftar kategori
         </SectionTitle>

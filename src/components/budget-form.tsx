@@ -18,17 +18,29 @@ export type ScopeOption = {
   bersama: boolean;
 };
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ label, onTutup }: { label: string; onTutup?: () => void }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" className="btn-primary w-full" disabled={pending}>
-      {pending ? 'Menyimpan…' : label}
-    </button>
+    <div className="flex flex-wrap items-center gap-3">
+      <button type="submit" className={`btn-primary ${onTutup ? '' : 'w-full'}`} disabled={pending}>
+        {pending ? 'Menyimpan…' : label}
+      </button>
+      {/* Hanya ada bila formulirnya berada di dalam dialog. */}
+      {onTutup && (
+        <button type="button" className="btn-secondary" onClick={onTutup}>Tutup</button>
+      )}
+    </div>
   );
 }
 
 /** Membuat RAB baru: tinggal pilih pemilik dan bulannya, rinciannya menyusul. */
-export function BudgetForm({ scopes, defaultPeriod }: { scopes: ScopeOption[]; defaultPeriod: string }) {
+export function BudgetForm({
+  scopes, defaultPeriod, onTutup,
+}: {
+  scopes: ScopeOption[];
+  defaultPeriod: string;
+  onTutup?: () => void;
+}) {
   const [state, formAction] = useActionState(saveBudget, initial);
 
   return (
@@ -99,7 +111,7 @@ export function BudgetForm({ scopes, defaultPeriod }: { scopes: ScopeOption[]; d
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
 
-      <SubmitButton label="Buat RAB" />
+      <SubmitButton label="Buat RAB" onTutup={onTutup} />
     </form>
   );
 }
@@ -112,11 +124,13 @@ export function BudgetLineForm({
   accounts,
   values,
   disabled,
+  onTutup,
 }: {
   budgetId: string;
   accounts: AkunOption[];
   values?: { accountId: string; amount: number; notes: string | null };
   disabled?: boolean;
+  onTutup?: () => void;
 }) {
   const [state, formAction] = useActionState(saveBudgetLine, initial);
 
@@ -179,7 +193,7 @@ export function BudgetLineForm({
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
 
-      <SubmitButton label={values ? 'Perbarui anggaran' : 'Tambah ke RAB'} />
+      <SubmitButton label={values ? 'Perbarui anggaran' : 'Tambah ke RAB'} onTutup={onTutup} />
     </form>
   );
 }
@@ -207,10 +221,12 @@ export function BudgetItemLineForm({
   budgetId,
   items,
   disabled,
+  onTutup,
 }: {
   budgetId: string;
   items: BarangOption[];
   disabled?: boolean;
+  onTutup?: () => void;
 }) {
   const [state, formAction] = useActionState(saveBudgetItemLine, initial);
   const [itemId, setItemId] = useState('');
@@ -349,7 +365,7 @@ export function BudgetItemLineForm({
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
 
-      <SubmitButton label="Simpan ke RAB" />
+      <SubmitButton label="Simpan ke RAB" onTutup={onTutup} />
     </form>
   );
 }

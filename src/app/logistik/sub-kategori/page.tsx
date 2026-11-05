@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { FormSubKategori, HapusSubKategori } from '@/components/barang-form';
+import { HapusSubKategori } from '@/components/barang-form';
+import { TambahSubKategoriDialog } from '@/components/barang-dialog';
 import { Alert, Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export default async function SubKategoriBarangPage() {
       <PageHeader
         title="Sub Kategori Barang"
         description="Perincian di dalam sebuah kategori. Kodenya hanya perlu unik di dalam kategorinya sendiri, jadi nama yang sama boleh dipakai di kategori lain."
+        action={<TambahSubKategoriDialog kategori={kategori} />}
       />
 
       {kategori.length === 0 && (
@@ -42,16 +44,7 @@ export default async function SubKategoriBarangPage() {
         </Alert>
       )}
 
-      {kategori.length > 0 && (
-        <Card className="card-pad mt-6">
-          <SectionTitle hint="Kategori induknya bisa dicari — ketik kode atau namanya.">
-            Tambah sub kategori
-          </SectionTitle>
-          <div className="mt-3"><FormSubKategori kategori={kategori} /></div>
-        </Card>
-      )}
-
-      <Card className="card-pad mt-6">
+      <Card className={kategori.length === 0 ? 'card-pad mt-6' : 'card-pad'}>
         <SectionTitle hint="Sub kategori yang sudah dipakai barang tidak bisa dihapus.">
           Daftar sub kategori
         </SectionTitle>

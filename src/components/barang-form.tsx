@@ -29,6 +29,14 @@ function Tombol({ label }: { label: string }) {
   );
 }
 
+/** Tombol tutup, hanya muncul bila formulirnya berada di dalam dialog. */
+function Tutup({ onTutup }: { onTutup?: () => void }) {
+  if (!onTutup) return null;
+  return (
+    <button type="button" className="btn-secondary" onClick={onTutup}>Tutup</button>
+  );
+}
+
 function Pesan({ state }: { state: ActionState }) {
   if (!state.message) return null;
   return (
@@ -75,7 +83,7 @@ function Hapus({
 
 /* ---------------------------------------------------------------- klasifikasi */
 
-export function FormSatuan() {
+export function FormSatuan({ onTutup }: { onTutup?: () => void }) {
   const [state, action] = useActionState(simpanSatuan, initial);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
@@ -88,6 +96,7 @@ export function FormSatuan() {
         <input id="sat-name" name="name" className="input" placeholder="Kilogram" required />
       </div>
       <Tombol label="Tambah" />
+      <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
@@ -97,7 +106,7 @@ export function HapusSatuan({ id, kode }: { id: string; kode: string }) {
   return <Hapus id={id} aksi={hapusSatuan} tanya={`Hapus satuan ${kode}?`} />;
 }
 
-export function FormKategori() {
+export function FormKategori({ onTutup }: { onTutup?: () => void }) {
   const [state, action] = useActionState(simpanKategoriBarang, initial);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
@@ -110,6 +119,7 @@ export function FormKategori() {
         <input id="kat-name" name="name" className="input" placeholder="Operasional" required />
       </div>
       <Tombol label="Tambah" />
+      <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
@@ -119,7 +129,12 @@ export function HapusKategori({ id, kode }: { id: string; kode: string }) {
   return <Hapus id={id} aksi={hapusKategoriBarang} tanya={`Hapus kategori ${kode}?`} />;
 }
 
-export function FormSubKategori({ kategori }: { kategori: Pilihan[] }) {
+export function FormSubKategori({
+  kategori, onTutup,
+}: {
+  kategori: Pilihan[];
+  onTutup?: () => void;
+}) {
   const [state, action] = useActionState(simpanSubKategori, initial);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" key={state.ok ? state.message : 'isi'}>
@@ -143,6 +158,7 @@ export function FormSubKategori({ kategori }: { kategori: Pilihan[] }) {
         <input id="sub-name" name="name" className="input" placeholder="Chemical" required />
       </div>
       <Tombol label="Tambah" />
+      <Tutup onTutup={onTutup} />
       <div className="w-full"><Pesan state={state} /></div>
     </form>
   );
@@ -474,9 +490,7 @@ export function FormItem({
 
       <div className="flex flex-wrap items-center gap-3">
         <Tombol label="Simpan barang" />
-        {onTutup && (
-          <button type="button" className="btn-secondary" onClick={onTutup}>Tutup</button>
-        )}
+        <Tutup onTutup={onTutup} />
       </div>
       <Pesan state={state} />
     </form>
