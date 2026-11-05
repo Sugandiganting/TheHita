@@ -227,6 +227,57 @@ CREATE TABLE "SpendEntry" (
 );
 
 -- CreateTable
+CREATE TABLE "ItemUnit" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "ItemCategory" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "ItemSubCategory" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "categoryId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "ItemSubCategory_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Item" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "categoryId" TEXT NOT NULL,
+    "subCategoryId" TEXT,
+    "unitId" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "notes" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Item_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Item_subCategoryId_fkey" FOREIGN KEY ("subCategoryId") REFERENCES "ItemSubCategory" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Item_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "ItemUnit" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Item_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
 CREATE TABLE "Season" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "code" TEXT NOT NULL,
@@ -398,6 +449,30 @@ CREATE INDEX "SpendEntry_planId_idx" ON "SpendEntry"("planId");
 
 -- CreateIndex
 CREATE INDEX "SpendEntry_categoryId_idx" ON "SpendEntry"("categoryId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ItemUnit_code_key" ON "ItemUnit"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ItemCategory_code_key" ON "ItemCategory"("code");
+
+-- CreateIndex
+CREATE INDEX "ItemSubCategory_categoryId_idx" ON "ItemSubCategory"("categoryId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ItemSubCategory_categoryId_code_key" ON "ItemSubCategory"("categoryId", "code");
+
+-- CreateIndex
+CREATE INDEX "Item_categoryId_idx" ON "Item"("categoryId");
+
+-- CreateIndex
+CREATE INDEX "Item_accountId_idx" ON "Item"("accountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Item_categoryId_code_key" ON "Item"("categoryId", "code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Item_categoryId_name_key" ON "Item"("categoryId", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Season_code_key" ON "Season"("code");

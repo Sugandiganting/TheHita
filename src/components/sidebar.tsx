@@ -76,7 +76,8 @@ const MENU: Entry[] = [
     items: [
       { href: '/logistik/receiving', label: 'Receiving', desc: 'Barang masuk dari pemasok', soon: true },
       { href: '/logistik/issuing', label: 'Issuing', desc: 'Barang keluar ke departemen', soon: true },
-      { href: '/logistik/barang', label: 'Master Barang', desc: 'Daftar item & satuan', soon: true },
+      { href: '/logistik/barang', label: 'Master Barang', desc: 'Daftar item, satuan & COA-nya' },
+      { href: '/logistik/barang/klasifikasi', label: 'Klasifikasi Barang', desc: 'Kategori, sub kategori, satuan' },
     ],
   },
   {

@@ -15,6 +15,7 @@ import { MAKS_CICILAN } from '@/lib/rencana-belanja';
 import { buatRencanaLanjutan } from '@/lib/rencana-berjalan';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
 import { randomBytes } from 'node:crypto';
+import { normalKode, normalNama, periksaItem, pesanKembar } from '@/lib/barang';
 import { cocokKataSandi, sidikKataSandi } from '@/lib/auth';
 import { NAMA_KUKI, UMUR_SESI_HARI, buatToken } from '@/lib/sesi';
 import { sesiSekarang } from '@/lib/sesi-server';
@@ -1749,4 +1750,181 @@ export async function gantiKataSandi(_prev: ActionState, formData: FormData): Pr
 
   await prisma.user.update({ where: { id: user.id }, data: { password: await sidikKataSandi(baru) } });
   return ok('Kata sandi diperbarui.');
+}
+
+/* ---------------------------------------------------------------------------
+ * Master barang: satuan, kategori, sub kategori, dan itemnya sendiri
+ *
+ * Kategori mengunci identitas item — kode dan nama boleh berulang asal
+ * kategorinya berbeda. Itu disengaja: semen untuk operasional dan semen untuk
+ * proyek dibebankan ke akun berbeda, jadi keduanya item tersendiri.
+ *
+ * Yang masih dipakai tidak dihapus melainkan dinonaktifkan. Menghapus master
+ * yang sudah dirujuk akan membuat baris RAB kehilangan barangnya, dan
+ * kehilangan itu tidak menampakkan diri sampai laporannya dibaca.
+ * ------------------------------------------------------------------------ */
+
+const segarkanBarang = () => {
+  revalidatePath('/logistik/barang');
+  revalidatePath('/logistik/barang/klasifikasi');
+};
+
+/** Nama kolom yang bentrok pada galat keunikan Prisma. */
+function kolomKembar(e: unknown): string[] | null {
+  const kode = (e as { code?: string })?.code;
+  if (kode !== 'P2002') return null;
+  const target = (e as { meta?: { target?: unknown } })?.meta?.target;
+  return Array.isArray(target) ? target.map(String) : [];
+}
+
+export async function simpanSatuan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const code = normalKode(String(formData.get('code') ?? ''));
+  const name = normalNama(String(formData.get('name') ?? ''));
+  if (!code) return fail('Kode satuan wajib diisi, mis. KG atau PCS.');
+  if (!name) return fail('Nama satuan wajib diisi.');
+
+  try {
+    if (id) await prisma.itemUnit.update({ where: { id }, data: { code, name } });
+    else await prisma.itemUnit.create({ data: { code, name } });
+  } catch (e) {
+    if (kolomKembar(e)) return fail(`Satuan dengan kode "${code}" sudah ada.`);
+    throw e;
+  }
+  segarkanBarang();
+  return ok(`Satuan ${code} disimpan.`);
+}
+
+export async function hapusSatuan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const dipakai = await prisma.item.count({ where: { unitId: id } });
+  if (dipakai > 0) {
+    return fail(`Satuan ini dipakai ${dipakai} barang, jadi tidak bisa dihapus. `
+      + 'Ubah satuan barang-barang itu lebih dulu bila memang hendak dibuang.');
+  }
+  await prisma.itemUnit.delete({ where: { id } });
+  segarkanBarang();
+  return ok('Satuan dihapus.');
+}
+
+export async function simpanKategoriBarang(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const code = normalKode(String(formData.get('code') ?? ''));
+  const name = normalNama(String(formData.get('name') ?? ''));
+  if (!code) return fail('Kode kategori wajib diisi, mis. OPEX atau PROYEK.');
+  if (!name) return fail('Nama kategori wajib diisi.');
+
+  try {
+    if (id) await prisma.itemCategory.update({ where: { id }, data: { code, name } });
+    else await prisma.itemCategory.create({ data: { code, name } });
+  } catch (e) {
+    if (kolomKembar(e)) return fail(`Kategori dengan kode "${code}" sudah ada.`);
+    throw e;
+  }
+  segarkanBarang();
+  return ok(`Kategori ${code} disimpan.`);
+}
+
+export async function hapusKategoriBarang(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const [barang, sub] = await Promise.all([
+    prisma.item.count({ where: { categoryId: id } }),
+    prisma.itemSubCategory.count({ where: { categoryId: id } }),
+  ]);
+  if (barang > 0) {
+    return fail(`Kategori ini memuat ${barang} barang. Menghapusnya akan membuat barang-barang itu `
+      + 'kehilangan kategori yang justru menentukan keunikan kodenya.');
+  }
+  if (sub > 0) return fail(`Kategori ini punya ${sub} sub kategori. Hapus sub kategorinya lebih dulu.`);
+  await prisma.itemCategory.delete({ where: { id } });
+  segarkanBarang();
+  return ok('Kategori dihapus.');
+}
+
+export async function simpanSubKategori(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const categoryId = String(formData.get('categoryId') ?? '');
+  const code = normalKode(String(formData.get('code') ?? ''));
+  const name = normalNama(String(formData.get('name') ?? ''));
+  if (!categoryId) return fail('Sub kategori harus berada di dalam sebuah kategori.');
+  if (!code) return fail('Kode sub kategori wajib diisi.');
+  if (!name) return fail('Nama sub kategori wajib diisi.');
+
+  try {
+    if (id) await prisma.itemSubCategory.update({ where: { id }, data: { categoryId, code, name } });
+    else await prisma.itemSubCategory.create({ data: { categoryId, code, name } });
+  } catch (e) {
+    if (kolomKembar(e)) return fail(`Kode "${code}" sudah dipakai di kategori yang sama.`);
+    throw e;
+  }
+  segarkanBarang();
+  return ok(`Sub kategori ${code} disimpan.`);
+}
+
+export async function hapusSubKategori(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const dipakai = await prisma.item.count({ where: { subCategoryId: id } });
+  if (dipakai > 0) {
+    return fail(`Sub kategori ini dipakai ${dipakai} barang. Kosongkan sub kategori barang-barang itu dulu.`);
+  }
+  await prisma.itemSubCategory.delete({ where: { id } });
+  segarkanBarang();
+  return ok('Sub kategori dihapus.');
+}
+
+export async function simpanItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const masukan = {
+    code: String(formData.get('code') ?? ''),
+    name: String(formData.get('name') ?? ''),
+    categoryId: String(formData.get('categoryId') ?? ''),
+    subCategoryId: String(formData.get('subCategoryId') ?? '').trim() || null,
+    unitId: String(formData.get('unitId') ?? ''),
+    accountId: String(formData.get('accountId') ?? ''),
+  };
+  const salah = periksaItem(masukan);
+  if (salah) return fail(salah);
+
+  // Sub kategori milik kategori lain akan lolos pemeriksaan bentuk tetapi
+  // menghasilkan barang yang terbaca di dua tempat sekaligus.
+  if (masukan.subCategoryId) {
+    const sub = await prisma.itemSubCategory.findUnique({
+      where: { id: masukan.subCategoryId },
+      select: { categoryId: true, name: true },
+    });
+    if (!sub) return fail('Sub kategori tidak ditemukan.');
+    if (sub.categoryId !== masukan.categoryId) {
+      return fail(`Sub kategori "${sub.name}" milik kategori lain. Pilih sub kategori dari kategori yang sama.`);
+    }
+  }
+
+  const code = normalKode(masukan.code);
+  const name = normalNama(masukan.name);
+  const data = { ...masukan, code, name };
+
+  try {
+    if (id) await prisma.item.update({ where: { id }, data });
+    else await prisma.item.create({ data });
+  } catch (e) {
+    const kolom = kolomKembar(e);
+    if (kolom) {
+      const kat = await prisma.itemCategory.findUnique({
+        where: { id: masukan.categoryId }, select: { name: true },
+      });
+      return fail(pesanKembar(kolom, kat?.name ?? 'ini', { code, name }));
+    }
+    throw e;
+  }
+  segarkanBarang();
+  return ok(`Barang ${code} — ${name} disimpan.`);
+}
+
+export async function setelAktifItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const aktif = String(formData.get('aktif') ?? '') === 'true';
+  const ada = await prisma.item.findUnique({ where: { id }, select: { code: true } });
+  if (!ada) return fail('Barang tidak ditemukan.');
+  await prisma.item.update({ where: { id }, data: { active: aktif } });
+  segarkanBarang();
+  return ok(`${ada.code} ${aktif ? 'diaktifkan' : 'dinonaktifkan'}.`);
 }

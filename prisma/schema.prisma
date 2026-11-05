@@ -89,6 +89,7 @@ model Account {
   costItems   ProjectCostItem[]
   budgetLines BudgetLine[]
   spendCategories SpendCategory[]
+  items           Item[]
 
   createdAt DateTime @default(now())
 
@@ -289,6 +290,92 @@ model BudgetLine {
 
 /// Rencana kas satu bulan: proyeksi uang masuk, komitmen yang harus dibayar,
 /// dan pembagian plafon belanja. Diperbarui tiap minggu lewat CashCheckpoint.
+/// Satuan barang: pcs, kg, liter. Dipisah jadi master supaya ejaannya tidak
+/// bercabang — "kg", "Kg" dan "kilogram" pada tiga item berbeda membuat
+/// rekapnya tidak bisa dijumlahkan.
+model ItemUnit {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  name   String
+  active Boolean @default(true)
+
+  items Item[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Kategori barang, mis. Opex dan Proyek.
+///
+/// Kategori MENGUNCI identitas item: kode dan nama boleh berulang asal
+/// kategorinya berbeda. Itu disengaja — semen untuk operasional dan semen
+/// untuk proyek dibebankan ke akun yang berbeda, jadi keduanya dicatat
+/// sebagai item tersendiri dengan COA masing-masing.
+model ItemCategory {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  name   String
+  active Boolean @default(true)
+
+  subs  ItemSubCategory[]
+  items Item[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Sub kategori, selalu milik satu kategori. Kodenya hanya perlu unik di
+/// dalam kategorinya sendiri.
+model ItemSubCategory {
+  id         String  @id @default(cuid())
+  categoryId String
+  code       String
+  name       String
+  active     Boolean @default(true)
+
+  category ItemCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  items    Item[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, code])
+  @@index([categoryId])
+}
+
+/// Barang yang dibeli: bahan, perlengkapan, peralatan.
+///
+/// Tiap item membawa akun bebannya sendiri, jadi penyusun RAB cukup memilih
+/// barangnya dan akuntansinya mengikuti — tidak perlu menghafal nomor akun.
+model Item {
+  id            String  @id @default(cuid())
+  code          String
+  name          String
+  categoryId    String
+  subCategoryId String?
+  unitId        String
+  /// Akun beban atau aset yang dikenai pembelian barang ini.
+  accountId     String
+  notes         String?
+  active        Boolean @default(true)
+
+  category    ItemCategory     @relation(fields: [categoryId], references: [id])
+  subCategory ItemSubCategory? @relation(fields: [subCategoryId], references: [id])
+  unit        ItemUnit         @relation(fields: [unitId], references: [id])
+  account     Account          @relation(fields: [accountId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Kode dan nama unik DI DALAM kategori, bukan menyeluruh. Keduanya dijaga:
+  // kode kembar membuat rekap salah jumlah, nama kembar membuat penyusun RAB
+  // memilih barang yang keliru tanpa ada yang terlihat salah.
+  @@unique([categoryId, code])
+  @@unique([categoryId, name])
+  @@index([categoryId])
+  @@index([accountId])
+}
+
 model CashPlan {
   id     String @id @default(cuid())
   /// Format YYYY-MM
