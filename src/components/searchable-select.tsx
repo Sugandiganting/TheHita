@@ -49,6 +49,7 @@ export function SearchableSelect({
   id,
   invalid,
   showGroup,
+  noun = 'akun',
 }: {
   name?: string;
   options: PickerOption[];
@@ -68,6 +69,12 @@ export function SearchableSelect({
    * ini dua pilihan berbeda terlihat sama persis.
    */
   showGroup?: boolean;
+  /**
+   * Sebutan untuk isi daftarnya, dipakai pada teks bantuan dan pesan kosong.
+   * Daftar ini semula hanya untuk akun; "tidak ada akun yang cocok" pada
+   * daftar satuan membuat orang mengira mereka salah kolom.
+   */
+  noun?: string;
 }) {
   const reactId = useId();
   const listId = `${reactId}-list`;
@@ -127,8 +134,39 @@ export function SearchableSelect({
     };
   }, [open]);
 
+  /*
+   * Fokus pindah ke kolom cari begitu panelnya benar-benar ada.
+   *
+   * Bergantung pada `open` saja tidak cukup: panel hanya dirender setelah
+   * `rect` terisi, dan `rect` baru terisi pada useLayoutEffect sesudahnya —
+   * jadi pada saat efek ini pertama berjalan, kolom carinya belum ada dan
+   * focus() tidak mengenai apa pun. Akibatnya fokus tertinggal di tombol
+   * pemicu: mengetik tidak mencari, dan Esc tidak menutup daftarnya.
+   *
+   * `siap` sengaja boolean, bukan `rect` itu sendiri. `rect` lahir baru setiap
+   * kali halaman digulir, dan bergantung padanya akan merebut fokus kembali ke
+   * kolom cari di tengah seseorang menggulir daftarnya.
+   */
+  const siap = open && rect !== null;
   useEffect(() => {
-    if (open) searchRef.current?.focus();
+    if (siap) searchRef.current?.focus();
+  }, [siap]);
+
+  /*
+   * Esc menutup daftarnya dari mana pun fokus berada, bukan hanya dari kolom
+   * cari. Penangan pada kolom itu saja membuat Esc diam begitu fokus bergeser
+   * — dan yang menekannya lalu menekan sekali lagi, yang kedua kalinya
+   * mengenai apa pun di belakang daftar ini.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
   }, [open]);
 
   // Tutup saat menekan di luar tombol maupun panel.
@@ -254,14 +292,14 @@ export function SearchableSelect({
                 onKeyDown={onKeyDown}
                 placeholder={searchPlaceholder}
                 className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                aria-label="Cari akun"
+                aria-label={`Cari ${noun}`}
               />
             </div>
 
             <ul ref={listRef} id={listId} role="listbox" className="max-h-64 overflow-y-auto overscroll-contain py-1">
               {filtered.length === 0 && (
                 <li className="px-3 py-6 text-center text-sm text-slate-500">
-                  Tidak ada akun yang cocok dengan “{query}”.
+                  Tidak ada {noun} yang cocok dengan “{query}”.
                 </li>
               )}
               {filtered.map((o, i) => {
@@ -295,7 +333,7 @@ export function SearchableSelect({
             </ul>
 
             <div className="border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
-              {filtered.length} dari {options.length} akun · ↑↓ pilih · Enter untuk memilih
+              {filtered.length} dari {options.length} {noun} · ↑↓ pilih · Enter untuk memilih
             </div>
           </div>,
           document.body,

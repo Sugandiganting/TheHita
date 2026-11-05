@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { AktifItem, FormItem } from '@/components/barang-form';
+import { AktifItem } from '@/components/barang-form';
+import { TambahBarangDialog } from '@/components/barang-dialog';
 import { SaringKategori } from '@/components/barang-saring';
 import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 
@@ -16,10 +17,10 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
  * barangnya dan akuntansinya mengikuti — tidak ada yang perlu menghafal nomor
  * akun. Itu juga sebabnya akun di sini wajib diisi.
  *
- * Formulirnya di atas, daftarnya di bawah, keduanya selebar halaman. Menaruh
- * formulir di kolom samping memang menghemat satu gulir, tetapi memotong lebar
- * daftarnya — dan daftar inilah yang punya enam kolom dan akan terus bertambah
- * panjang, sedangkan formulirnya hanya dipakai sebentar tiap kali.
+ * Yang tampil saat halaman dibuka hanya daftarnya beserta saringannya. Itulah
+ * yang dicari hampir setiap kali halaman ini dibuka; mendaftarkan barang baru
+ * jauh lebih jarang, jadi formulirnya pindah ke dalam dialog dan daftarnya
+ * mendapat seluruh lebar halaman.
  */
 export default async function BarangPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
@@ -63,49 +64,30 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
     }),
   ]);
 
-  const siap = kategori.length > 0 && satuan.length > 0;
-
   return (
     <>
       <PageHeader
         title="Master Barang"
         description="Daftar barang yang dibeli, lengkap dengan satuan dan akun COA-nya. Dipakai menyusun RAB Purchasing, dan nanti oleh Receiving serta Issuing."
+        action={
+          <TambahBarangDialog
+            kategori={kategori}
+            sub={sub}
+            satuan={satuan}
+            akun={akun}
+            bisa={akun.length > 0}
+          />
+        }
       />
 
-      {!siap && (
-        <Alert tone="warning" title="Klasifikasinya belum siap">
-          Barang membutuhkan kategori dan satuan sebelum bisa didaftarkan.
-          {kategori.length === 0 && (
-            <>
-              {' '}Belum ada kategori —{' '}
-              <Link href="/logistik/kategori" className="font-medium underline">buat di Kategori Barang</Link>.
-            </>
-          )}
-          {satuan.length === 0 && (
-            <>
-              {' '}Belum ada satuan —{' '}
-              <Link href="/logistik/satuan" className="font-medium underline">buat di Satuan Barang</Link>.
-            </>
-          )}
+      {akun.length === 0 && (
+        <Alert tone="warning" title="Belum ada akun COA yang bisa dipakai barang">
+          Barang wajib membawa akun beban, harga pokok, persediaan atau aset tetap. Siapkan bagan
+          akunnya lebih dulu di <Link href="/coa" className="font-medium underline">Bagan Akun</Link>.
         </Alert>
       )}
 
-      <Card className="card-pad mt-6">
-        <SectionTitle hint="Kode dirapikan sendiri jadi huruf besar tanpa spasi, supaya satu barang tidak terdaftar dua kali karena beda cara mengetik. Semua pilihan bisa dicari — ketik nomor akun atau namanya.">
-          Tambah barang
-        </SectionTitle>
-        <div className="mt-3">
-          {siap ? (
-            <FormItem kategori={kategori} sub={sub} satuan={satuan} akun={akun} />
-          ) : (
-            <p className="text-sm text-slate-500">
-              Tersedia setelah kategori dan satuan dibuat.
-            </p>
-          )}
-        </div>
-      </Card>
-
-      <Card className="card-pad mt-6">
+      <Card className="card-pad">
         <SectionTitle hint={`${barang.length} barang ditampilkan. Barang tidak dihapus, hanya dinonaktifkan — RAB bulan-bulan lalu tetap bisa menyebut barang yang sudah tidak dibeli lagi.`}>
           Daftar barang
         </SectionTitle>

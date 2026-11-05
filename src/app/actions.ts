@@ -1970,6 +1970,63 @@ export async function hapusSubKategori(_prev: ActionState, formData: FormData): 
   return ok('Sub kategori dihapus.');
 }
 
+/* ---------------------------------------------------------------------------
+ * Tambah cepat dari formulir barang.
+ *
+ * Kategori, sub kategori dan satuan kadang baru ketahuan belum ada justru saat
+ * sebuah barang hendak didaftarkan. Menyuruh orang pindah halaman, membuatnya
+ * di sana, lalu kembali dan mengisi ulang seluruh formulir adalah cara yang
+ * paling pasti membuat isian yang sudah diketik hilang.
+ *
+ * Ketiganya memakai ulang aksi yang sama persis dengan menunya masing-masing —
+ * pemeriksaan dan pesan galatnya tidak digandakan — lalu membaca kembali baris
+ * yang baru dibuat supaya pemanggilnya bisa langsung memilihnya. Tanpa
+ * pengembalian itu, yang baru dibuat harus dicari sendiri di daftar yang baru
+ * saja bertambah.
+ * ------------------------------------------------------------------------ */
+
+export type PilihanBaru =
+  | { ok: true; item: { id: string; code: string; name: string } }
+  | { ok: false; message: string };
+
+function formulir(isi: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(isi)) fd.set(k, v);
+  return fd;
+}
+
+export async function buatSatuanCepat(code: string, name: string): Promise<PilihanBaru> {
+  const hasil = await simpanSatuan(empty, formulir({ code, name }));
+  if (!hasil.ok) return { ok: false, message: hasil.message };
+  const item = await prisma.itemUnit.findUnique({
+    where: { code: normalKode(code) },
+    select: { id: true, code: true, name: true },
+  });
+  return item ? { ok: true, item } : { ok: false, message: 'Satuan tersimpan tetapi tidak terbaca kembali.' };
+}
+
+export async function buatKategoriCepat(code: string, name: string): Promise<PilihanBaru> {
+  const hasil = await simpanKategoriBarang(empty, formulir({ code, name }));
+  if (!hasil.ok) return { ok: false, message: hasil.message };
+  const item = await prisma.itemCategory.findUnique({
+    where: { code: normalKode(code) },
+    select: { id: true, code: true, name: true },
+  });
+  return item ? { ok: true, item } : { ok: false, message: 'Kategori tersimpan tetapi tidak terbaca kembali.' };
+}
+
+export async function buatSubKategoriCepat(
+  categoryId: string, code: string, name: string,
+): Promise<PilihanBaru> {
+  const hasil = await simpanSubKategori(empty, formulir({ categoryId, code, name }));
+  if (!hasil.ok) return { ok: false, message: hasil.message };
+  const item = await prisma.itemSubCategory.findUnique({
+    where: { categoryId_code: { categoryId, code: normalKode(code) } },
+    select: { id: true, code: true, name: true },
+  });
+  return item ? { ok: true, item } : { ok: false, message: 'Sub kategori tersimpan tetapi tidak terbaca kembali.' };
+}
+
 export async function simpanItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const masukan = {
