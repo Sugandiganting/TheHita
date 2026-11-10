@@ -172,12 +172,12 @@ test('tanpa kategori, rencana tetap terhitung', () => {
 });
 
 test('usulan skenario memakai terendah, tertimbang, dan tertinggi', () => {
-  const u = usulkanProyeksi([jt(300), jt(419.9), jt(351)]);
+  const u = usulkanProyeksi([jt(300), jt(420), jt(360)]);
   assert.ok(u);
   assert.equal(keJt(u.PESIMIS), 300);
-  assert.equal(keJt(u.OPTIMIS), 419.9);
-  // (300x1 + 419,9x2 + 351x3) / 6
-  assert.equal(keJt(u.NORMAL), keJt((jt(300) + jt(419.9) * 2 + jt(351) * 3) / 6));
+  assert.equal(keJt(u.OPTIMIS), 420);
+  // (300x1 + 420x2 + 360x3) / 6
+  assert.equal(keJt(u.NORMAL), keJt((jt(300) + jt(420) * 2 + jt(360) * 3) / 6));
 });
 
 test('riwayat kosong tidak menghasilkan usulan', () => {

@@ -183,6 +183,7 @@ CREATE TABLE "CashPlan" (
     "nextNormal" REAL,
     "nextOptimistic" REAL,
     "monthlyOutflow" REAL,
+    "nonOperatingOutflow" REAL,
     "salaryNeed" REAL,
     "notes" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -304,11 +305,9 @@ CREATE TABLE "Season" (
 );
 
 -- CreateTable
-CREATE TABLE "MonthTarget" (
-    "month" INTEGER NOT NULL PRIMARY KEY,
-    "cashMargin" REAL,
-    "optimisticUp" REAL,
-    "pessimisticDown" REAL,
+CREATE TABLE "ScenarioTarget" (
+    "scenario" TEXT NOT NULL PRIMARY KEY,
+    "margin" REAL NOT NULL,
     "updatedAt" DATETIME NOT NULL
 );
 

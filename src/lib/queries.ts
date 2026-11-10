@@ -36,9 +36,10 @@ import { hitungTren, type Tren } from './tren-masuk';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 import {
-  batasBelanjaMargin, marginTercapai, sebaranDariNormal,
-  type PolaTarget,
-} from './target-bulan';
+  AKUN_RENOVASI, SKENARIO_URUT, batasBelanjaDariMargin, golonganMargin, marginTercapai,
+  targetBerurut, targetLengkap, targetMasukDariMargin,
+  type SkenarioMargin, type TargetMargin,
+} from './target-margin';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -992,31 +993,41 @@ export type RencanaKasDetail = {
   checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
   terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
   /**
-   * Target margin kas bulan ini beserta posisinya. null bila bulan ini belum
-   * ditetapkan di master Target Bulan — dan selama null, halaman ini berjalan
-   * persis seperti sebelum menu itu ada.
+   * Target margin dan tiga hal yang diturunkan darinya. null bila ketiga
+   * skenario belum ditetapkan di master Target Margin — dan selama null,
+   * halaman ini berjalan persis seperti sebelum menu itu ada.
+   *
+   * Semuanya berpangkal pada MARGIN OPERASI: renovasi, pembelian aset tetap
+   * dan cicilan pokok utang dikeluarkan lebih dulu.
    */
   margin: {
-    /** Persen dari uang masuk yang ingin disisakan. */
-    target: number;
-    /** Belanja paling banyak sebulan agar targetnya tercapai. */
-    batasBelanja: number | null;
-    /** Uang masuk sampai laporan posisi kas terakhir. */
+    /** Target margin tiap skenario, dalam persen. */
+    target: Record<Skenario, number>;
+    /** Ketiganya berurut naik. Salah urut hampir selalu salah ketik. */
+    berurut: boolean;
+    /** Uang masuk yang diperlukan agar margin tiap skenario tercapai. */
+    targetMasuk: Record<Skenario, number | null>;
+    /** Batas belanja operasi menurut ramalan uang masuk tiap skenario. */
+    batasBelanja: Record<Skenario, number | null>;
+    /** Golongan bulan ini menurut margin operasi yang dicapainya. */
+    golongan: SkenarioMargin | 'DI_BAWAH_PESIMIS' | null;
+    /** Ramalan belanja operasi sebulan penuh. */
+    belanjaOperasiSebulan: number | null;
+    /** Uang keluar bukan operasi yang dipakai: diketik bila ada, selain itu usulan. */
+    nonOperasi: number | null;
+    usulanNonOperasi: number | null;
+    nonOperasiDiketik: number | null;
     masukSampaiKini: number | null;
-    /** Uang keluar sampai laporan itu, diukur dari pergerakan saldo. */
+    /** Seluruh uang keluar sampai kini, diukur dari pergerakan saldo. */
     keluarSampaiKini: number | null;
-    /**
-     * Margin yang benar-benar tercapai, dalam persen. Hanya diisi untuk bulan
-     * yang sudah dilaporkan penuh — lihat alasannya di getRencanaKas.
-     */
-    tercapai: number | null;
-    /** Laporan posisi kas terakhir sudah mencakup seluruh bulan. */
+    /** Uang keluar sampai kini setelah yang bukan operasi dikeluarkan. */
+    operasiSampaiKini: number | null;
     bulanPenuh: boolean;
-    /** Tanggal laporan posisi kas terakhir. */
     hariTerlapor: number | null;
-    /** Batas dikurangi yang sudah keluar. Negatif berarti sudah lewat. */
-    sisaRuang: number | null;
-    lewat: boolean;
+    /** Margin operasi yang tercapai — dasar target dan penggolongan. */
+    tercapaiOperasi: number | null;
+    /** Margin kas apa adanya, termasuk renovasi dan pokok utang. */
+    tercapaiKas: number | null;
   } | null;
   /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
   menurutJurnal: { saldoKas: number; masukBulanIni: number };
@@ -1046,23 +1057,112 @@ export async function polaMusim(): Promise<PolaMusim> {
   ]));
 }
 
-/** Target tiap bulan kalender, lengkap dua belas barisnya walau belum diisi. */
-export async function polaTarget(): Promise<PolaTarget> {
-  const rows = await prisma.monthTarget.findMany();
-  const peta: PolaTarget = new Map(
-    Array.from({ length: 12 }, (_, i) => [i + 1, {
-      month: i + 1, cashMargin: null, optimisticUp: null, pessimisticDown: null,
-    }]),
-  );
-  for (const r of rows) {
-    peta.set(r.month, {
-      month: r.month,
-      cashMargin: r.cashMargin,
-      optimisticUp: r.optimisticUp,
-      pessimisticDown: r.pessimisticDown,
+/**
+ * Uang keluar sebulan yang bukan biaya operasi, dihitung dari jurnal.
+ *
+ * Tiga hal: pembelian aset tetap dan aset dalam pengerjaan (debit pada akun
+ * bersubtipe FIXED_ASSET), beban renovasi, dan cicilan POKOK utang (debit pada
+ * kewajiban bersubtipe LOAN — debit mengurangi utang, jadi itu pengembalian
+ * pinjaman).
+ *
+ * Bunga pinjaman sengaja tidak ikut: bunga memang ongkos menjalankan usaha,
+ * dan mengeluarkannya akan membuat margin terbaca lebih baik daripada
+ * sesungguhnya justru pada bulan yang bebannya paling berat.
+ *
+ * Mengembalikan null bila bulan itu tidak punya satu baris jurnal pun — itu
+ * bukan nol, melainkan belum terukur, dan pemanggilnya yang memutuskan.
+ */
+async function usulanBukanOperasi(period: Period): Promise<number | null> {
+  const lines = await prisma.journalLine.findMany({
+    where: {
+      entry: { date: { gte: periodStart(period), lt: periodEndExclusive(period) } },
+      OR: [
+        { account: { subtype: 'FIXED_ASSET', isHeader: false } },
+        { account: { code: { in: [...AKUN_RENOVASI] } } },
+        { account: { subtype: 'LOAN', type: 'LIABILITY' } },
+      ],
+    },
+    select: { debit: true, credit: true },
+  });
+  if (lines.length === 0) return null;
+  return round(Math.max(0, lines.reduce((t, l) => t + l.debit - l.credit, 0)));
+}
+
+export type BarisRiwayatMargin = {
+  period: Period;
+  masuk: number;
+  keluar: number;
+  nonOperasi: number | null;
+  /** Margin kas apa adanya, termasuk renovasi dan pokok utang. */
+  marginKas: number | null;
+  /** Margin setelah yang bukan operasi dikeluarkan. null bila belum diketahui. */
+  marginOperasi: number | null;
+};
+
+/**
+ * Margin yang benar-benar tercapai bulan demi bulan, dari laporan posisi kas.
+ *
+ * Dipakai memilih angka target: pita yang dikarang tanpa melihat riwayat
+ * hampir pasti meleset, dan melesetnya baru ketahuan setahun kemudian.
+ *
+ * Uang keluar diukur dari pergerakan saldo — saldo awal ditambah uang masuk
+ * dikurangi saldo akhir — bukan dari jurnal, karena jurnalnya belum tentu
+ * memuat seluruh belanja. Hanya bulan yang laporannya mencakup seluruh bulan
+ * dan yang bulan sebelumnya juga terlapor yang bisa dihitung; bulan yang
+ * melompat menghasilkan uang keluar dua bulan yang terbaca sebagai sebulan.
+ */
+export async function riwayatMargin(sampai: Period, bulan = 12): Promise<BarisRiwayatMargin[]> {
+  const plans = await prisma.cashPlan.findMany({
+    where: { period: { lte: sampai, gte: addMonths(sampai, -bulan) } },
+    orderBy: { period: 'asc' },
+    select: {
+      period: true,
+      nonOperatingOutflow: true,
+      checkpoints: { orderBy: { date: 'desc' }, take: 1 },
+    },
+  });
+
+  const saldoAkhir = new Map<string, { saldo: number; masuk: number; hari: number }>();
+  for (const p of plans) {
+    const c = p.checkpoints[0];
+    if (c) saldoAkhir.set(p.period, { saldo: c.cashOnHand, masuk: c.incomeToDate, hari: c.date.getUTCDate() });
+  }
+
+  const hasil: BarisRiwayatMargin[] = [];
+  for (const p of plans) {
+    const kini = saldoAkhir.get(p.period);
+    const lalu = saldoAkhir.get(addMonths(p.period as Period, -1));
+    if (!kini || !lalu) continue;
+
+    const hariTerakhir = new Date(Date.UTC(
+      Number(p.period.slice(0, 4)), Number(p.period.slice(5, 7)), 0,
+    )).getUTCDate();
+    if (kini.hari < hariTerakhir) continue;
+
+    const keluar = round(lalu.saldo + kini.masuk - kini.saldo);
+    const nonOperasi = p.nonOperatingOutflow;
+    hasil.push({
+      period: p.period as Period,
+      masuk: kini.masuk,
+      keluar,
+      nonOperasi,
+      marginKas: marginTercapai(kini.masuk, keluar),
+      marginOperasi: nonOperasi === null
+        ? null
+        : marginTercapai(kini.masuk, round(Math.max(0, keluar - nonOperasi))),
     });
   }
-  return peta;
+  return hasil;
+}
+
+/** Target margin tiap skenario. Kosong bila belum pernah ditetapkan. */
+export async function targetMargin(): Promise<TargetMargin> {
+  const rows = await prisma.scenarioTarget.findMany();
+  return new Map(
+    rows
+      .filter((r) => (SKENARIO_URUT as readonly string[]).includes(r.scenario))
+      .map((r) => [r.scenario as SkenarioMargin, r.margin]),
+  );
 }
 
 export type RencanaBelanja = {
@@ -1312,31 +1412,19 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       ) as Record<Skenario, number | null>)
     : null;
 
-  const target = await polaTarget();
-  const targetBulanIni = target.get(monthOf(period));
-
   /*
-   * Urutan yang menang: yang diketik, lalu sebaran dari master target, lalu
-   * turunan musim, lalu rata-rata riwayat.
+   * Ramalan tetap ramalan; target margin tidak menggantikannya.
    *
-   * Normal dihitung lebih dulu karena dua skenario lain diturunkan darinya.
-   * Sebaran didahulukan atas turunan musim karena ia menjaga ketiganya tetap
-   * berurutan — pesimis di bawah normal, optimis di atasnya. Turunan musim
-   * membawa tiap skenario sendiri-sendiri dari bulan terakhir yang diketik,
-   * dan tiga angka yang berjalan sendiri-sendiri bisa berakhir saling
-   * bertentangan tanpa ada yang menahannya.
-   *
-   * Rata-rata riwayat tetap jadi jaring terakhir: ia tidak mengenal musim sama
-   * sekali, jadi bulan sepi dan bulan ramai diberinya angka sama.
+   * Target uang masuk dihitung mundur dari belanja, dan batas belanja dihitung
+   * maju dari uang masuk. Kalau ramalannya sendiri diisi dari target, kedua
+   * arah itu bertemu di angka yang sama dan batas belanjanya berhenti
+   * mengatakan apa pun — ia cuma mengembalikan belanja yang tadi dipakai
+   * menghitungnya. Jadi keduanya berdiri sendiri, dan selisih di antaranya
+   * justru itulah yang ingin dibaca.
    */
-  const normalDipakai = tersimpan.NORMAL ?? usulanMusim?.NORMAL ?? usulan?.NORMAL ?? 0;
-  const sebaran = sebaranDariNormal(normalDipakai, targetBulanIni);
-
-  const dipakai = {
-    PESIMIS: tersimpan.PESIMIS ?? sebaran.pesimis ?? usulanMusim?.PESIMIS ?? usulan?.PESIMIS ?? 0,
-    NORMAL: normalDipakai,
-    OPTIMIS: tersimpan.OPTIMIS ?? sebaran.optimis ?? usulanMusim?.OPTIMIS ?? usulan?.OPTIMIS ?? 0,
-  } as Record<Skenario, number>;
+  const dipakai = Object.fromEntries(
+    SKENARIO.map((s) => [s, tersimpan[s] ?? usulanMusim?.[s] ?? usulan?.[s] ?? 0]),
+  ) as Record<Skenario, number>;
 
   const musimBulanIni = pola.get(monthOf(period)) ?? null;
   const dasar = Object.fromEntries(
@@ -1661,11 +1749,42 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
    * bulan ini melainkan selisih yang tidak bermakna, jadi angkanya tidak
    * ditampilkan sama sekali.
    */
-  const targetMargin = targetBulanIni?.cashMargin ?? null;
+  /*
+   * Target margin: satu hubungan dipakai dari tiga arah sekaligus.
+   *
+   * Ketiganya berpangkal pada MARGIN OPERASI, bukan margin kas apa adanya.
+   * Renovasi, pembelian aset tetap dan cicilan pokok utang dikeluarkan lebih
+   * dulu — tanpa itu, bulan yang kebetulan berproyek besar tergolong pesimis
+   * padahal usahanya berjalan baik, dan golongan itulah yang nanti menentukan
+   * target bulan berikutnya. Satu bulan renovasi akan menarik turun seluruh
+   * tahun sesudahnya.
+   */
+  const [tm, usulanNonOperasi] = await Promise.all([targetMargin(), usulanBukanOperasi(period)]);
+  const adaTarget = targetLengkap(tm);
+
+  const nonOperasi = plan.nonOperatingOutflow ?? usulanNonOperasi;
   const keluarSampaiKini = terakhir && saldoAkhirBulanLalu !== null
     ? round(saldoAkhirBulanLalu + terakhir.incomeToDate - terakhir.cashOnHand)
     : null;
-  const batasBelanja = batasBelanjaMargin(dipakai.NORMAL, targetMargin);
+  /*
+   * Dua perlakuan berbeda untuk "belum diisi", dan bedanya disengaja.
+   *
+   * Ke belakang — mengukur apa yang sudah terjadi — belum diisi berarti BELUM
+   * DIKETAHUI, bukan nol. Menganggapnya nol sama dengan menyatakan bahwa bulan
+   * itu tidak ada renovasi sama sekali, dan justru itulah pernyataan yang
+   * paling sering keliru: pada usaha yang sedang banyak merenovasi, selisih
+   * antara margin kas apa adanya dan margin operasi bisa belasan persen, dan
+   * seluruh selisih itu berasal dari renovasi. Bulan renovasi yang terbaca
+   * sebagai bulan biasa akan tergolong buruk, dan golongan itu menular ke
+   * target bulan berikutnya.
+   *
+   * Ke depan — menghitung target — belum diisi berarti NOL, karena yang
+   * direncanakan memang belanja operasi. Renovasi yang sudah direncanakan
+   * diketik sendiri, dan selama belum diketik memang belum ada rencananya.
+   */
+  const operasiSampaiKini = keluarSampaiKini === null || nonOperasi === null
+    ? null
+    : round(Math.max(0, keluarSampaiKini - nonOperasi));
 
   /*
    * Margin yang tercapai hanya dilaporkan untuk bulan yang sudah penuh.
@@ -1674,28 +1793,56 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
    * — sedangkan uang masuk mengalir tiap hari. Membagi keduanya pada tanggal
    * 2 menghasilkan angka seperti minus tiga ribu persen: benar secara
    * aritmetika, dan sama sekali tidak bisa dipakai menilai apa pun. Yang tetap
-   * bermakna sepanjang bulan adalah perbandingan "sudah keluar" dengan "belanja
-   * maksimal" di sebelahnya, dan itulah yang ditampilkan tiap hari.
+   * bermakna sepanjang bulan adalah perbandingan "sudah keluar" dengan "batas
+   * belanja" di sebelahnya, dan itulah yang ditampilkan tiap hari.
    */
   const hariTerakhirBulan = new Date(Date.UTC(
     Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
   )).getUTCDate();
   const bulanPenuh = terakhir ? terakhir.date.getUTCDate() >= hariTerakhirBulan : false;
 
-  const margin = targetMargin === null ? null : {
-    target: targetMargin,
-    batasBelanja,
+  const tercapaiOperasi = bulanPenuh && terakhir && operasiSampaiKini !== null
+    ? marginTercapai(terakhir.incomeToDate, operasiSampaiKini)
+    : null;
+  const tercapaiKas = bulanPenuh && terakhir && keluarSampaiKini !== null
+    ? marginTercapai(terakhir.incomeToDate, keluarSampaiKini)
+    : null;
+
+  // Belanja operasi sebulan penuh, dasar menghitung target uang masuk.
+  const belanjaOperasiSebulan = outflow === null
+    ? null
+    : round(Math.max(0, outflow - (nonOperasi ?? 0)));
+
+  const margin = !adaTarget ? null : {
+    target: Object.fromEntries(
+      SKENARIO.map((sk) => [sk, tm.get(sk as SkenarioMargin) ?? 0]),
+    ) as Record<Skenario, number>,
+    berurut: targetBerurut(tm),
+    /** [C] Uang masuk yang diperlukan agar margin tiap skenario tercapai. */
+    targetMasuk: Object.fromEntries(
+      SKENARIO.map((sk) => [
+        sk, targetMasukDariMargin(belanjaOperasiSebulan, tm.get(sk as SkenarioMargin) ?? null),
+      ]),
+    ) as Record<Skenario, number | null>,
+    /** [A] Batas belanja operasi menurut ramalan uang masuk tiap skenario. */
+    batasBelanja: Object.fromEntries(
+      SKENARIO.map((sk) => [
+        sk, batasBelanjaDariMargin(dipakai[sk as Skenario], tm.get(sk as SkenarioMargin) ?? null),
+      ]),
+    ) as Record<Skenario, number | null>,
+    /** [B] Golongan bulan ini menurut margin operasi yang dicapainya. */
+    golongan: golonganMargin(tercapaiOperasi, tm),
+    belanjaOperasiSebulan,
+    nonOperasi,
+    usulanNonOperasi,
+    nonOperasiDiketik: plan.nonOperatingOutflow,
     masukSampaiKini: terakhir?.incomeToDate ?? null,
     keluarSampaiKini,
+    operasiSampaiKini,
     bulanPenuh,
     hariTerlapor: terakhir?.date.getUTCDate() ?? null,
-    tercapai: bulanPenuh && terakhir && keluarSampaiKini !== null
-      ? marginTercapai(terakhir.incomeToDate, keluarSampaiKini)
-      : null,
-    sisaRuang: batasBelanja !== null && keluarSampaiKini !== null
-      ? round(batasBelanja - keluarSampaiKini)
-      : null,
-    lewat: batasBelanja !== null && keluarSampaiKini !== null && keluarSampaiKini > batasBelanja,
+    tercapaiOperasi,
+    tercapaiKas,
   };
 
   return {

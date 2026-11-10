@@ -446,6 +446,12 @@ model CashPlan {
   /// Total uang keluar sebulan bila pola belanja tidak berubah — dipakai
   /// untuk meramalkan kapan kas habis, bukan untuk menghitung plafon.
   monthlyOutflow Float?
+  /// Uang keluar bulan ini yang bukan biaya operasi: renovasi, pembelian aset
+  /// tetap, dan cicilan pokok utang. Dikeluarkan lebih dulu sebelum margin
+  /// dihitung, supaya bulan yang kebetulan berproyek besar tidak terbaca
+  /// sebagai bulan yang usahanya buruk. Bunga pinjaman TIDAK termasuk — bunga
+  /// memang biaya. null = pakai usulan dari jurnal.
+  nonOperatingOutflow Float?
   /// Kebutuhan gaji sebulan; menandai bulan yang saldonya tidak lagi menutupinya.
   salaryNeed     Float?
 
@@ -567,29 +573,24 @@ model Season {
 }
 
 /// Musim yang berlaku untuk satu bulan kalender, berulang tiap tahun.
-/// Target sebuah bulan kalender: margin kas yang diinginkan, dan seberapa lebar
-/// sebaran optimis-pesimis di sekitar ramalan normalnya.
+/// Target margin tiap skenario, berlaku untuk seluruh bulan.
 ///
-/// Dua hal yang sengaja berdiri di satu tabel tetapi di kolom berbeda, karena
-/// alasan geraknya berlainan. Margin bergerak ketika target laba berubah;
-/// sebaran bergerak ketika pasarnya makin sulit ditebak. Menyatukan keduanya
-/// akan membuat menaikkan target laba diam-diam menaikkan ramalan optimis.
+/// Satu angka per skenario, bukan pita dua ujung: pita tidak bisa menghasilkan
+/// satu proyeksi tanpa aturan tambahan tentang ujung mana yang dipakai, dan
+/// aturan semacam itu adalah hal yang paling cepat dilupakan orang. Pitanya
+/// tetap berguna sebagai rentang saat memilih angkanya, tetapi yang disimpan
+/// hasil pilihannya.
 ///
-/// Seluruh kolomnya boleh kosong, dan kosong berarti belum ditetapkan — bukan
-/// nol. Bulan yang kosong berjalan persis seperti sebelum menu ini ada.
-model MonthTarget {
-  /// 1 sampai 12.
-  month           Int    @id
-  /// Margin KAS, bukan margin laba bersih: berapa persen dari uang yang masuk
-  /// bulan itu yang ingin disisakan. Uang masuk memuat hal yang bukan
-  /// pendapatan — deposit tamu, pelunasan piutang, setoran modal — jadi
-  /// angkanya memang tidak akan sama dengan margin di laba rugi, dan tidak
-  /// seharusnya dibandingkan begitu saja.
-  cashMargin      Float?
-  /// Optimis = normal dinaikkan sekian persen.
-  optimisticUp    Float?
-  /// Pesimis = normal diturunkan sekian persen.
-  pessimisticDown Float?
+/// MARGIN OPERASI, bukan margin kas apa adanya: renovasi, pembelian aset tetap
+/// dan cicilan pokok utang dikeluarkan lebih dulu. Tanpa itu, satu bulan dengan
+/// proyek besar akan tergolong pesimis padahal usahanya berjalan baik — dan
+/// golongan itulah yang nanti menentukan target bulan berikutnya.
+model ScenarioTarget {
+  /// PESIMIS | NORMAL | OPTIMIS
+  scenario String @id
+  /// Persen dari uang masuk yang tersisa setelah belanja operasi.
+  /// Boleh negatif: pesimis memang boleh berarti rugi tipis.
+  margin   Float
 
   updatedAt DateTime @updatedAt
 }

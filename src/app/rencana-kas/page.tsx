@@ -13,6 +13,7 @@ import { dariJurnal, lajuHarian } from '@/lib/laju-harian';
 import { BulananChart } from '@/components/bulanan-chart';
 import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
+import { NonOperasiForm } from '@/components/non-operasi-form';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryAccount, CategoryBudget, CategoryDelete, CategoryForm, CheckpointDelete,
@@ -242,69 +243,137 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               )}
 
               {/*
-                * Target margin menahan tanpa memblokir: plafon di atas tetap
-                * dihitung dari likuiditas, kartu ini yang mengatakan apakah
-                * belanjanya masih sejalan dengan laba yang diinginkan. Dua
-                * pertanyaan berbeda, jadi dua angka yang berdiri sendiri —
-                * menggabungkannya akan menyembunyikan yang mana yang mengikat.
+                * Satu hubungan dibaca dari tiga arah: target uang masuk
+                * dihitung mundur dari belanja, batas belanja dihitung maju
+                * dari uang masuk, dan golongan dibaca dari margin yang sudah
+                * tercapai. Ramalannya sendiri tidak diisi dari target — kalau
+                * iya, kedua arah pertama bertemu di angka yang sama dan tidak
+                * lagi mengatakan apa pun.
                 */}
               {data.margin && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Margin kas: dari uang yang masuk bulan ini, berapa yang tersisa. Dihitung terhadap uang masuk, bukan terhadap pendapatan di laba rugi, jadi angkanya memang berbeda dengan margin laba bersih.">
-                    Target margin kas {data.margin.target}%
+                  <SectionTitle hint="Margin operasi: renovasi, pembelian aset tetap dan cicilan pokok utang dikeluarkan lebih dulu. Bunga pinjaman tetap di dalam, karena bunga memang biaya. Dihitung terhadap uang masuk, bukan terhadap pendapatan di laba rugi.">
+                    Target margin
                   </SectionTitle>
 
-                  <div className="mt-3 grid gap-4 sm:grid-cols-3">
-                    <StatCard
-                      label="Belanja maksimal"
-                      value={data.margin.batasBelanja === null ? '—' : formatRupiah(data.margin.batasBelanja)}
-                      hint={`Dari ramalan normal ${formatRupiah(data.dipakai.NORMAL)}`}
-                    />
-                    <StatCard
-                      label="Sudah keluar"
-                      value={data.margin.keluarSampaiKini === null ? '—' : formatRupiah(data.margin.keluarSampaiKini)}
-                      hint={data.margin.keluarSampaiKini === null
-                        ? 'Perlu posisi kas bulan ini dan akhir bulan lalu'
-                        : 'Diukur dari pergerakan saldo, bukan dari belanja yang diketik'}
-                    />
-                    <StatCard
-                      label="Margin tercapai"
-                      value={data.margin.tercapai === null ? '—' : formatPercent(data.margin.tercapai)}
-                      tone={data.margin.tercapai === null
-                        ? 'neutral'
-                        : data.margin.tercapai < data.margin.target ? 'warning' : 'positive'}
-                      hint={data.margin.tercapai !== null
-                        ? `Dari uang masuk ${formatRupiah(data.margin.masukSampaiKini ?? 0)}`
-                        : data.margin.hariTerlapor === null
-                          ? 'Belum ada posisi kas bulan ini'
-                          : `Bulan baru berjalan ${data.margin.hariTerlapor} hari — gaji keluar di awal bulan sedangkan uang masuk mengalir tiap hari, jadi angkanya belum bisa dibandingkan`}
-                    />
-                  </div>
-
-                  {data.margin.lewat && data.margin.sisaRuang !== null && (
-                    <div className="mt-4">
-                      <Alert tone="warning" title="Belanja sudah melewati batas margin">
-                        Sudah <strong>{formatRupiah(-data.margin.sisaRuang)}</strong> di atas batas{' '}
-                        {formatRupiah(data.margin.batasBelanja ?? 0)}. Plafon mingguan di atas tidak
-                        ikut dipotong — uangnya memang masih ada — tetapi pada ramalan normal bulan
-                        ini akan ditutup dengan margin di bawah {data.margin.target}%.
+                  {!data.margin.berurut && (
+                    <div className="mt-3">
+                      <Alert tone="warning" title="Urutan targetnya terbalik">
+                        Pesimis seharusnya paling rendah dan optimis paling tinggi. Selama
+                        terbalik, penggolongan bulan di bawah tidak bisa dipercaya.
                       </Alert>
                     </div>
                   )}
 
-                  {!data.margin.lewat && data.margin.sisaRuang !== null && (
-                    <p className="mt-3 text-xs text-slate-500">
-                      Masih ada <strong>{formatRupiah(data.margin.sisaRuang)}</strong> sebelum batas
-                      margin tersentuh. Batas ini tidak memblokir apa pun; ia hanya memberi tahu
-                      kapan belanja mulai memakan laba yang ditargetkan.
-                    </p>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[640px]">
+                      <thead className="border-b border-slate-200">
+                        <tr>
+                          <th className="th">Skenario</th>
+                          <th className="th num">Target margin</th>
+                          <th className="th num">Uang masuk yang diperlukan</th>
+                          <th className="th num">Ramalan uang masuk</th>
+                          <th className="th num">Batas belanja operasi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {SKENARIO.map((sk) => {
+                          const perlu = data.margin!.targetMasuk[sk];
+                          const ramalan = data.dipakai[sk];
+                          const kurang = perlu !== null && ramalan < perlu;
+                          return (
+                            <tr key={sk} className={data.margin!.golongan === sk ? 'bg-brand-50/50' : ''}>
+                              <td className="td font-medium text-slate-900">
+                                {NAMA_SKENARIO[sk]}
+                                {data.margin!.golongan === sk && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-brand-700">
+                                    golongan bulan ini
+                                  </span>
+                                )}
+                              </td>
+                              <td className="td num">{formatPercent(data.margin!.target[sk])}</td>
+                              <td className={`td num ${kurang ? 'text-amber-700' : ''}`}>
+                                {perlu === null ? '—' : formatRupiah(perlu)}
+                              </td>
+                              <td className="td num">{formatRupiah(ramalan)}</td>
+                              <td className="td num">
+                                {data.margin!.batasBelanja[sk] === null
+                                  ? '—'
+                                  : formatRupiah(data.margin!.batasBelanja[sk]!)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                    <StatCard
+                      label="Belanja operasi sudah"
+                      value={data.margin.operasiSampaiKini === null
+                        ? '—'
+                        : formatRupiah(data.margin.operasiSampaiKini)}
+                      hint={data.margin.keluarSampaiKini === null
+                        ? 'Perlu posisi kas bulan ini dan akhir bulan lalu'
+                        : data.margin.nonOperasi === null
+                          ? `Seluruh uang keluar ${formatRupiah(data.margin.keluarSampaiKini)} — berapa yang bukan operasi belum diisi di bawah`
+                          : `Dari seluruh uang keluar ${formatRupiah(data.margin.keluarSampaiKini)}, dikurangi bukan operasi ${formatRupiah(data.margin.nonOperasi)}`}
+                    />
+                    <StatCard
+                      label="Margin operasi"
+                      value={data.margin.tercapaiOperasi === null
+                        ? '—'
+                        : formatPercent(data.margin.tercapaiOperasi)}
+                      tone={data.margin.tercapaiOperasi === null
+                        ? 'neutral'
+                        : data.margin.tercapaiOperasi < data.margin.target.NORMAL ? 'warning' : 'positive'}
+                      hint={data.margin.tercapaiOperasi !== null
+                        ? 'Dasar target dan penggolongan'
+                        : data.margin.nonOperasi === null
+                          ? 'Isi dulu uang keluar bukan operasi di bawah — tanpa itu bulan renovasi akan terbaca sebagai bulan yang usahanya buruk'
+                          : data.margin.hariTerlapor === null
+                            ? 'Belum ada posisi kas bulan ini'
+                            : `Bulan baru berjalan ${data.margin.hariTerlapor} hari — gaji keluar di awal bulan sedangkan uang masuk mengalir tiap hari, jadi angkanya belum bisa dibandingkan`}
+                    />
+                    <StatCard
+                      label="Margin kas apa adanya"
+                      value={data.margin.tercapaiKas === null ? '—' : formatPercent(data.margin.tercapaiKas)}
+                      hint="Termasuk renovasi dan pokok utang — kenyataan kas, bukan dasar target"
+                    />
+                  </div>
+
+                  {data.margin.golongan === 'DI_BAWAH_PESIMIS' && (
+                    <div className="mt-4">
+                      <Alert tone="danger" title="Di bawah skenario pesimis">
+                        Margin operasi bulan ini{' '}
+                        <strong>{formatPercent(data.margin.tercapaiOperasi ?? 0)}</strong>, di bawah
+                        target pesimis {formatPercent(data.margin.target.PESIMIS)}. Bulan seperti ini
+                        tidak ada di dalam rencana mana pun, jadi ia tidak digolongkan pesimis —
+                        menyebutnya begitu akan membuat bulan terburuk terbaca seolah masih
+                        terkendali.
+                      </Alert>
+                    </div>
                   )}
 
-                  {data.margin.batasBelanja === null && (
-                    <p className="mt-3 text-xs text-slate-500">
-                      Batasnya belum bisa dihitung karena ramalan normal bulan ini masih nol.
-                    </p>
-                  )}
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <NonOperasiForm
+                      id={data.id}
+                      nilai={data.margin.nonOperasiDiketik}
+                      usulan={data.margin.usulanNonOperasi}
+                      dipakai={data.margin.nonOperasi}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-xs text-slate-500">
+                    Batas belanja tidak memblokir apa pun — plafon mingguan di atas tetap dihitung
+                    dari likuiditas. Yang dikatakan tabel ini: pada tiap skenario, belanja operasi
+                    mulai memakan margin yang ditargetkan setelah angka itu.{' '}
+                    <Link href="/target-margin" className="font-medium text-brand-600 hover:underline">
+                      Ubah targetnya
+                    </Link>
+                    .
+                  </p>
                 </Card>
               )}
 

@@ -11,6 +11,8 @@ import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import { JENIS_RAB_LABEL, jenisRabSah, periodeBerikutnya, type JenisRab } from '@/lib/rab';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
+import { SKENARIO_URUT } from '@/lib/target-margin';
+import { NAMA_SKENARIO } from '@/lib/rencana-kas';
 import { MAKS_CICILAN } from '@/lib/rencana-belanja';
 import { buatRencanaLanjutan } from '@/lib/rencana-berjalan';
 import { PENGULANGAN, setelahDilunasi, type Pengulangan } from '@/lib/kewajiban';
@@ -1358,65 +1360,64 @@ export async function deleteSpend(_prev: ActionState, formData: FormData): Promi
 }
 
 /* ------------------------------------------------------------------ */
-/* Target bulan: margin kas dan sebaran                                */
+/* Target margin tiap skenario                                         */
 /* ------------------------------------------------------------------ */
 
 function segarkanTarget() {
-  revalidatePath('/target-bulan');
+  revalidatePath('/target-margin');
   revalidatePath('/rencana-kas');
 }
 
-/**
- * Persen dari formulir. Kosong berarti belum ditetapkan, bukan nol.
- *
- * Bedanya penting: margin 0% adalah keputusan — seluruh uang masuk boleh
- * dibelanjakan — sedangkan belum ditetapkan berarti tidak ada batas yang
- * ditarik sama sekali. Kalau keduanya disamakan, bulan yang belum disentuh
- * akan melahirkan peringatan atas batas yang tidak pernah dipilih siapa pun.
- */
-function persenAtauNull(formData: FormData, nama: string): number | null | 'salah' {
-  const mentah = String(formData.get(nama) ?? '').trim().replace(',', '.');
-  if (mentah === '') return null;
-  const n = Number(mentah);
-  if (!Number.isFinite(n) || n < 0) return 'salah';
-  return Math.round(n * 100) / 100;
-}
+export async function simpanTargetMargin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const masuk: { scenario: string; margin: number }[] = [];
 
-export async function simpanTargetBulan(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const month = Number(String(formData.get('month') ?? ''));
-  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
-
-  const cashMargin = persenAtauNull(formData, 'cashMargin');
-  const optimisticUp = persenAtauNull(formData, 'optimisticUp');
-  const pessimisticDown = persenAtauNull(formData, 'pessimisticDown');
-  if (cashMargin === 'salah') return fail('Target margin harus angka 0 atau lebih.');
-  if (optimisticUp === 'salah') return fail('Kenaikan optimis harus angka 0 atau lebih.');
-  if (pessimisticDown === 'salah') return fail('Penurunan pesimis harus angka 0 atau lebih.');
-
-  if (typeof cashMargin === 'number' && cashMargin >= 100) {
-    return fail('Margin 100% berarti seluruh uang masuk tidak boleh dibelanjakan sama sekali. '
-      + 'Isi angka di bawah 100.');
-  }
-  if (typeof pessimisticDown === 'number' && pessimisticDown >= 100) {
-    return fail('Penurunan pesimis 100% membuat ramalan terburuknya nol. Isi angka di bawah 100.');
+  for (const sk of SKENARIO_URUT) {
+    const mentah = String(formData.get(`margin-${sk}`) ?? '').trim().replace(',', '.');
+    if (mentah === '') return fail(`Target ${NAMA_SKENARIO[sk]} belum diisi. Ketiganya dipakai bersama — satu yang kosong membuat penggolongan bulan tidak bisa dihitung.`);
+    const n = Number(mentah);
+    if (!Number.isFinite(n)) return fail(`Target ${NAMA_SKENARIO[sk]} harus berupa angka.`);
+    if (n >= 100) return fail(`Target ${NAMA_SKENARIO[sk]} 100% berarti seluruh uang masuk tersisa tanpa ada yang dibelanjakan. Isi angka di bawah 100.`);
+    masuk.push({ scenario: sk, margin: Math.round(n * 100) / 100 });
   }
 
-  const data = { cashMargin, optimisticUp, pessimisticDown };
-  await prisma.monthTarget.upsert({
-    where: { month },
-    update: data,
-    create: { month, ...data },
-  });
+  // Urutan yang terbalik hampir selalu salah ketik. Menukarnya diam-diam akan
+  // menyembunyikan salah ketik itu sampai angkanya dipakai mengambil keputusan.
+  const [p, n, o] = masuk.map((m) => m.margin);
+  if (!(p < n && n < o)) {
+    return fail(`Ketiganya harus berurut naik: pesimis paling rendah, optimis paling tinggi. `
+      + `Yang terisi sekarang ${p}% / ${n}% / ${o}%.`);
+  }
+
+  await prisma.$transaction(masuk.map((m) => prisma.scenarioTarget.upsert({
+    where: { scenario: m.scenario },
+    update: { margin: m.margin },
+    create: m,
+  })));
   segarkanTarget();
-  return ok(`Target ${NAMA_BULAN[month - 1]} disimpan.`);
+  return ok(`Target margin disimpan: pesimis ${p}%, normal ${n}%, optimis ${o}%.`);
 }
 
-export async function hapusTargetBulan(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const month = Number(String(formData.get('month') ?? ''));
-  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
-  await prisma.monthTarget.deleteMany({ where: { month } });
+export async function hapusTargetMargin(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  await prisma.scenarioTarget.deleteMany({});
   segarkanTarget();
-  return ok(`Target ${NAMA_BULAN[month - 1]} dikosongkan — bulan itu kembali tanpa batas margin.`);
+  return ok('Target margin dikosongkan — Rencana Kas kembali berjalan tanpa target.');
+}
+
+export async function simpanNonOperasi(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const mentah = String(formData.get('nonOperatingOutflow') ?? '').replace(/[^\d.-]/g, '');
+  const nilai = mentah === '' ? null : round(Number(mentah));
+  if (nilai !== null && (!Number.isFinite(nilai) || nilai < 0)) {
+    return fail('Uang keluar bukan operasi tidak boleh negatif.');
+  }
+  const plan = await prisma.cashPlan.findUnique({ where: { id }, select: { id: true } });
+  if (!plan) return fail('Rencana kas tidak ditemukan.');
+
+  await prisma.cashPlan.update({ where: { id }, data: { nonOperatingOutflow: nilai } });
+  revalidatePath('/rencana-kas');
+  return ok(nilai === null
+    ? 'Dikosongkan — kembali memakai usulan dari jurnal.'
+    : 'Uang keluar bukan operasi disimpan.');
 }
 
 /* ------------------------------------------------------------------ */

@@ -65,7 +65,7 @@ async function main() {
   await prisma.cashCheckpoint.deleteMany();
   await prisma.cashCommitment.deleteMany();
   await prisma.cashPlan.deleteMany();
-  await prisma.monthTarget.deleteMany();
+  await prisma.scenarioTarget.deleteMany();
   await prisma.seasonMonth.deleteMany();
   await prisma.season.deleteMany();
   await prisma.budgetItemLine.deleteMany();
@@ -108,8 +108,8 @@ async function main() {
   }
   catat('musim', isi.musim?.length ?? 0);
 
-  await prisma.monthTarget.createMany({ data: isi.targetBulan ?? [] });
-  catat('targetBulan', isi.targetBulan?.length ?? 0);
+  await prisma.scenarioTarget.createMany({ data: isi.targetMargin ?? [] });
+  catat('targetMargin', isi.targetMargin?.length ?? 0);
 
   await prisma.purchase.createMany({ data: isi.rencanaBelanja ?? [] });
   catat('rencanaBelanja', isi.rencanaBelanja?.length ?? 0);
