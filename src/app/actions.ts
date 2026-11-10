@@ -1358,6 +1358,68 @@ export async function deleteSpend(_prev: ActionState, formData: FormData): Promi
 }
 
 /* ------------------------------------------------------------------ */
+/* Target bulan: margin kas dan sebaran                                */
+/* ------------------------------------------------------------------ */
+
+function segarkanTarget() {
+  revalidatePath('/target-bulan');
+  revalidatePath('/rencana-kas');
+}
+
+/**
+ * Persen dari formulir. Kosong berarti belum ditetapkan, bukan nol.
+ *
+ * Bedanya penting: margin 0% adalah keputusan — seluruh uang masuk boleh
+ * dibelanjakan — sedangkan belum ditetapkan berarti tidak ada batas yang
+ * ditarik sama sekali. Kalau keduanya disamakan, bulan yang belum disentuh
+ * akan melahirkan peringatan atas batas yang tidak pernah dipilih siapa pun.
+ */
+function persenAtauNull(formData: FormData, nama: string): number | null | 'salah' {
+  const mentah = String(formData.get(nama) ?? '').trim().replace(',', '.');
+  if (mentah === '') return null;
+  const n = Number(mentah);
+  if (!Number.isFinite(n) || n < 0) return 'salah';
+  return Math.round(n * 100) / 100;
+}
+
+export async function simpanTargetBulan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const month = Number(String(formData.get('month') ?? ''));
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
+
+  const cashMargin = persenAtauNull(formData, 'cashMargin');
+  const optimisticUp = persenAtauNull(formData, 'optimisticUp');
+  const pessimisticDown = persenAtauNull(formData, 'pessimisticDown');
+  if (cashMargin === 'salah') return fail('Target margin harus angka 0 atau lebih.');
+  if (optimisticUp === 'salah') return fail('Kenaikan optimis harus angka 0 atau lebih.');
+  if (pessimisticDown === 'salah') return fail('Penurunan pesimis harus angka 0 atau lebih.');
+
+  if (typeof cashMargin === 'number' && cashMargin >= 100) {
+    return fail('Margin 100% berarti seluruh uang masuk tidak boleh dibelanjakan sama sekali. '
+      + 'Isi angka di bawah 100.');
+  }
+  if (typeof pessimisticDown === 'number' && pessimisticDown >= 100) {
+    return fail('Penurunan pesimis 100% membuat ramalan terburuknya nol. Isi angka di bawah 100.');
+  }
+
+  const data = { cashMargin, optimisticUp, pessimisticDown };
+  await prisma.monthTarget.upsert({
+    where: { month },
+    update: data,
+    create: { month, ...data },
+  });
+  segarkanTarget();
+  return ok(`Target ${NAMA_BULAN[month - 1]} disimpan.`);
+}
+
+export async function hapusTargetBulan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const month = Number(String(formData.get('month') ?? ''));
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
+  await prisma.monthTarget.deleteMany({ where: { month } });
+  segarkanTarget();
+  return ok(`Target ${NAMA_BULAN[month - 1]} dikosongkan — bulan itu kembali tanpa batas margin.`);
+}
+
+/* ------------------------------------------------------------------ */
 /* Musim                                                               */
 /* ------------------------------------------------------------------ */
 

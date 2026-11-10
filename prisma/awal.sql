@@ -304,6 +304,15 @@ CREATE TABLE "Season" (
 );
 
 -- CreateTable
+CREATE TABLE "MonthTarget" (
+    "month" INTEGER NOT NULL PRIMARY KEY,
+    "cashMargin" REAL,
+    "optimisticUp" REAL,
+    "pessimisticDown" REAL,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
 CREATE TABLE "SeasonMonth" (
     "month" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "seasonId" TEXT NOT NULL,

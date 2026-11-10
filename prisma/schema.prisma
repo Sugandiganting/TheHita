@@ -567,6 +567,33 @@ model Season {
 }
 
 /// Musim yang berlaku untuk satu bulan kalender, berulang tiap tahun.
+/// Target sebuah bulan kalender: margin kas yang diinginkan, dan seberapa lebar
+/// sebaran optimis-pesimis di sekitar ramalan normalnya.
+///
+/// Dua hal yang sengaja berdiri di satu tabel tetapi di kolom berbeda, karena
+/// alasan geraknya berlainan. Margin bergerak ketika target laba berubah;
+/// sebaran bergerak ketika pasarnya makin sulit ditebak. Menyatukan keduanya
+/// akan membuat menaikkan target laba diam-diam menaikkan ramalan optimis.
+///
+/// Seluruh kolomnya boleh kosong, dan kosong berarti belum ditetapkan — bukan
+/// nol. Bulan yang kosong berjalan persis seperti sebelum menu ini ada.
+model MonthTarget {
+  /// 1 sampai 12.
+  month           Int    @id
+  /// Margin KAS, bukan margin laba bersih: berapa persen dari uang yang masuk
+  /// bulan itu yang ingin disisakan. Uang masuk memuat hal yang bukan
+  /// pendapatan — deposit tamu, pelunasan piutang, setoran modal — jadi
+  /// angkanya memang tidak akan sama dengan margin di laba rugi, dan tidak
+  /// seharusnya dibandingkan begitu saja.
+  cashMargin      Float?
+  /// Optimis = normal dinaikkan sekian persen.
+  optimisticUp    Float?
+  /// Pesimis = normal diturunkan sekian persen.
+  pessimisticDown Float?
+
+  updatedAt DateTime @updatedAt
+}
+
 model SeasonMonth {
   /// 1 sampai 12.
   month    Int    @id

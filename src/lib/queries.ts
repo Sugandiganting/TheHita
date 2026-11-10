@@ -35,6 +35,10 @@ import {
 import { hitungTren, type Tren } from './tren-masuk';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 import { CABANG_SAJA } from '@/lib/penampung-master';
+import {
+  batasBelanjaMargin, marginTercapai, sebaranDariNormal,
+  type PolaTarget,
+} from './target-bulan';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -987,6 +991,33 @@ export type RencanaKasDetail = {
   konteksBeli: Record<Skenario, PurchaseContext> | null;
   checkpoint: { id: string; date: Date; cashOnHand: number; incomeToDate: number; notes: string | null }[];
   terakhir: { date: Date; cashOnHand: number; incomeToDate: number } | null;
+  /**
+   * Target margin kas bulan ini beserta posisinya. null bila bulan ini belum
+   * ditetapkan di master Target Bulan — dan selama null, halaman ini berjalan
+   * persis seperti sebelum menu itu ada.
+   */
+  margin: {
+    /** Persen dari uang masuk yang ingin disisakan. */
+    target: number;
+    /** Belanja paling banyak sebulan agar targetnya tercapai. */
+    batasBelanja: number | null;
+    /** Uang masuk sampai laporan posisi kas terakhir. */
+    masukSampaiKini: number | null;
+    /** Uang keluar sampai laporan itu, diukur dari pergerakan saldo. */
+    keluarSampaiKini: number | null;
+    /**
+     * Margin yang benar-benar tercapai, dalam persen. Hanya diisi untuk bulan
+     * yang sudah dilaporkan penuh — lihat alasannya di getRencanaKas.
+     */
+    tercapai: number | null;
+    /** Laporan posisi kas terakhir sudah mencakup seluruh bulan. */
+    bulanPenuh: boolean;
+    /** Tanggal laporan posisi kas terakhir. */
+    hariTerlapor: number | null;
+    /** Batas dikurangi yang sudah keluar. Negatif berarti sudah lewat. */
+    sisaRuang: number | null;
+    lewat: boolean;
+  } | null;
   /** Angka menurut jurnal sistem, sebagai pembanding atas input manual. */
   menurutJurnal: { saldoKas: number; masukBulanIni: number };
   rencana: Rencana | null;
@@ -1013,6 +1044,25 @@ export async function polaMusim(): Promise<PolaMusim> {
     r.month,
     { code: r.season.code, name: r.season.name, delta: r.season.delta },
   ]));
+}
+
+/** Target tiap bulan kalender, lengkap dua belas barisnya walau belum diisi. */
+export async function polaTarget(): Promise<PolaTarget> {
+  const rows = await prisma.monthTarget.findMany();
+  const peta: PolaTarget = new Map(
+    Array.from({ length: 12 }, (_, i) => [i + 1, {
+      month: i + 1, cashMargin: null, optimisticUp: null, pessimisticDown: null,
+    }]),
+  );
+  for (const r of rows) {
+    peta.set(r.month, {
+      month: r.month,
+      cashMargin: r.cashMargin,
+      optimisticUp: r.optimisticUp,
+      pessimisticDown: r.pessimisticDown,
+    });
+  }
+  return peta;
 }
 
 export type RencanaBelanja = {
@@ -1262,13 +1312,31 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       ) as Record<Skenario, number | null>)
     : null;
 
-  // Yang diketik menang, lalu turunan musim, lalu rata-rata riwayat. Turunan
-  // musim didahulukan karena ia berpangkal pada angka yang pernah dipilih
-  // orang lalu disesuaikan dengan polanya; rata-rata riwayat tidak mengenal
-  // musim sama sekali, jadi bulan sepi dan bulan ramai diberinya angka sama.
-  const dipakai = Object.fromEntries(
-    SKENARIO.map((s) => [s, tersimpan[s] ?? usulanMusim?.[s] ?? usulan?.[s] ?? 0]),
-  ) as Record<Skenario, number>;
+  const target = await polaTarget();
+  const targetBulanIni = target.get(monthOf(period));
+
+  /*
+   * Urutan yang menang: yang diketik, lalu sebaran dari master target, lalu
+   * turunan musim, lalu rata-rata riwayat.
+   *
+   * Normal dihitung lebih dulu karena dua skenario lain diturunkan darinya.
+   * Sebaran didahulukan atas turunan musim karena ia menjaga ketiganya tetap
+   * berurutan — pesimis di bawah normal, optimis di atasnya. Turunan musim
+   * membawa tiap skenario sendiri-sendiri dari bulan terakhir yang diketik,
+   * dan tiga angka yang berjalan sendiri-sendiri bisa berakhir saling
+   * bertentangan tanpa ada yang menahannya.
+   *
+   * Rata-rata riwayat tetap jadi jaring terakhir: ia tidak mengenal musim sama
+   * sekali, jadi bulan sepi dan bulan ramai diberinya angka sama.
+   */
+  const normalDipakai = tersimpan.NORMAL ?? usulanMusim?.NORMAL ?? usulan?.NORMAL ?? 0;
+  const sebaran = sebaranDariNormal(normalDipakai, targetBulanIni);
+
+  const dipakai = {
+    PESIMIS: tersimpan.PESIMIS ?? sebaran.pesimis ?? usulanMusim?.PESIMIS ?? usulan?.PESIMIS ?? 0,
+    NORMAL: normalDipakai,
+    OPTIMIS: tersimpan.OPTIMIS ?? sebaran.optimis ?? usulanMusim?.OPTIMIS ?? usulan?.OPTIMIS ?? 0,
+  } as Record<Skenario, number>;
 
   const musimBulanIni = pola.get(monthOf(period)) ?? null;
   const dasar = Object.fromEntries(
@@ -1579,6 +1647,57 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       ) as Record<Skenario, Runway>)
     : null;
 
+  /*
+   * Posisi terhadap target margin kas bulan ini.
+   *
+   * Uang keluar tidak diambil dari jurnal maupun dari belanja yang diketik di
+   * menu ini, melainkan dari pergerakan saldo: saldo awal ditambah uang masuk
+   * dikurangi saldo sekarang. Itu satu-satunya ukuran yang lengkap — belanja
+   * yang tidak sempat dicatat di kategori mana pun tetap terhitung, dan
+   * justru belanja semacam itulah yang paling sering membuat marginnya
+   * meleset tanpa ada yang menyadari.
+   *
+   * Butuh saldo akhir bulan lalu. Tanpa itu, yang terukur bukan uang keluar
+   * bulan ini melainkan selisih yang tidak bermakna, jadi angkanya tidak
+   * ditampilkan sama sekali.
+   */
+  const targetMargin = targetBulanIni?.cashMargin ?? null;
+  const keluarSampaiKini = terakhir && saldoAkhirBulanLalu !== null
+    ? round(saldoAkhirBulanLalu + terakhir.incomeToDate - terakhir.cashOnHand)
+    : null;
+  const batasBelanja = batasBelanjaMargin(dipakai.NORMAL, targetMargin);
+
+  /*
+   * Margin yang tercapai hanya dilaporkan untuk bulan yang sudah penuh.
+   *
+   * Uang keluar menumpuk di awal bulan — gaji dibayar hari pertama atau kedua
+   * — sedangkan uang masuk mengalir tiap hari. Membagi keduanya pada tanggal
+   * 2 menghasilkan angka seperti minus tiga ribu persen: benar secara
+   * aritmetika, dan sama sekali tidak bisa dipakai menilai apa pun. Yang tetap
+   * bermakna sepanjang bulan adalah perbandingan "sudah keluar" dengan "belanja
+   * maksimal" di sebelahnya, dan itulah yang ditampilkan tiap hari.
+   */
+  const hariTerakhirBulan = new Date(Date.UTC(
+    Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
+  )).getUTCDate();
+  const bulanPenuh = terakhir ? terakhir.date.getUTCDate() >= hariTerakhirBulan : false;
+
+  const margin = targetMargin === null ? null : {
+    target: targetMargin,
+    batasBelanja,
+    masukSampaiKini: terakhir?.incomeToDate ?? null,
+    keluarSampaiKini,
+    bulanPenuh,
+    hariTerlapor: terakhir?.date.getUTCDate() ?? null,
+    tercapai: bulanPenuh && terakhir && keluarSampaiKini !== null
+      ? marginTercapai(terakhir.incomeToDate, keluarSampaiKini)
+      : null,
+    sisaRuang: batasBelanja !== null && keluarSampaiKini !== null
+      ? round(batasBelanja - keluarSampaiKini)
+      : null,
+    lewat: batasBelanja !== null && keluarSampaiKini !== null && keluarSampaiKini > batasBelanja,
+  };
+
   return {
     id: plan.id,
     period: plan.period,
@@ -1636,6 +1755,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       id: c.id, date: c.date, cashOnHand: c.cashOnHand, incomeToDate: c.incomeToDate, notes: c.notes,
     })),
     terakhir: terakhir && { date: terakhir.date, cashOnHand: terakhir.cashOnHand, incomeToDate: terakhir.incomeToDate },
+    margin,
     menurutJurnal: { saldoKas: round(saldoKas), masukBulanIni: round(bulanIni[0]?.cashIn ?? 0) },
     rencana,
   };
