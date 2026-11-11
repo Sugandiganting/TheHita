@@ -116,13 +116,16 @@ test('kode yang sama di dua departemen justru dibolehkan — itu jalan keluarnya
 });
 
 test('dua nama sama dengan kode berbeda di satu departemen ditolak', () => {
+  // Kodenya sengaja di luar penomoran yang sungguh dipakai: BARANG_TAMBAHAN
+  // ikut masuk ke tiap pemeriksaan, jadi kode contoh yang kebetulan sama
+  // dengan salah satunya akan menambah masalah kedua yang bukan maksud tes ini.
   const { masalah } = siapkanLembar([
-    baris({ baris: 5, code: 'HK-030', name: 'Tissu Facial' }),
-    baris({ baris: 6, code: 'HK-031', name: 'Tissu Facial' }),
+    baris({ baris: 5, code: 'XX-030', name: 'Tissu Facial' }),
+    baris({ baris: 6, code: 'XX-031', name: 'Tissu Facial' }),
   ]);
   assert.equal(masalah.length, 1);
   assert.ok(masalah[0].includes('Tissu Facial'));
-  assert.ok(masalah[0].includes('HK-030') && masalah[0].includes('HK-031'));
+  assert.ok(masalah[0].includes('XX-030') && masalah[0].includes('XX-031'));
 });
 
 test('baris yang kembar persis dilewati tanpa jadi masalah', () => {

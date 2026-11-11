@@ -276,6 +276,24 @@ export const BARANG_TAMBAHAN: Omit<BarisLembar, 'baris'>[] = [
     catatan: 'Pemakaian Play Laundry atas FO-005. Di Front Office buku ini masuk Peralatan & '
       + 'Perlengkapan FO; di Laundry masuk Supplies Laundry.',
   },
+
+  /*
+   * Lima alat kebersihan di bawah ini muncul di template RAB Des 2026 – Jul
+   * 2027 untuk Uluwatu, Legian dan SRK, tetapi belum sempat masuk lembar
+   * master. Tanpa barisnya di sini, RAB ketiga cabang itu tidak bisa diimpor
+   * utuh — dan yang paling berbahaya bukan impor yang berhenti, melainkan
+   * impor yang jalan sambil diam-diam meninggalkan lima barang.
+   */
+  { code: 'HK-031', name: 'Sapu', unit: 'Pcs', kategori: 'OPEX', sub: 'House Keeping',
+    coa: 'Biaya Peralatan dan Perlengkapan HK', catatan: 'Dari template RAB 2026–2027.' },
+  { code: 'HK-032', name: 'Sapu Lidi', unit: 'Pcs', kategori: 'OPEX', sub: 'House Keeping',
+    coa: 'Biaya Peralatan dan Perlengkapan HK', catatan: 'Dari template RAB 2026–2027.' },
+  { code: 'HK-033', name: 'Pengki', unit: 'Pcs', kategori: 'OPEX', sub: 'House Keeping',
+    coa: 'Biaya Peralatan dan Perlengkapan HK', catatan: 'Dari template RAB 2026–2027.' },
+  { code: 'HK-034', name: 'Pel', unit: 'Pcs', kategori: 'OPEX', sub: 'House Keeping',
+    coa: 'Biaya Peralatan dan Perlengkapan HK', catatan: 'Dari template RAB 2026–2027.' },
+  { code: 'HK-035', name: 'Squeeze', unit: 'Pcs', kategori: 'OPEX', sub: 'House Keeping',
+    coa: 'Biaya Peralatan dan Perlengkapan HK', catatan: 'Dari template RAB 2026–2027.' },
 ];
 
 /**
