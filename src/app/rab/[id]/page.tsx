@@ -5,7 +5,9 @@ import { getBudgetDetail } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import { JENIS_RAB_LABEL } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
-import { TambahAnggaranDialog, TambahBarangRabDialog } from '@/components/budget-dialog';
+import {
+  TambahAnggaranDialog, TambahBarangRabDialog, UbahAnggaranDialog, UbahBarangRabDialog,
+} from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -20,7 +22,10 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
       orderBy: { code: 'asc' },
       select: { id: true, code: true, name: true, type: true },
     }),
-    prisma.budgetLine.findMany({ where: { budgetId: id }, select: { id: true, accountId: true } }),
+    prisma.budgetLine.findMany({
+      where: { budgetId: id },
+      select: { id: true, accountId: true, amount: true, notes: true },
+    }),
     prisma.item.findMany({
       where: { active: true },
       orderBy: [{ category: { name: 'asc' } }, { code: 'asc' }],
@@ -38,7 +43,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
 
   const disahkan = rab.status === 'ACTIVE';
   const purchasing = rab.kind === 'PURCHASING';
-  const lineIdByAccount = new Map(lines.map((l) => [l.accountId, l.id]));
+  const barisPerAkun = new Map(lines.map((l) => [l.accountId, l]));
   const r = rab.ringkasan;
 
   const opsiBarang: BarangOption[] = barang.map((b) => ({
@@ -168,7 +173,19 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         <td className="td num">{formatRupiah(b.unitPrice)}</td>
                         <td className="td num">{formatRupiah(b.anggaran)}</td>
                         <td className="td num">
-                          <BudgetItemLineDelete id={b.lineId} disabled={disahkan} />
+                          <span className="flex items-center justify-end gap-3">
+                            <UbahBarangRabDialog
+                              budgetId={rab.id}
+                              items={opsiBarang}
+                              nama={`${b.itemCode} ${b.itemName}`}
+                              nilai={{
+                                itemId: b.itemId, quantity: b.quantity,
+                                unitPrice: b.unitPrice, catatan: b.catatan,
+                              }}
+                              disabled={disahkan}
+                            />
+                            <BudgetItemLineDelete id={b.lineId} disabled={disahkan} />
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -236,8 +253,21 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <td className="td num">{b.terpakaiPct === null ? '—' : formatPercent(b.terpakaiPct)}</td>
                       {!purchasing && (
                         <td className="td num">
-                          {lineIdByAccount.has(b.accountId) ? (
-                            <BudgetLineDelete id={lineIdByAccount.get(b.accountId)!} disabled={disahkan} />
+                          {barisPerAkun.has(b.accountId) ? (
+                            <span className="flex items-center justify-end gap-3">
+                              <UbahAnggaranDialog
+                                budgetId={rab.id}
+                                accounts={accounts}
+                                nama={`${b.accountCode} ${b.accountName}`}
+                                nilai={{
+                                  accountId: b.accountId,
+                                  amount: barisPerAkun.get(b.accountId)!.amount,
+                                  notes: barisPerAkun.get(b.accountId)!.notes,
+                                }}
+                                disabled={disahkan}
+                              />
+                              <BudgetLineDelete id={barisPerAkun.get(b.accountId)!.id} disabled={disahkan} />
+                            </span>
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}

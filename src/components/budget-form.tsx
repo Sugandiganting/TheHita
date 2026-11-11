@@ -165,9 +165,16 @@ export function BudgetLineForm({
           options={opsiAkun}
           defaultValue={values?.accountId ?? ''}
           required
+          disabled={values !== undefined}
           placeholder="— Pilih akun —"
           searchPlaceholder="Ketik nomor atau nama akun…"
         />
+        {values && (
+          <p className="mt-1 text-xs text-slate-500">
+            Akunnya tidak bisa diganti di sini, karena baris RAB dikenali dari akunnya. Kalau yang
+            terpilih memang keliru, hapus barisnya lalu tambahkan yang benar.
+          </p>
+        )}
       </div>
 
       <div>
@@ -220,34 +227,42 @@ export type BarangOption = {
 export function BudgetItemLineForm({
   budgetId,
   items,
+  values,
   disabled,
   onTutup,
 }: {
   budgetId: string;
   items: BarangOption[];
+  /** Diisi saat mengoreksi baris yang sudah ada. */
+  values?: { itemId: string; quantity: number; unitPrice: number; catatan: string | null };
   disabled?: boolean;
   onTutup?: () => void;
 }) {
   const [state, formAction] = useActionState(saveBudgetItemLine, initial);
-  const [itemId, setItemId] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [unitPrice, setUnitPrice] = useState('');
+  const [itemId, setItemId] = useState(values?.itemId ?? '');
+  const [quantity, setQuantity] = useState(values ? String(values.quantity) : '');
+  const [unitPrice, setUnitPrice] = useState(values ? String(values.unitPrice) : '');
+  const mengubah = values !== undefined;
 
   /*
-   * Dikosongkan sendiri setelah tersimpan.
+   * Dikosongkan sendiri setelah tersimpan — tetapi hanya saat menambah.
    *
    * Tiga kolom ini terkendali oleh state, jadi `key` pada <form> tidak
    * mengosongkannya seperti pada formulir yang kolomnya tidak terkendali.
    * Kalau dibiarkan terisi, barang yang baru disimpan masih terpilih saat
    * barang berikutnya diketik — dan menekan simpan sekali lagi tanpa sadar
    * hanya akan menimpa baris yang sudah benar.
+   *
+   * Saat mengoreksi justru sebaliknya: yang baru disimpan adalah keadaan yang
+   * benar, dan mengosongkannya membuat dialog yang masih terbuka menampilkan
+   * baris kosong seolah-olah datanya hilang.
    */
   useEffect(() => {
-    if (!state.ok) return;
+    if (!state.ok || mengubah) return;
     setItemId('');
     setQuantity('');
     setUnitPrice('');
-  }, [state]);
+  }, [state, mengubah]);
 
   const opsiBarang: PickerOption[] = useMemo(
     () =>
@@ -303,6 +318,7 @@ export function BudgetItemLineForm({
           value={itemId}
           onChange={setItemId}
           required
+          disabled={mengubah}
           placeholder="— Pilih barang —"
           searchPlaceholder="Ketik kode atau nama barang…"
           noun="barang"
@@ -313,6 +329,19 @@ export function BudgetItemLineForm({
             Akun bebannya{' '}
             <span className="font-mono">{terpilih.accountCode}</span> {terpilih.accountName}
             {' — '}satuan {terpilih.satuan}
+          </p>
+        )}
+        {/*
+          * Barangnya tidak bisa diganti di sini.
+          *
+          * Satu baris RAB dikenali dari barangnya, jadi mengganti barang
+          * berarti membuat baris lain — dan baris lamanya akan tertinggal
+          * tanpa ada yang melihatnya pergi.
+          */}
+        {mengubah && (
+          <p className="mt-1 text-xs text-slate-500">
+            Barangnya tidak bisa diganti di sini, karena baris RAB dikenali dari barangnya. Kalau
+            yang terpilih memang keliru, hapus barisnya lalu tambahkan yang benar.
           </p>
         )}
       </div>
@@ -361,7 +390,8 @@ export function BudgetItemLineForm({
           name="notes"
           className="input"
           placeholder="Opsional"
-          key={state.ok ? state.message : 'baru'}
+          defaultValue={values?.catatan ?? ''}
+          key={values?.itemId ?? (state.ok ? state.message : 'baru')}
         />
       </div>
 
@@ -369,7 +399,7 @@ export function BudgetItemLineForm({
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
 
-      <SubmitButton label="Simpan ke RAB" onTutup={onTutup} />
+      <SubmitButton label={mengubah ? 'Perbarui baris' : 'Simpan ke RAB'} onTutup={onTutup} />
     </form>
   );
 }

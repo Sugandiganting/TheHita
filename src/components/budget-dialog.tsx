@@ -44,6 +44,62 @@ export function TambahAnggaranDialog({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Ubah — dialog yang sama, dengan isinya sudah terisi                  */
+/* ------------------------------------------------------------------ */
+
+export function UbahBarangRabDialog({
+  budgetId, items, nilai, nama, disabled,
+}: {
+  budgetId: string;
+  items: BarangOption[];
+  nilai: { itemId: string; quantity: number; unitPrice: number; catatan: string | null };
+  /** Nama barangnya, untuk judul dialognya. */
+  nama: string;
+  disabled: boolean;
+}) {
+  return (
+    <DialogTombol
+      label="Ubah"
+      varian="tautan"
+      judul={`Ubah ${nama}`}
+      disabled={disabled}
+      title={disabled ? 'RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.' : undefined}
+      keterangan="Jumlah dan harga satuannya boleh dikoreksi. Nilai yang dianggarkan ikut sendiri, karena ia hasil kali keduanya."
+    >
+      {(tutup) => (
+        <BudgetItemLineForm budgetId={budgetId} items={items} values={nilai} onTutup={tutup} />
+      )}
+    </DialogTombol>
+  );
+}
+
+export function UbahAnggaranDialog({
+  budgetId, accounts, nilai, nama, disabled,
+}: {
+  budgetId: string;
+  accounts: AkunOption[];
+  nilai: { accountId: string; amount: number; notes: string | null };
+  /** Nama akunnya, untuk judul dialognya. */
+  nama: string;
+  disabled: boolean;
+}) {
+  return (
+    <DialogTombol
+      label="Ubah"
+      varian="tautan"
+      lebar="sm"
+      judul={`Ubah anggaran ${nama}`}
+      disabled={disabled}
+      title={disabled ? 'RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.' : undefined}
+    >
+      {(tutup) => (
+        <BudgetLineForm budgetId={budgetId} accounts={accounts} values={nilai} onTutup={tutup} />
+      )}
+    </DialogTombol>
+  );
+}
+
 export function TambahBarangRabDialog({
   budgetId, items, disabled,
 }: {

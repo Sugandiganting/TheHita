@@ -104,6 +104,7 @@ export type BarisBarangRab = {
   unitPrice: number;
   /** Jumlah kali harga satuan. Tidak disimpan, supaya tidak pernah berbeda. */
   anggaran: number;
+  catatan: string | null;
 };
 
 /**

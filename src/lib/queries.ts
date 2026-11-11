@@ -839,6 +839,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     quantity: l.quantity,
     unitPrice: l.unitPrice,
     anggaran: nilaiBarisBarang(l, round),
+    catatan: l.notes,
   }));
 
   // Baris anggaran RAB ini, selalu di tingkat akun supaya bisa dibandingkan
