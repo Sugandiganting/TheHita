@@ -1302,16 +1302,104 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
           </Card>
 
           <Card className="card-pad">
-            <SectionTitle hint="Untuk bulan berjalan. Bulan yang belum pernah diisi diusulkan sendiri dari bulan terakhir yang pernah diketik, disesuaikan dengan pola musim di Master Data — tinggal diubah bila memang ada yang berbeda. Bulan-bulan sesudahnya juga mengikuti pola yang sama.">
+            <SectionTitle hint="Untuk bulan berjalan. Yang belum diisi diusulkan sendiri — dari realisasi bulan terakhir yang lengkap beserta separuh kelebihannya bila Target Margin sudah ditetapkan, selain itu dari bulan terakhir yang pernah diketik menurut pola musim. Tinggal diubah bila memang ada yang berbeda.">
               Proyeksi uang masuk
             </SectionTitle>
             <ProjectionForm
               id={data.id}
               tersimpan={data.tersimpan}
               usulan={data.usulan}
+              usulanRumus={data.usulanRumus}
               usulanMusim={data.usulanMusim}
               notes={data.notes}
             />
+            {/*
+              * Rumusnya ditulis utuh di layar supaya bisa dihitung ulang
+              * dengan tangan saat rapat. Angka ramalan yang tidak bisa
+              * ditelusuri asalnya akan selalu kalah oleh angka di kepala
+              * orang yang paling yakin di ruangan itu.
+              */}
+            {data.usulanRumus && (
+              <Card className="card-pad min-w-0">
+                <SectionTitle hint="Separuh kelebihan bulan terakhir yang realisasinya lengkap dibawa ke bulan berikutnya, lalu dikali musim. Separuh, bukan seluruhnya, karena satu bulan ramai belum tentu berulang.">
+                  Asal target bulan ini
+                </SectionTitle>
+
+                {data.usulanRumus.dariRealisasi ? (
+                  <div className="mt-3 space-y-2 text-sm">
+                    <p className="text-slate-600">
+                      Bertumpu pada <strong>{formatPeriod(data.usulanRumus.anchor)}</strong>, bulan
+                      terakhir yang laporannya lengkap dan targetnya pernah ditetapkan.
+                    </p>
+                    <dl className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                      <div className="flex justify-between px-3 py-2">
+                        <dt className="text-slate-600">Uang masuk nyata {formatPeriod(data.usulanRumus.anchor)}</dt>
+                        <dd className="font-medium tabular-nums">{formatRupiah(data.usulanRumus.masukNyata)}</dd>
+                      </div>
+                      <div className="flex justify-between px-3 py-2">
+                        <dt className="text-slate-600">
+                          Target yang tercapai
+                          {data.usulanRumus.tingkat && (
+                            <span className="ml-1 text-slate-400">
+                              ({NAMA_SKENARIO[data.usulanRumus.tingkat]})
+                            </span>
+                          )}
+                          {data.usulanRumus.tingkat === null && (
+                            <span className="ml-1 text-amber-700">(tidak ada yang tercapai)</span>
+                          )}
+                        </dt>
+                        <dd className="font-medium tabular-nums">{formatRupiah(data.usulanRumus.t)}</dd>
+                      </div>
+                      <div className="flex justify-between px-3 py-2">
+                        <dt className="text-slate-600">
+                          {data.usulanRumus.masukNyata > data.usulanRumus.t
+                            ? 'Separuh kelebihannya'
+                            : 'Di bawah target — kembali ke targetnya'}
+                        </dt>
+                        <dd className="font-medium tabular-nums">
+                          {data.usulanRumus.masukNyata > data.usulanRumus.t
+                            ? formatRupiah((data.usulanRumus.masukNyata - data.usulanRumus.t) / 2)
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between px-3 py-2">
+                        <dt className="text-slate-600">
+                          Pengali musim terhadap {formatPeriod(data.usulanRumus.anchor)}
+                        </dt>
+                        <dd className="font-medium tabular-nums">
+                          ×{data.usulanRumus.c.toFixed(3)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between bg-slate-50 px-3 py-2">
+                        <dt className="font-medium text-slate-900">Target normal bulan ini</dt>
+                        <dd className="font-semibold tabular-nums">
+                          {formatRupiah(data.usulanRumus.nilai.NORMAL)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="text-xs text-slate-500">
+                      Pesimis dan optimis diturunkan dari target normal lewat{' '}
+                      <Link href="/target-margin" className="font-medium text-brand-600 hover:underline">
+                        Target Margin
+                      </Link>
+                      : belanja yang tersirat dari target normal dibagi (1 − margin) tiap skenario.
+                      Ketiganya karena itu menggambarkan rencana belanja yang sama pada tiga
+                      tingkat keuntungan, dan urutannya tidak bisa terbalik.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-600">
+                    Bulan ini dirantai dari bulan sebelumnya, hanya dikali musim{' '}
+                    <strong>×{data.usulanRumus.c.toFixed(3)}</strong>. Suku kelebihannya tidak
+                    muncul lagi — bulan yang belum terjadi diandaikan mendarat tepat di
+                    targetnya, sehingga selisihnya nol. Titik tumpunya tetap{' '}
+                    <strong>{formatPeriod(data.usulanRumus.anchor)}</strong>, dan begitu sebuah
+                    bulan selesai seluruh rantainya dihitung ulang dari situ.
+                  </p>
+                )}
+              </Card>
+            )}
+
             {data.riwayatMasuk.length > 0 && (
               <div className="mt-4 border-t border-slate-100 pt-3">
                 <p className="mb-1 text-xs font-medium text-slate-500">Riwayat uang masuk</p>

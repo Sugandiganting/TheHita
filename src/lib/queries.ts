@@ -40,6 +40,10 @@ import {
   targetBerurut, targetLengkap, targetMasukDariMargin,
   type SkenarioMargin, type TargetMargin,
 } from './target-margin';
+import {
+  rantaiTarget, tingkatTercapai,
+  type BarisTargetCash, type Tingkat,
+} from './target-cash';
 
 export type UnitFilter = string[] | null; // null = seluruh unit
 
@@ -894,6 +898,25 @@ export type RencanaKasDetail = {
   tersimpan: Record<Skenario, number | null>;
   usulan: Record<Skenario, number> | null;
   /**
+   * Target dari rumus: separuh kelebihan bulan terakhir yang realisasinya
+   * lengkap, dirantai ke depan lewat musim. null bila titik tumpunya belum
+   * ada — bulan yang laporannya lengkap dan targetnya pernah ditetapkan.
+   */
+  usulanRumus: {
+    /** Bulan yang jadi titik tumpu. */
+    anchor: Period;
+    masukNyata: number;
+    /** Tingkat yang tercapai di bulan itu; null bila di bawah pesimis. */
+    tingkat: Skenario | null;
+    /** Nilai target tingkat itu. */
+    t: number;
+    nilai: Record<Skenario, number>;
+    /** Bulan ini dihitung langsung dari realisasi, bukan dari bulan hitungan. */
+    dariRealisasi: boolean;
+    /** Pengali musim terhadap bulan sebelumnya. */
+    c: number;
+  } | null;
+  /**
    * Usulan yang diturunkan dari bulan terakhir yang pernah diketik, lewat pola
    * musim. null bila polanya belum disiapkan atau belum ada bulan yang diisi.
    */
@@ -1155,6 +1178,82 @@ export async function riwayatMargin(sampai: Period, bulan = 12): Promise<BarisRi
   return hasil;
 }
 
+export type RamalanTargetCash = {
+  /** Bulan terakhir yang realisasinya lengkap dan targetnya pernah ditetapkan. */
+  anchor: Period;
+  masukNyata: number;
+  tingkat: Tingkat;
+  baris: BarisTargetCash[];
+};
+
+/**
+ * Target uang masuk dua belas bulan ke depan, bertumpu pada bulan terakhir
+ * yang realisasinya lengkap.
+ *
+ * Titik tumpunya harus memenuhi dua syarat sekaligus: laporan posisi kasnya
+ * mencakup seluruh bulan, dan ketiga targetnya pernah ditetapkan seseorang.
+ * Tanpa syarat kedua, "tingkat yang tercapai" tidak punya pembanding — dan
+ * tingkat itulah yang menentukan berapa kelebihan yang dibawa ke bulan
+ * berikutnya.
+ *
+ * Yang diambil target TERSIMPAN, bukan usulan. Kalau usulan ikut dipakai,
+ * rumus ini akan membandingkan kenyataan dengan angka yang ia sendiri usulkan
+ * bulan lalu, dan hasilnya hanya memantulkan dirinya sendiri.
+ */
+export async function ramalanTargetCash(sebelum: Period, bulan = 12): Promise<RamalanTargetCash | null> {
+  const kandidat = await prisma.cashPlan.findMany({
+    where: {
+      period: { lt: sebelum },
+      incomePessimistic: { not: null },
+      incomeNormal: { not: null },
+      incomeOptimistic: { not: null },
+    },
+    orderBy: { period: 'desc' },
+    take: 6,
+    select: {
+      period: true,
+      incomePessimistic: true, incomeNormal: true, incomeOptimistic: true,
+      checkpoints: { orderBy: { date: 'desc' }, take: 1 },
+    },
+  });
+
+  const anchor = kandidat.find((k) => {
+    const c = k.checkpoints[0];
+    if (!c) return false;
+    const hariTerakhir = new Date(Date.UTC(
+      Number(k.period.slice(0, 4)), Number(k.period.slice(5, 7)), 0,
+    )).getUTCDate();
+    return c.date.getUTCDate() >= hariTerakhir;
+  });
+  if (!anchor) return null;
+
+  const masukNyata = anchor.checkpoints[0].incomeToDate;
+  const tingkat = tingkatTercapai(masukNyata, {
+    PESIMIS: anchor.incomePessimistic!,
+    NORMAL: anchor.incomeNormal!,
+    OPTIMIS: anchor.incomeOptimistic!,
+  });
+  if (!tingkat) return null;
+
+  const [pola, margin] = await Promise.all([polaMusim(), targetMargin()]);
+  const periode: Period[] = [];
+  for (let i = 1; i <= bulan; i++) periode.push(addMonths(anchor.period as Period, i));
+
+  const baris = rantaiTarget({
+    anchor: anchor.period as Period,
+    masukNyata,
+    tingkat,
+    pola,
+    margin,
+    bulan,
+    periode,
+    pembulatan: round,
+  });
+  if (baris.length === 0) return null;
+
+  return { anchor: anchor.period as Period, masukNyata, tingkat, baris };
+}
+
 /** Target margin tiap skenario. Kosong bila belum pernah ditetapkan. */
 export async function targetMargin(): Promise<TargetMargin> {
   const rows = await prisma.scenarioTarget.findMany();
@@ -1413,6 +1512,16 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     : null;
 
   /*
+   * Target dari rumus: bertumpu pada bulan terakhir yang realisasinya lengkap,
+   * lalu dirantai ke depan lewat musim. Diletakkan di atas turunan musim
+   * karena ia berpangkal pada kenyataan, bukan pada angka yang pernah diketik
+   * seseorang beberapa bulan lalu.
+   */
+  const ramalanRumus = await ramalanTargetCash(period);
+  const barisRumus = ramalanRumus?.baris.find((b) => b.period === period) ?? null;
+  const usulanRumus = barisRumus?.target ?? null;
+
+  /*
    * Ramalan tetap ramalan; target margin tidak menggantikannya.
    *
    * Target uang masuk dihitung mundur dari belanja, dan batas belanja dihitung
@@ -1423,7 +1532,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
    * justru itulah yang ingin dibaca.
    */
   const dipakai = Object.fromEntries(
-    SKENARIO.map((s) => [s, tersimpan[s] ?? usulanMusim?.[s] ?? usulan?.[s] ?? 0]),
+    SKENARIO.map((s) => [s, tersimpan[s] ?? usulanRumus?.[s] ?? usulanMusim?.[s] ?? usulan?.[s] ?? 0]),
   ) as Record<Skenario, number>;
 
   const musimBulanIni = pola.get(monthOf(period)) ?? null;
@@ -1851,6 +1960,17 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     notes: plan.notes,
     tersimpan,
     usulan,
+    usulanRumus: ramalanRumus && barisRumus
+      ? {
+          anchor: ramalanRumus.anchor,
+          masukNyata: ramalanRumus.masukNyata,
+          tingkat: ramalanRumus.tingkat.skenario,
+          t: ramalanRumus.tingkat.t,
+          nilai: barisRumus.target,
+          dariRealisasi: barisRumus.dariRealisasi,
+          c: barisRumus.c,
+        }
+      : null,
     usulanMusim: usulanMusim && acuanDiketik
       ? { dari: acuanDiketik.period, nilai: usulanMusim }
       : null,

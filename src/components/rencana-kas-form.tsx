@@ -125,12 +125,28 @@ export function CheckpointForm({
 /** Tiga proyeksi uang masuk sebulan penuh. Dikosongkan = pakai usulan sistem. */
 type TigaSkenario = { PESIMIS: number | null; NORMAL: number | null; OPTIMIS: number | null };
 
+export type UsulanRumus = {
+  anchor: string;
+  masukNyata: number;
+  tingkat: 'PESIMIS' | 'NORMAL' | 'OPTIMIS' | null;
+  t: number;
+  nilai: { PESIMIS: number; NORMAL: number; OPTIMIS: number };
+  dariRealisasi: boolean;
+  c: number;
+};
+
 export function ProjectionForm({
-  id, tersimpan, usulan, usulanMusim, notes,
+  id, tersimpan, usulan, usulanRumus, usulanMusim, notes,
 }: {
   id: string;
   tersimpan: TigaSkenario;
   usulan: { PESIMIS: number; NORMAL: number; OPTIMIS: number } | null;
+  /**
+   * Target dari rumus, bertumpu pada bulan terakhir yang realisasinya lengkap.
+   * Didahulukan daripada turunan musim karena ia berpangkal pada kenyataan,
+   * bukan pada angka yang pernah diketik seseorang beberapa bulan lalu.
+   */
+  usulanRumus: UsulanRumus | null;
   /**
    * Turunan pola musim dari bulan terakhir yang pernah diketik. Didahulukan
    * daripada rata-rata riwayat: ia berpangkal pada angka yang pernah dipilih
@@ -152,8 +168,9 @@ export function ProjectionForm({
 
       {baris.map((b) => {
         const nilai = tersimpan[b.kunci];
+        const dariRumus = usulanRumus?.nilai[b.kunci] ?? null;
         const dariMusim = usulanMusim?.nilai[b.kunci] ?? null;
-        const usul = dariMusim ?? usulan?.[b.kunci];
+        const usul = dariRumus ?? dariMusim ?? usulan?.[b.kunci];
         return (
           <div key={b.name}>
             <label className="label" htmlFor={`rk-${b.name}`}>{b.label}</label>
@@ -173,9 +190,11 @@ export function ProjectionForm({
                   : `Usulan sistem ${formatRupiah(usul)}`}
               {usul !== undefined && (
                 <span className="mt-0.5 block text-slate-400">
-                  {dariMusim !== null
-                    ? `dari ${formatPeriod(usulanMusim!.dari)} menurut pola musim di Master Data`
-                    : 'rata-rata uang masuk beberapa bulan terakhir'}
+                  {dariRumus !== null
+                    ? `dari realisasi ${formatPeriod(usulanRumus!.anchor)} beserta separuh kelebihannya, dikali musim`
+                    : dariMusim !== null
+                      ? `dari ${formatPeriod(usulanMusim!.dari)} menurut pola musim di Master Data`
+                      : 'rata-rata uang masuk beberapa bulan terakhir'}
                 </span>
               )}
             </p>
