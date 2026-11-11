@@ -30,6 +30,20 @@ function matches(option: PickerOption, terms: string[]): boolean {
   return terms.every((t) => hay.includes(t));
 }
 
+/*
+ * Lebar panel yang diusahakan, berapa pun lebar tombolnya.
+ *
+ * Kolom pilihan sering sempit karena berbagi baris dengan kolom lain,
+ * sedangkan nama yang harus dibedakan di dalamnya panjang-panjang —
+ * "Persediaan Peralatan dan Perlengkapan HK" dan "… dan Perlengkapan Kantor"
+ * hanya berbeda di kata terakhirnya. Dipotong, keduanya terbaca sama persis,
+ * dan yang memilih tidak punya cara tahu ia salah.
+ */
+const LEBAR_NYAMAN = 420;
+
+/** Jarak aman panel dari tepi layar. */
+const TEPI = 8;
+
 /**
  * Daftar pilihan yang bisa dicari, pengganti <select> untuk daftar panjang.
  *
@@ -118,6 +132,7 @@ export function SearchableSelect({
     triggerRef.current?.focus();
   };
 
+
   /** Hitung posisi panel dari tombol pemicu; dipakai ulang saat halaman digulir. */
   const place = () => {
     const el = triggerRef.current;
@@ -125,10 +140,16 @@ export function SearchableSelect({
     const r = el.getBoundingClientRect();
     const room = window.innerHeight - r.bottom;
     const below = room > 260 || room > r.top;
+
+    const width = Math.min(Math.max(r.width, LEBAR_NYAMAN), window.innerWidth - TEPI * 2);
     setRect({
       top: below ? r.bottom + 4 : r.top - 4,
-      left: r.left,
-      width: Math.max(r.width, 260),
+      // Panel yang lebih lebar dari tombolnya digeser ke kiri bila keluar
+      // layar, bukan disempitkan kembali — nama terpotong justru yang hendak
+      // dihindari. Lebarnya tidak ikut kata yang diketik, supaya panelnya
+      // tidak berkedut-kedut saat daftarnya menyempit.
+      left: Math.max(TEPI, Math.min(r.left, window.innerWidth - width - TEPI)),
+      width,
       below,
     });
   };
@@ -276,6 +297,10 @@ export function SearchableSelect({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-haspopup="listbox"
+        // Tombolnya selebar kolomnya, jadi pilihan yang sudah diambil masih
+        // bisa terpotong di situ. Nomornya tetap terbaca utuh, dan namanya
+        // bisa dilihat penuh dengan menunjuknya.
+        title={current ? `${current.code} — ${current.label}` : undefined}
         className={`input flex items-center gap-2 text-left ${
           invalid || belumDiisi ? 'border-red-300' : ''
         } ${disabled ? '' : 'cursor-pointer hover:border-slate-400'}`}
@@ -353,13 +378,16 @@ export function SearchableSelect({
                       data-active={i === active}
                       onMouseEnter={() => setActive(i)}
                       onClick={() => commit(o.value)}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                      className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm ${
                         i === active ? 'bg-brand-50' : ''
                       } ${o.value === selected ? 'font-medium text-brand-700' : 'text-slate-700'}`}
                     >
-                      <span className="w-20 shrink-0 font-mono text-xs text-slate-500">{o.code}</span>
-                      <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                      {o.meta && <span className="shrink-0 text-xs tabular-nums text-slate-500">{o.meta}</span>}
+                      <span className="w-20 shrink-0 pt-0.5 font-mono text-xs text-slate-500">{o.code}</span>
+                      {/* Dibiarkan turun baris, bukan dipotong: dua nama yang
+                          hanya berbeda di kata terakhir akan terbaca sama
+                          persis begitu ujungnya hilang. */}
+                      <span className="min-w-0 flex-1 break-words">{o.label}</span>
+                      {o.meta && <span className="shrink-0 pt-0.5 text-xs tabular-nums text-slate-500">{o.meta}</span>}
                     </button>
                   </li>
                 );
