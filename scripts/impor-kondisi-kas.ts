@@ -5,6 +5,14 @@
  * ke layar tiap kali adalah pekerjaan yang paling mungkin salah ketik sekaligus
  * paling mudah dihindari, jadi di sini dibaca langsung dari berkasnya.
  *
+ * YANG DIBACA HANYA KOLOM "(Berjalan)" — kolom berisi apa yang sudah benar-
+ * benar terjadi sampai hari pembaruan: saldo kas, uang yang sudah masuk, dan
+ * belanja tiap kantong. Kolom proyeksi di sebelahnya sengaja tidak disentuh,
+ * begitu pula angka pengeluaran rutin: peramalan adalah pekerjaan aplikasi,
+ * dihitung dari realisasi, pola musim dan target margin. Workbook dan aplikasi
+ * meramal dengan cara yang berbeda, dan menimpa yang satu dengan yang lain
+ * membuat angka di layar tidak lagi bisa ditelusuri asalnya.
+ *
  * Workbook kondisi keuangan (sheet "Saldo New Format") boleh disertakan, tetapi
  * tidak wajib: saldo kasnya sendiri sudah ada di baris "NET CASH CUMMULATIVE
  * (Cash Basis)" pada kolom bulan berjalan, dan tanggalnya di baris SALES di
@@ -20,7 +28,6 @@
  * Pilihan:
  *   --periode=YYYY-MM  Bulan yang diisi (bawaan: kolom berjalan terakhir yang terisi)
  *   --coba             Hanya menampilkan hasil bacaan, tidak menyimpan apa pun
- *   --paksa-skenario   Muat pesimis/optimis walau urutannya terbalik
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -30,37 +37,6 @@ import {
 } from './lib-workbook';
 
 const prisma = new PrismaClient();
-
-/**
- * Kolom bulan pada baris judul. `berjalan` memilih kolom "(Berjalan)" yang
- * berisi angka sampai hari ini; selain itu kolom proyeksi, yang judulnya hanya
- * nama bulan tanpa keterangan apa pun.
- */
-function cariKolom(
-  ws: Sheet, barisJudul: number, bulan: number, berjalan: boolean, tahun?: number,
-): number {
-  const nama = BULAN[bulan];
-  // Nama bulan yang sama muncul dua kali — sekali untuk tiap tahun yang
-  // dicakup workbook. Tahunnya ada di baris 1 di atas kolomnya; tanpa
-  // memeriksanya, "November" yang ditemukan lebih dulu belum tentu yang
-  // dimaksud, dan tidak ada apa pun yang terlihat salah sesudahnya.
-  let cadangan = 0;
-  for (let c = 2; c <= 40; c += 1) {
-    const j = teks(ws.getCell(barisJudul, c).value).trim().toLowerCase();
-    if (!j || !nama.some((n) => j.startsWith(n))) continue;
-    const sisa = j.slice(nama.find((n) => j.startsWith(n))!.length).trim();
-    if (berjalan ? !sisa.startsWith('(berjalan)') : sisa !== '') continue;
-    if (tahun === undefined) return c;
-    const th = angka(ws.getCell(1, c).value);
-    if (th === tahun) return c;
-    if (th === null && cadangan === 0) cadangan = c;
-  }
-  if (cadangan > 0) return cadangan;
-  throw new Error(
-    `Kolom ${berjalan ? 'proyeksi' : ''} bulan ${nama[0]}${tahun ? ` ${tahun}` : ''} `
-    + `tidak ditemukan di sheet ${ws.name}`,
-  );
-}
 
 /**
  * Tanggal pembaruan sebuah kolom berjalan.
@@ -92,7 +68,6 @@ async function main() {
     }),
   );
   const coba = opsi.has('coba');
-  const paksaSkenario = opsi.has('paksa-skenario');
 
   if (berkas.length < 1 || berkas.length > 2) {
     console.error('Pemakaian: npm run impor-kas -- <Proyeksi.xlsx> [Kondisi_Keuangan.xlsx] [--periode=YYYY-MM] [--coba]');
@@ -138,7 +113,6 @@ async function main() {
   }
   const { kolom: kolomBerjalan, bulan, tahun } = pilihan;
   const period = `${tahun}-${String(bulan).padStart(2, '0')}`;
-  const bulanLalu = bulan === 1 ? 12 : bulan - 1;
 
   /* ---- Saldo dan tanggalnya ---- */
   let tanggal: Date | null = null;
@@ -180,61 +154,16 @@ async function main() {
     amount: nilai(normal, cariBaris(normal, label), kolomBerjalan),
   }));
 
-  /* ---- Pengeluaran rutin: bulan lalu, lengkap dengan cicilan bank ---- */
-  const kolomLalu = cariKolom(normal, judul, bulanLalu, true, bulan === 1 ? tahun - 1 : tahun);
-  const keluarLalu = nilai(normal, cariBaris(normal, 'TOTAL CASHOUTFLOW'), kolomLalu);
-  const utangLalu = nilai(normal, cariBaris(normal, 'UTANG BANK'), kolomLalu);
-  const pengeluaranRutin = keluarLalu + utangLalu;
-
-  /* ---- Proyeksi tiga skenario ---- */
-  const proyeksiNormal = nilai(normal, barisMasuk, cariKolom(normal, judul, bulan, false, tahun));
-  const skenarioLain = (nama: string, bln = bulan) => {
-    const ws = ambilSheet(wbProyeksi, nama);
-    const j = cariBaris(ws, 'Variable');
-    return nilai(ws, cariBaris(ws, 'TOTAL CASHFLOW'), cariKolom(ws, j, bln, false, tahun));
-  };
-  const proyeksiPesimis = skenarioLain('Combined Cashflow Pesimistic');
-  const proyeksiOptimis = skenarioLain('Combined Cashflow Optimistic');
-
-  /*
-   * Skenario yang tidak berurut tidak dimuat.
-   *
-   * Sheet Pesimis dan Optimis tidak selalu ikut diperbarui saat yang Normal
-   * diperbarui, dan hasilnya pesimis bisa berakhir lebih tinggi daripada
-   * normal. Angka seperti itu bukan sekadar meleset — ia membalik arti
-   * plafon belanjanya, sehingga skenario yang paling hati-hati justru
-   * membolehkan belanja paling besar.
-   *
-   * Yang Normal tetap dimuat, karena memang itu yang diperbarui. Dua lainnya
-   * dibiarkan kosong, dan aplikasi akan memakai usulannya sendiri — dari
-   * realisasi bulan lalu, pola musim, dan target margin.
-   */
-  const urut = proyeksiPesimis <= proyeksiNormal && proyeksiNormal <= proyeksiOptimis;
-  const muatSkenario = urut || paksaSkenario;
-
   /* ---- Laporan ---- */
   console.log(C.bold(`\nRencana kas ${period}`));
   console.log(`  Saldo per ${tanggal.toISOString().slice(0, 10)}  ${C.bold(rupiah(saldo))} ${C.dim(`(${asalSaldo})`)}`);
   console.log(`  Uang masuk bulan ini        ${rupiah(masuk)}`);
   console.log(C.dim('\n  Sudah dibelanjakan bulan ini'));
   for (const b of belanja) console.log(`    ${b.label.padEnd(18)} ${rupiah(b.amount)}`);
-  console.log(C.dim('\n  Proyeksi uang masuk sebulan'));
-  console.log(`    Pesimis            ${rupiah(proyeksiPesimis)}`);
-  console.log(`    Normal             ${rupiah(proyeksiNormal)}`);
-  console.log(`    Optimis            ${rupiah(proyeksiOptimis)}`);
-  console.log(`\n  Pengeluaran rutin/bulan      ${rupiah(pengeluaranRutin)} ${C.dim(`(bulan ${bulanLalu}, termasuk cicilan bank)`)}`);
-
-  if (!urut) {
-    console.log(C.warn(
-      '\n  Pesimis, normal dan optimis tidak berurut — sheet Pesimistic atau Optimistic tampaknya\n'
-      + '  belum ikut diperbarui.',
-    ));
-    console.log(paksaSkenario
-      ? C.warn('  --paksa-skenario: ketiganya tetap dimuat apa adanya.')
-      : C.dim('  Hanya yang normal dimuat. Dua lainnya dibiarkan kosong, dan aplikasi memakai\n'
-        + '  usulannya sendiri dari realisasi bulan lalu, pola musim dan target margin.\n'
-        + '  Pakai --paksa-skenario bila angkanya memang hendak dipakai apa adanya.'));
-  }
+  console.log(C.dim(
+    '\n  Hanya kolom berjalan yang dibaca. Proyeksi uang masuk dan pengeluaran rutin tidak\n'
+    + '  disentuh — keduanya dihitung aplikasi dari realisasi, pola musim dan target margin.',
+  ));
 
   if (coba) {
     console.log(C.dim('\n--coba: tidak ada yang disimpan.\n'));
@@ -244,16 +173,11 @@ async function main() {
   /* ---- Simpan ---- */
   const plan = await prisma.cashPlan.upsert({
     where: { period },
-    update: {
-      ...(muatSkenario ? { incomePessimistic: proyeksiPesimis, incomeOptimistic: proyeksiOptimis } : {}),
-      incomeNormal: proyeksiNormal,
-      monthlyOutflow: pengeluaranRutin,
-    },
+    // Yang dibuat hanyalah wadahnya bila belum ada. Tidak ada satu pun angka
+    // proyeksi yang ditulis di sini — lihat catatan di kepala berkas.
+    update: {},
     create: {
       period,
-      ...(muatSkenario ? { incomePessimistic: proyeksiPesimis, incomeOptimistic: proyeksiOptimis } : {}),
-      incomeNormal: proyeksiNormal,
-      monthlyOutflow: pengeluaranRutin,
       categories: { create: KATEGORI.map((label, sort) => ({ label, weight: 1, sort })) },
     },
     include: { categories: true },
