@@ -24,7 +24,7 @@
 import { monthOf, type Period } from './period';
 import { pengali, type PolaMusim } from './musim';
 import { SKENARIO, type Skenario } from './rencana-kas';
-import type { TargetMargin } from './target-margin';
+import { targetBulan, type PolaTargetMargin, type TargetMargin } from './target-margin';
 
 const bulat = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -156,7 +156,8 @@ export function rantaiTarget(input: {
   masukNyata: number;
   tingkat: Tingkat;
   pola: PolaMusim;
-  margin: TargetMargin;
+  /** Target margin tiap bulan kalender — tiap bulan rantai memakai miliknya sendiri. */
+  margin: PolaTargetMargin;
   bulan: number;
   /** Bulan sesudah anchor, berurutan. */
   periode: Period[];
@@ -176,7 +177,15 @@ export function rantaiTarget(input: {
       ? targetBerikutnya(input.masukNyata, input.tingkat, c, pembulatan)
       : pembulatan(nilaiSebelumnya * c);
 
-    const sebaran = sebaranDariTargetNormal(normal, input.margin, pembulatan);
+    /*
+     * Tiap bulan memakai target marginnya sendiri. Rantainya berhenti di bulan
+     * pertama yang belum ditetapkan, bukan meminjam angka bulan lain: pinjaman
+     * semacam itu menghasilkan target yang tampak sah padahal tidak pernah
+     * dipilih siapa pun untuk bulan itu.
+     */
+    const marginBulan = targetBulan(input.margin, monthOf(period));
+    if (!marginBulan) break;
+    const sebaran = sebaranDariTargetNormal(normal, marginBulan, pembulatan);
     if (sebaran === null) break;
 
     hasil.push({ period, target: sebaran, dariRealisasi: nilaiSebelumnya === null, c });

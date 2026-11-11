@@ -305,9 +305,11 @@ CREATE TABLE "Season" (
 );
 
 -- CreateTable
-CREATE TABLE "ScenarioTarget" (
-    "scenario" TEXT NOT NULL PRIMARY KEY,
-    "margin" REAL NOT NULL,
+CREATE TABLE "MonthMarginTarget" (
+    "month" INTEGER NOT NULL PRIMARY KEY,
+    "pesimis" REAL NOT NULL,
+    "normal" REAL NOT NULL,
+    "optimis" REAL NOT NULL,
     "updatedAt" DATETIME NOT NULL
 );
 

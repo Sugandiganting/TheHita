@@ -5,7 +5,7 @@ import {
   targetBerikutnya, tingkatTercapai,
 } from '../src/lib/target-cash.ts';
 import type { PolaMusim } from '../src/lib/musim.ts';
-import type { TargetMargin } from '../src/lib/target-margin.ts';
+import type { PolaTargetMargin, TargetMargin } from '../src/lib/target-margin.ts';
 import type { Period } from '../src/lib/period.ts';
 import type { Skenario } from '../src/lib/rencana-kas.ts';
 
@@ -19,6 +19,11 @@ const pola: PolaMusim = new Map([
 ]);
 
 const margin: TargetMargin = new Map([['PESIMIS', -10], ['NORMAL', 0], ['OPTIMIS', 10]]);
+
+/** Target yang sama untuk tiap bulan, supaya uji rantai memusat pada musimnya. */
+const polaMargin: PolaTargetMargin = new Map(
+  Array.from({ length: 12 }, (_, i) => [i + 1, margin]),
+);
 
 /* ------------------------------------------------- tingkat yang tercapai */
 
@@ -124,7 +129,7 @@ test('bulan pertama memakai rumus, bulan sesudahnya hanya dikali musim', () => {
     anchor: '2026-10' as Period,
     masukNyata: 400,
     tingkat: { skenario: 'NORMAL', t: 350 },
-    pola, margin, bulan: 2,
+    pola, margin: polaMargin, bulan: 2,
     periode: ['2026-11', '2026-12'] as Period[],
   });
 
@@ -146,7 +151,7 @@ test('rantai berhenti di bulan yang belum bermusim, bukan menebak', () => {
     anchor: '2026-10' as Period,
     masukNyata: 400,
     tingkat: { skenario: 'NORMAL', t: 350 },
-    pola, margin, bulan: 4,
+    pola, margin: polaMargin, bulan: 4,
     periode: ['2026-11', '2026-12', '2027-01'] as Period[],
   });
   assert.equal(r.length, 2, 'Januari belum bermusim di pola uji ini');
@@ -161,4 +166,19 @@ test('tanpa target margin, rantainya tidak menghasilkan apa pun', () => {
     periode: ['2026-11', '2026-12'] as Period[],
   });
   assert.equal(r.length, 0);
+});
+
+test('rantai berhenti di bulan yang target marginnya belum ditetapkan', () => {
+  // Meminjam angka bulan lain akan menghasilkan target yang tampak sah
+  // padahal tidak pernah dipilih siapa pun untuk bulan itu.
+  const hanyaNovember: PolaTargetMargin = new Map([[11, margin]]);
+  const r = rantaiTarget({
+    anchor: '2026-10' as Period,
+    masukNyata: 400,
+    tingkat: { skenario: 'NORMAL', t: 350 },
+    pola, margin: hanyaNovember, bulan: 3,
+    periode: ['2026-11', '2026-12'] as Period[],
+  });
+  assert.equal(r.length, 1, 'Desember targetnya belum ditetapkan');
+  assert.equal(r[0].period, '2026-11');
 });

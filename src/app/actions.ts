@@ -1369,38 +1369,72 @@ function segarkanTarget() {
 }
 
 export async function simpanTargetMargin(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const masuk: { scenario: string; margin: number }[] = [];
+  const month = Number(String(formData.get('month') ?? ''));
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
 
+  const angka: number[] = [];
   for (const sk of SKENARIO_URUT) {
     const mentah = String(formData.get(`margin-${sk}`) ?? '').trim().replace(',', '.');
-    if (mentah === '') return fail(`Target ${NAMA_SKENARIO[sk]} belum diisi. Ketiganya dipakai bersama — satu yang kosong membuat penggolongan bulan tidak bisa dihitung.`);
+    if (mentah === '') {
+      return fail(`Target ${NAMA_SKENARIO[sk]} belum diisi. Ketiganya dipakai bersama — satu yang `
+        + 'kosong membuat penggolongan bulan itu tidak bisa dihitung.');
+    }
     const n = Number(mentah);
     if (!Number.isFinite(n)) return fail(`Target ${NAMA_SKENARIO[sk]} harus berupa angka.`);
-    if (n >= 100) return fail(`Target ${NAMA_SKENARIO[sk]} 100% berarti seluruh uang masuk tersisa tanpa ada yang dibelanjakan. Isi angka di bawah 100.`);
-    masuk.push({ scenario: sk, margin: Math.round(n * 100) / 100 });
+    if (n >= 100) {
+      return fail(`Target ${NAMA_SKENARIO[sk]} 100% berarti seluruh uang masuk tersisa tanpa ada `
+        + 'yang dibelanjakan. Isi angka di bawah 100.');
+    }
+    angka.push(Math.round(n * 100) / 100);
   }
 
   // Urutan yang terbalik hampir selalu salah ketik. Menukarnya diam-diam akan
   // menyembunyikan salah ketik itu sampai angkanya dipakai mengambil keputusan.
-  const [p, n, o] = masuk.map((m) => m.margin);
-  if (!(p < n && n < o)) {
-    return fail(`Ketiganya harus berurut naik: pesimis paling rendah, optimis paling tinggi. `
-      + `Yang terisi sekarang ${p}% / ${n}% / ${o}%.`);
+  const [pesimis, normal, optimis] = angka;
+  if (!(pesimis < normal && normal < optimis)) {
+    return fail('Ketiganya harus berurut naik: pesimis paling rendah, optimis paling tinggi. '
+      + `Yang terisi sekarang ${pesimis}% / ${normal}% / ${optimis}%.`);
   }
 
-  await prisma.$transaction(masuk.map((m) => prisma.scenarioTarget.upsert({
-    where: { scenario: m.scenario },
-    update: { margin: m.margin },
-    create: m,
-  })));
+  const data = { pesimis, normal, optimis };
+  await prisma.monthMarginTarget.upsert({ where: { month }, update: data, create: { month, ...data } });
   segarkanTarget();
-  return ok(`Target margin disimpan: pesimis ${p}%, normal ${n}%, optimis ${o}%.`);
+  return ok(`Target ${NAMA_BULAN[month - 1]} disimpan: ${pesimis}% / ${normal}% / ${optimis}%.`);
 }
 
-export async function hapusTargetMargin(_prev: ActionState, _formData: FormData): Promise<ActionState> {
-  await prisma.scenarioTarget.deleteMany({});
+/**
+ * Menyalin target sebuah bulan ke seluruh bulan lain.
+ *
+ * Tiga puluh enam angka yang diketik satu per satu hampir pasti berakhir
+ * dengan beberapa bulan yang terlewat, dan bulan yang terlewat berhenti
+ * menghasilkan target sama sekali. Yang berbeda tinggal disesuaikan sesudahnya.
+ */
+export async function salinTargetMarginKeSemua(
+  _prev: ActionState, formData: FormData,
+): Promise<ActionState> {
+  const month = Number(String(formData.get('month') ?? ''));
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
+
+  const sumber = await prisma.monthMarginTarget.findUnique({ where: { month } });
+  if (!sumber) return fail(`${NAMA_BULAN[month - 1]} belum punya target untuk disalin.`);
+
+  const data = { pesimis: sumber.pesimis, normal: sumber.normal, optimis: sumber.optimis };
+  await prisma.$transaction(
+    Array.from({ length: 12 }, (_, i) => i + 1).map((m) => prisma.monthMarginTarget.upsert({
+      where: { month: m }, update: data, create: { month: m, ...data },
+    })),
+  );
   segarkanTarget();
-  return ok('Target margin dikosongkan — Rencana Kas kembali berjalan tanpa target.');
+  return ok(`Target ${NAMA_BULAN[month - 1]} disalin ke seluruh dua belas bulan. `
+    + 'Sesuaikan bulan yang memang berbeda.');
+}
+
+export async function hapusTargetMargin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const month = Number(String(formData.get('month') ?? ''));
+  if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
+  await prisma.monthMarginTarget.deleteMany({ where: { month } });
+  segarkanTarget();
+  return ok(`Target ${NAMA_BULAN[month - 1]} dikosongkan — bulan itu kembali tanpa target.`);
 }
 
 export async function simpanNonOperasi(_prev: ActionState, formData: FormData): Promise<ActionState> {

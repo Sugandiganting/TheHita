@@ -36,9 +36,10 @@ import { hitungTren, type Tren } from './tren-masuk';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 import {
-  AKUN_RENOVASI, SKENARIO_URUT, batasBelanjaDariMargin, golonganMargin, marginTercapai,
+  AKUN_RENOVASI, batasBelanjaDariMargin, golonganMargin, marginTercapai,
   targetBerurut, targetLengkap, targetMasukDariMargin,
-  type SkenarioMargin, type TargetMargin,
+  targetBulan,
+  type PolaTargetMargin, type SkenarioMargin, type TargetMargin,
 } from './target-margin';
 import {
   rantaiTarget, tingkatTercapai,
@@ -1235,7 +1236,7 @@ export async function ramalanTargetCash(sebelum: Period, bulan = 12): Promise<Ra
   });
   if (!tingkat) return null;
 
-  const [pola, margin] = await Promise.all([polaMusim(), targetMargin()]);
+  const [pola, margin] = await Promise.all([polaMusim(), targetMarginPola()]);
   const periode: Period[] = [];
   for (let i = 1; i <= bulan; i++) periode.push(addMonths(anchor.period as Period, i));
 
@@ -1254,14 +1255,17 @@ export async function ramalanTargetCash(sebelum: Period, bulan = 12): Promise<Ra
   return { anchor: anchor.period as Period, masukNyata, tingkat, baris };
 }
 
-/** Target margin tiap skenario. Kosong bila belum pernah ditetapkan. */
-export async function targetMargin(): Promise<TargetMargin> {
-  const rows = await prisma.scenarioTarget.findMany();
-  return new Map(
-    rows
-      .filter((r) => (SKENARIO_URUT as readonly string[]).includes(r.scenario))
-      .map((r) => [r.scenario as SkenarioMargin, r.margin]),
-  );
+/** Target margin tiap bulan kalender. Bulan yang belum ditetapkan tidak ada isinya. */
+export async function targetMarginPola(): Promise<PolaTargetMargin> {
+  const rows = await prisma.monthMarginTarget.findMany();
+  return new Map(rows.map((r) => [
+    r.month,
+    new Map([
+      ['PESIMIS', r.pesimis],
+      ['NORMAL', r.normal],
+      ['OPTIMIS', r.optimis],
+    ]) as TargetMargin,
+  ]));
 }
 
 export type RencanaBelanja = {
@@ -1868,7 +1872,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
    * target bulan berikutnya. Satu bulan renovasi akan menarik turun seluruh
    * tahun sesudahnya.
    */
-  const [tm, usulanNonOperasi] = await Promise.all([targetMargin(), usulanBukanOperasi(period)]);
+  const [polaTarget, usulanNonOperasi] = await Promise.all([
+    targetMarginPola(), usulanBukanOperasi(period),
+  ]);
+  const tm = targetBulan(polaTarget, monthOf(period)) ?? new Map();
   const adaTarget = targetLengkap(tm);
 
   const nonOperasi = plan.nonOperatingOutflow ?? usulanNonOperasi;

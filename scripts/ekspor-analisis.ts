@@ -68,7 +68,7 @@ async function main() {
       orderBy: { period: 'asc' },
     }),
     musim: await prisma.season.findMany({ include: { months: true } }),
-    targetMargin: await prisma.scenarioTarget.findMany({ orderBy: { scenario: 'asc' } }),
+    targetMargin: await prisma.monthMarginTarget.findMany({ orderBy: { month: 'asc' } }),
     rencanaBelanja: await prisma.purchase.findMany(),
     kendaraan: await prisma.vehicle.findMany(),
     kewajiban: await prisma.scheduledObligation.findMany({ include: { payments: true } }),

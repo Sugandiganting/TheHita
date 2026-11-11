@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { riwayatMargin, targetMargin } from '@/lib/queries';
+import { polaMusim, riwayatMargin, targetMarginPola } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
 import { formatPercent, formatPeriod, formatRupiah } from '@/lib/format';
-import { golonganMargin, targetLengkap, type SkenarioMargin } from '@/lib/target-margin';
+import { NAMA_BULAN } from '@/lib/musim';
+import { golonganMargin, targetBulan } from '@/lib/target-margin';
 import { NAMA_SKENARIO } from '@/lib/rencana-kas';
-import { TargetMarginForm } from '@/components/target-margin-form';
+import { BarisTargetMargin } from '@/components/target-margin-form';
 import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,17 @@ const LABEL_GOLONGAN: Record<string, string> = {
 /**
  * Target margin tiap skenario.
  *
- * Satu set untuk seluruh tahun, bukan per bulan: perbedaan antar bulan sudah
- * ditangani pola musim di master Musim, dan mengulanginya di sini berarti dua
- * tempat yang harus sepakat tanpa ada yang menjaganya.
+ * Satu baris per bulan kalender. Bulan sepi tidak bisa dituntut margin yang
+ * sama dengan bulan ramai, dan beban yang hanya muncul di bulan tertentu —
+ * THR misalnya — tidak terwakili oleh pola musim, yang mengatur pemasukan.
+ * Musim tiap bulan tetap ditampilkan sebagai konteks supaya angkanya tidak
+ * dipilih sambil menebak bulan itu ramai atau sepi.
  */
 export default async function TargetMarginPage() {
-  const [tm, riwayat] = await Promise.all([targetMargin(), riwayatMargin(currentPeriod())]);
-  const nilai = Object.fromEntries(tm) as Partial<Record<SkenarioMargin, number>>;
-  const lengkap = targetLengkap(tm);
+  const [pola, musim, riwayat] = await Promise.all([
+    targetMarginPola(), polaMusim(), riwayatMargin(currentPeriod()),
+  ]);
+  const jumlahTerisi = [...pola.keys()].length;
 
   const denganOperasi = riwayat.filter((r) => r.marginOperasi !== null);
   const rataKas = riwayat.length > 0
@@ -38,7 +42,7 @@ export default async function TargetMarginPage() {
     <>
       <PageHeader
         title="Target Margin"
-        description="Tiga angka yang menentukan apa artinya pesimis, normal dan optimis — dan dari ketiganya diturunkan target uang masuk, batas belanja, serta golongan tiap bulan."
+        description="Tiga angka tiap bulan yang menentukan apa artinya pesimis, normal dan optimis — dan dari ketiganya diturunkan target uang masuk, batas belanja, serta golongan tiap bulan."
       />
 
       <Alert tone="info" title="Margin operasi, bukan margin kas apa adanya">
@@ -51,13 +55,62 @@ export default async function TargetMarginPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="card-pad">
-            <SectionTitle hint="Ketiganya disimpan sekaligus dan harus berurut naik. Boleh negatif — pesimis memang boleh berarti rugi tipis.">
-              Target tiap skenario
+          <Card className="card-pad min-w-0">
+            <SectionTitle hint="Ketiga skenario satu bulan disimpan sekaligus dan harus berurut naik. Boleh negatif — pesimis memang boleh berarti rugi tipis. Bulan yang kosong tidak menghasilkan target apa pun.">
+              Target tiap bulan
             </SectionTitle>
-            <div className="mt-3">
-              <TargetMarginForm nilai={nilai} />
+
+            {jumlahTerisi === 0 && (
+              <p className="mt-3 text-sm text-slate-600">
+                Isi satu bulan lebih dulu, lalu pakai <strong>Salin ke semua</strong> supaya dua
+                belas bulan terisi sekaligus — yang berbeda tinggal disesuaikan sesudahnya. Tiga
+                puluh enam angka yang diketik satu per satu hampir pasti menyisakan bulan yang
+                terlewat, dan bulan yang terlewat berhenti menghasilkan target sama sekali.
+              </p>
+            )}
+
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead className="border-b border-slate-200">
+                  <tr>
+                    <th className="th">Bulan</th>
+                    <th className="th">Pesimis</th>
+                    <th className="th">Normal</th>
+                    <th className="th">Optimis</th>
+                    <th className="th">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {NAMA_BULAN.map((nama, i) => {
+                    const bulan = i + 1;
+                    const t = pola.get(bulan);
+                    const m = musim.get(bulan);
+                    return (
+                      <BarisTargetMargin
+                        key={bulan}
+                        bulan={bulan}
+                        nama={nama}
+                        musim={m ? `${m.name} ${m.delta >= 0 ? '+' : ''}${m.delta}%` : null}
+                        nilai={t
+                          ? {
+                              pesimis: t.get('PESIMIS')!,
+                              normal: t.get('NORMAL')!,
+                              optimis: t.get('OPTIMIS')!,
+                            }
+                          : null}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              Musim tiap bulan diatur di{' '}
+              <Link href="/musim" className="font-medium text-brand-600 hover:underline">Master Musim</Link>{' '}
+              — ia mengatur naik turunnya pemasukan, bukan marginnya, jadi keduanya memang diisi
+              terpisah.
+            </p>
           </Card>
 
           <Card className="card-pad min-w-0">
@@ -86,7 +139,8 @@ export default async function TargetMarginPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {riwayat.map((r) => {
-                      const g = lengkap ? golonganMargin(r.marginOperasi, tm) : null;
+                      const tb = targetBulan(pola, Number(r.period.slice(5, 7)));
+                      const g = tb ? golonganMargin(r.marginOperasi, tb) : null;
                       return (
                         <tr key={r.period}>
                           <td className="td">{formatPeriod(r.period)}</td>
@@ -169,8 +223,10 @@ export default async function TargetMarginPage() {
               </div>
             </dl>
             <p className="mt-4 text-xs text-slate-500">
-              Selama ketiganya belum lengkap, Rencana Kas berjalan persis seperti sebelum menu ini
-              ada: tidak ada target, tidak ada batas, tidak ada golongan.
+              Bulan yang ketiganya belum lengkap berjalan persis seperti sebelum menu ini ada:
+              tidak ada target, tidak ada batas, tidak ada golongan. Ramalan dua belas bulan juga
+              berhenti di bulan pertama yang belum ditetapkan — meminjam angka bulan lain akan
+              menghasilkan target yang tampak sah padahal tidak pernah dipilih untuk bulan itu.
             </p>
           </Card>
         </div>

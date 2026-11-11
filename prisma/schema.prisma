@@ -573,24 +573,30 @@ model Season {
 }
 
 /// Musim yang berlaku untuk satu bulan kalender, berulang tiap tahun.
-/// Target margin tiap skenario, berlaku untuk seluruh bulan.
+/// Target margin tiap skenario, untuk satu bulan kalender.
+///
+/// Ketiganya disimpan bersama dan tidak boleh kosong sebagian: penggolongan
+/// sebuah bulan memerlukan seluruhnya, dan urutannya harus naik. Kolom yang
+/// boleh kosong akan melahirkan bulan yang separuh tertata, dan golongan yang
+/// dihitung dari pita separuh kosong terbaca sama meyakinkannya dengan
+/// golongan yang benar.
 ///
 /// Satu angka per skenario, bukan pita dua ujung: pita tidak bisa menghasilkan
 /// satu proyeksi tanpa aturan tambahan tentang ujung mana yang dipakai, dan
-/// aturan semacam itu adalah hal yang paling cepat dilupakan orang. Pitanya
-/// tetap berguna sebagai rentang saat memilih angkanya, tetapi yang disimpan
-/// hasil pilihannya.
+/// aturan semacam itu adalah hal yang paling cepat dilupakan orang.
 ///
 /// MARGIN OPERASI, bukan margin kas apa adanya: renovasi, pembelian aset tetap
 /// dan cicilan pokok utang dikeluarkan lebih dulu. Tanpa itu, satu bulan dengan
 /// proyek besar akan tergolong pesimis padahal usahanya berjalan baik — dan
-/// golongan itulah yang nanti menentukan target bulan berikutnya.
-model ScenarioTarget {
-  /// PESIMIS | NORMAL | OPTIMIS
-  scenario String @id
+/// golongan itulah yang menentukan target bulan berikutnya.
+model MonthMarginTarget {
+  /// 1 sampai 12.
+  month   Int   @id
   /// Persen dari uang masuk yang tersisa setelah belanja operasi.
   /// Boleh negatif: pesimis memang boleh berarti rugi tipis.
-  margin   Float
+  pesimis Float
+  normal  Float
+  optimis Float
 
   updatedAt DateTime @updatedAt
 }

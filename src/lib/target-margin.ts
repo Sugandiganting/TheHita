@@ -36,6 +36,22 @@ export type SkenarioMargin = (typeof SKENARIO_URUT)[number];
 /** Target margin tiap skenario, dalam persen. */
 export type TargetMargin = Map<SkenarioMargin, number>;
 
+/**
+ * Target tiap bulan kalender, 1 sampai 12.
+ *
+ * Per bulan dan bukan satu set setahun, karena bulan sepi memang tidak bisa
+ * dituntut margin yang sama dengan bulan ramai — dan beban yang hanya muncul
+ * di bulan tertentu, seperti THR, tidak terwakili oleh pola musim yang
+ * mengatur pemasukan.
+ */
+export type PolaTargetMargin = Map<number, TargetMargin>;
+
+/** Target sebuah bulan kalender; undefined bila bulan itu belum ditetapkan. */
+export function targetBulan(pola: PolaTargetMargin, month: number): TargetMargin | undefined {
+  const t = pola.get(month);
+  return t && targetLengkap(t) ? t : undefined;
+}
+
 const bulat = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /** Margin yang boleh dipakai: angka hingga, dan di bawah 100%. */
