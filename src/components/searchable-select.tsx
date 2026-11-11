@@ -84,6 +84,16 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
+  /*
+   * Teguran untuk isian wajib yang belum dipilih.
+   *
+   * Validasi bawaan browser tidak bisa menampilkan gelembungnya di sini:
+   * yang membawa atribut `required` adalah isian tersembunyi, dan gelembung
+   * tidak bisa ditempelkan pada sesuatu yang tak terlihat. Akibatnya menekan
+   * Simpan tidak melakukan apa-apa dan tidak mengatakan apa-apa — yang
+   * menekannya menyangka aplikasinya rusak. Jadi tegurannya dibuat sendiri.
+   */
+  const [belumDiisi, setBelumDiisi] = useState(false);
   const [rect, setRect] = useState<{ top: number; left: number; width: number; below: boolean } | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -104,6 +114,7 @@ export function SearchableSelect({
     onChange?.(v);
     setOpen(false);
     setQuery('');
+    setBelumDiisi(false);
     triggerRef.current?.focus();
   };
 
@@ -239,6 +250,13 @@ export function SearchableSelect({
           className="sr-only absolute h-0 w-0 opacity-0"
           style={{ position: 'absolute', height: 0, width: 0, opacity: 0, pointerEvents: 'none' }}
           onFocus={() => triggerRef.current?.focus()}
+          onInvalid={(e) => {
+            // Gelembung bawaan dicegah supaya tidak ada dua teguran untuk satu
+            // hal — dan karena yang bawaan memang tidak akan terlihat.
+            e.preventDefault();
+            setBelumDiisi(true);
+            triggerRef.current?.focus();
+          }}
         />
       )}
 
@@ -258,9 +276,9 @@ export function SearchableSelect({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-haspopup="listbox"
-        className={`input flex items-center gap-2 text-left ${invalid ? 'border-red-300' : ''} ${
-          disabled ? '' : 'cursor-pointer hover:border-slate-400'
-        }`}
+        className={`input flex items-center gap-2 text-left ${
+          invalid || belumDiisi ? 'border-red-300' : ''
+        } ${disabled ? '' : 'cursor-pointer hover:border-slate-400'}`}
       >
         <span className={`min-w-0 flex-1 truncate ${current ? '' : 'text-slate-400'}`}>
           {current ? (
@@ -281,6 +299,10 @@ export function SearchableSelect({
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
+
+      {belumDiisi && (
+        <p className="mt-1 text-xs text-red-600">Pilih {noun} dulu.</p>
+      )}
 
       {open &&
         rect &&

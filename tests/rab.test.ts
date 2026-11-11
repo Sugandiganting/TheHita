@@ -120,7 +120,7 @@ test('bulan berikutnya, termasuk lompat tahun', () => {
 
 const barang = (o: Partial<BarisBarangRab>): BarisBarangRab => ({
   lineId: 'l1', itemId: 'i1', itemCode: 'BTN', itemName: 'Beton Instan',
-  satuan: 'SAK', kategori: 'Operasional', subKategori: null,
+  satuan: 'SAK', kategori: 'Operasional', subKategori: 'Engineering',
   accountId: 'a1', accountCode: '6150.01', accountName: 'Biaya Pemeliharaan',
   quantity: 0, unitPrice: 0, anggaran: 0, ...o,
 });

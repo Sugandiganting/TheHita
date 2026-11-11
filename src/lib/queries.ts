@@ -832,7 +832,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     itemName: l.item.name,
     satuan: l.item.unit.code,
     kategori: l.item.category.name,
-    subKategori: l.item.subCategory?.name ?? null,
+    subKategori: l.item.subCategory.name,
     accountId: l.item.accountId,
     accountCode: l.item.account.code,
     accountName: l.item.account.name,

@@ -2095,7 +2095,7 @@ export async function hapusSubKategori(_prev: ActionState, formData: FormData): 
   const id = String(formData.get('id') ?? '');
   const dipakai = await prisma.item.count({ where: { subCategoryId: id } });
   if (dipakai > 0) {
-    return fail(`Sub kategori ini dipakai ${dipakai} barang. Kosongkan sub kategori barang-barang itu dulu.`);
+    return fail(`Sub kategori ini dipakai ${dipakai} barang. Pindahkan barang-barang itu ke sub kategori lain dulu.`);
   }
   await prisma.itemSubCategory.delete({ where: { id } });
   segarkanBarang();
@@ -2165,7 +2165,7 @@ export async function simpanItem(_prev: ActionState, formData: FormData): Promis
     code: String(formData.get('code') ?? ''),
     name: String(formData.get('name') ?? ''),
     categoryId: String(formData.get('categoryId') ?? ''),
-    subCategoryId: String(formData.get('subCategoryId') ?? '').trim() || null,
+    subCategoryId: String(formData.get('subCategoryId') ?? '').trim(),
     unitId: String(formData.get('unitId') ?? ''),
     accountId: String(formData.get('accountId') ?? ''),
   };
@@ -2174,15 +2174,13 @@ export async function simpanItem(_prev: ActionState, formData: FormData): Promis
 
   // Sub kategori milik kategori lain akan lolos pemeriksaan bentuk tetapi
   // menghasilkan barang yang terbaca di dua tempat sekaligus.
-  if (masukan.subCategoryId) {
-    const sub = await prisma.itemSubCategory.findUnique({
-      where: { id: masukan.subCategoryId },
-      select: { categoryId: true, name: true },
-    });
-    if (!sub) return fail('Sub kategori tidak ditemukan.');
-    if (sub.categoryId !== masukan.categoryId) {
-      return fail(`Sub kategori "${sub.name}" milik kategori lain. Pilih sub kategori dari kategori yang sama.`);
-    }
+  const sub = await prisma.itemSubCategory.findUnique({
+    where: { id: masukan.subCategoryId },
+    select: { categoryId: true, name: true },
+  });
+  if (!sub) return fail('Sub kategori tidak ditemukan.');
+  if (sub.categoryId !== masukan.categoryId) {
+    return fail(`Sub kategori "${sub.name}" milik kategori lain. Pilih sub kategori dari kategori yang sama.`);
   }
 
   const code = normalKode(masukan.code);
@@ -2198,7 +2196,7 @@ export async function simpanItem(_prev: ActionState, formData: FormData): Promis
       const kat = await prisma.itemCategory.findUnique({
         where: { id: masukan.categoryId }, select: { name: true },
       });
-      return fail(pesanKembar(kolom, kat?.name ?? 'ini', { code, name }));
+      return fail(pesanKembar(kolom, { kategori: kat?.name ?? 'kategori ini', sub: sub.name }, { code, name }));
     }
     throw e;
   }

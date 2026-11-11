@@ -204,7 +204,7 @@ export type BarangOption = {
   name: string;
   satuan: string;
   kategori: string;
-  subKategori: string | null;
+  subKategori: string;
   accountCode: string;
   accountName: string;
 };
@@ -255,7 +255,10 @@ export function BudgetItemLineForm({
         value: b.id,
         code: b.code,
         label: b.name,
-        group: b.subKategori ? `${b.kategori} › ${b.subKategori}` : b.kategori,
+        // Dikelompokkan per departemen, karena itulah cara penyusun RAB
+        // mencarinya: ia tahu sedang menyusun belanja House Keeping, bukan
+        // sedang mencari satu nama di antara seratus.
+        group: `${b.kategori} › ${b.subKategori}`,
         meta: b.satuan,
       })),
     [items],
@@ -302,6 +305,7 @@ export function BudgetItemLineForm({
           required
           placeholder="— Pilih barang —"
           searchPlaceholder="Ketik kode atau nama barang…"
+          noun="barang"
           showGroup
         />
         {terpilih && (

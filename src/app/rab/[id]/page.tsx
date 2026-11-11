@@ -47,7 +47,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
     name: b.name,
     satuan: b.unit.code,
     kategori: b.category.name,
-    subKategori: b.subCategory?.name ?? null,
+    subKategori: b.subCategory.name,
     accountCode: b.account.code,
     accountName: b.account.name,
   }));
@@ -155,7 +155,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                           <span className="mr-2 font-mono text-xs text-slate-500">{b.itemCode}</span>
                           {b.itemName}
                           <span className="mt-0.5 block text-xs text-slate-500">
-                            {b.subKategori ? `${b.kategori} › ${b.subKategori}` : b.kategori}
+                            {b.kategori} › {b.subKategori}
                           </span>
                         </td>
                         <td className="td">

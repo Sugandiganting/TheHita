@@ -227,7 +227,7 @@ export function HapusSubKategori({ id, kode, dipakai }: { id: string; kode: stri
       id={id}
       aksi={hapusSubKategori}
       tanya={`Hapus sub kategori ${kode}?`}
-      terkunci={dipakai > 0 ? `Dipakai ${dipakai} barang. Kosongkan sub kategori barang-barang itu dulu.` : undefined}
+      terkunci={dipakai > 0 ? `Dipakai ${dipakai} barang. Pindahkan barang-barang itu ke sub kategori lain dulu.` : undefined}
     />
   );
 }
@@ -403,7 +403,7 @@ export type NilaiItem = {
   code: string;
   name: string;
   categoryId: string;
-  subCategoryId: string | null;
+  subCategoryId: string;
   unitId: string;
   accountId: string;
 };
@@ -471,16 +471,7 @@ export function FormItem({
     setSat('');
   }, [state, nilai]);
 
-  /*
-   * Pilihan "tanpa sub kategori" ikut masuk daftar, bukan dibiarkan sebagai
-   * keadaan kosong yang hanya bisa dicapai dengan tidak menyentuh kolomnya.
-   * Begitu seseorang sudah memilih satu sub kategori, tanpa pilihan ini ia
-   * tidak punya cara membatalkannya lagi.
-   */
-  const opsiSub: PickerOption[] = useMemo(
-    () => [{ value: '', code: '—', label: 'Tanpa sub kategori' }, ...opsi(subTersedia)],
-    [subTersedia],
-  );
+  const opsiSub: PickerOption[] = useMemo(() => opsi(subTersedia), [subTersedia]);
 
   return (
     <form action={action} className="space-y-3" key={kunci(state, nilai)}>
@@ -522,13 +513,14 @@ export function FormItem({
         <PilihAtauBuat
           id="it-sub"
           name="subCategoryId"
-          label="Sub kategori"
+          label="Sub kategori (departemen)"
           noun="sub kategori"
           options={opsiSub}
           value={subTerpilih}
           onChange={setSubTerpilih}
+          required
           disabled={!kat}
-          placeholder="— Tanpa sub kategori —"
+          placeholder={kat ? '— Pilih sub kategori —' : '— Pilih kategorinya dulu —'}
           bisaBuat={Boolean(kat)}
           alasanTakBisaBuat="pilih kategorinya dulu"
           buat={async (code, nama) => {
@@ -536,8 +528,8 @@ export function FormItem({
             if (hasil.ok) setSubBaru((d) => [...d, { ...hasil.item, categoryId: kat }]);
             return hasil;
           }}
-          contohKode="CHEM"
-          contohNama="Chemical"
+          contohKode="HK"
+          contohNama="House Keeping"
         />
 
         <PilihAtauBuat
@@ -578,8 +570,9 @@ export function FormItem({
       </div>
 
       <p className="text-xs text-slate-500">
-        Kode dan nama hanya perlu unik di dalam kategorinya — barang yang sama boleh didaftarkan
-        lagi di kategori lain dengan akun COA yang berbeda.
+        Kode dan nama hanya perlu unik di dalam satu kategori dan sub kategori. Jadi satu kode
+        yang dibeli dua departemen didaftarkan dua kali — masing-masing di sub kategorinya
+        sendiri, dengan satuan dan akun COA-nya sendiri.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">

@@ -58,7 +58,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
         id: true, code: true, name: true, active: true,
         categoryId: true, subCategoryId: true, unitId: true, accountId: true,
         category: { select: { code: true, name: true } },
-        subCategory: { select: { code: true } },
+        subCategory: { select: { code: true, name: true } },
         unit: { select: { code: true } },
         account: { select: { code: true, name: true } },
         _count: { select: { budgetLines: true } },
@@ -90,7 +90,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
       )}
 
       <Card className="card-pad">
-        <SectionTitle hint={`${barang.length} barang ditampilkan. Yang sudah pernah masuk RAB tidak bisa dihapus, hanya dinonaktifkan — RAB bulan-bulan lalu tetap bisa menyebut barang yang sudah tidak dibeli lagi.`}>
+        <SectionTitle hint={`${barang.length} barang ditampilkan. Satu kode boleh muncul lebih dari sekali selama departemennya berbeda — itulah cara satu barang dengan dua akun COA didaftarkan. Yang sudah pernah masuk RAB tidak bisa dihapus, hanya dinonaktifkan; RAB bulan-bulan lalu tetap bisa menyebut barang yang sudah tidak dibeli lagi.`}>
           Daftar barang
         </SectionTitle>
 
@@ -113,6 +113,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
                 <th className="th">Kode</th>
                 <th className="th">Nama</th>
                 <th className="th">Kategori</th>
+                <th className="th">Departemen</th>
                 <th className="th">Satuan</th>
                 <th className="th">Akun COA</th>
                 <th className="th">Aksi</th>
@@ -121,7 +122,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
             <tbody className="divide-y divide-slate-100">
               {barang.length === 0 && (
                 <tr>
-                  <td className="td text-slate-500" colSpan={6}>
+                  <td className="td text-slate-500" colSpan={7}>
                     {cari || cariKategori ? 'Tidak ada yang cocok dengan saringan ini.' : 'Belum ada barang.'}
                   </td>
                 </tr>
@@ -133,11 +134,10 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
                     {b.name}
                     {!b.active && <Badge tone="amber">nonaktif</Badge>}
                   </td>
+                  <td className="td text-slate-600">{b.category.code}</td>
                   <td className="td text-slate-600">
-                    {b.category.code}
-                    {b.subCategory && (
-                      <span className="block text-[11px] text-slate-400">{b.subCategory.code}</span>
-                    )}
+                    {b.subCategory.name}
+                    <span className="block font-mono text-[11px] text-slate-400">{b.subCategory.code}</span>
                   </td>
                   <td className="td text-slate-500">{b.unit.code}</td>
                   <td className="td text-slate-600">
@@ -168,7 +168,7 @@ export default async function BarangPage({ searchParams }: { searchParams: Promi
         </div>
 
         <p className="mt-4 text-xs text-slate-500">
-          {kategori.length} kategori · {sub.length} sub kategori · {satuan.length} satuan —
+          {kategori.length} kategori · {sub.length} sub kategori (departemen) · {satuan.length} satuan —
           dikelola di{' '}
           <Link href="/logistik/kategori" className="font-medium text-brand-600 hover:underline">Kategori</Link>,{' '}
           <Link href="/logistik/sub-kategori" className="font-medium text-brand-600 hover:underline">Sub Kategori</Link>, dan{' '}

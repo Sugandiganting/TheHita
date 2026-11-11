@@ -25,6 +25,7 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "impor": "tsx scripts/impor.ts",
     "impor-kas": "tsx scripts/impor-kondisi-kas.ts",
+    "impor-barang": "tsx scripts/impor-barang.ts",
     "impor-riwayat": "tsx scripts/impor-riwayat-kas.ts",
     "pengguna": "node scripts/pengguna.mjs",
     "cadangkan": "node scripts/cadangkan.mjs",

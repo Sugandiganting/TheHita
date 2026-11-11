@@ -4,7 +4,7 @@ import { normalKode, normalNama, periksaItem, pesanKembar, type MasukanItem } fr
 
 const sah: MasukanItem = {
   code: 'CHEM-01', name: 'Chemical Lantai', categoryId: 'kat-opex',
-  subCategoryId: null, unitId: 'sat-liter', accountId: 'akun-hk',
+  subCategoryId: 'sub-hk', unitId: 'sat-liter', accountId: 'akun-hk',
 };
 
 test('kode dirapikan supaya satu barang tidak jadi dua', () => {
@@ -45,21 +45,32 @@ test('kode dengan bentuk yang tidak dikenal ditolak', () => {
   assert.ok(periksaItem({ ...sah, code: 'A'.repeat(33) })?.includes('1–32 karakter'));
 });
 
-test('sub kategori boleh kosong', () => {
-  assert.equal(periksaItem({ ...sah, subCategoryId: null }), null);
+test('sub kategori wajib — di situlah departemen yang menentukan akun bebannya', () => {
+  const pesan = periksaItem({ ...sah, subCategoryId: '' });
+  assert.ok(pesan?.includes('Sub kategori wajib'));
+  // Yang perlu dimengerti bukan cuma bahwa kolomnya wajib, tetapi bahwa satu
+  // kode yang dipakai dua departemen memang didaftarkan dua kali.
+  assert.ok(pesan?.includes('departemen'), 'menyebut alasannya');
+  assert.ok(pesan?.includes('dua kali'), 'menyebut cara mendaftarkan kode yang dipakai dua departemen');
 });
 
 test('nama terlalu panjang ditolak', () => {
   assert.ok(periksaItem({ ...sah, name: 'x'.repeat(121) })?.includes('terlalu panjang'));
 });
 
-test('pesan kembar menyebut kategorinya, dan bahwa kategori lain boleh', () => {
-  const kode = pesanKembar(['categoryId', 'code'], 'Opex', { code: 'CHEM-01', name: 'Chemical' });
-  assert.ok(kode.includes('CHEM-01'));
+test('pesan kembar menyebut kategori dan departemennya, dan bahwa departemen lain boleh', () => {
+  const tempat = { kategori: 'Opex', sub: 'House Keeping' };
+  const kode = pesanKembar(['categoryId', 'subCategoryId', 'code'], tempat, { code: 'HK-012', name: 'Sabun' });
+  assert.ok(kode.includes('HK-012'));
   assert.ok(kode.includes('Opex'));
-  assert.ok(kode.includes('kategori lain'), 'menyebut bahwa pengulangan antar kategori justru diizinkan');
+  assert.ok(kode.includes('House Keeping'), 'kembarnya di departemen mana');
+  assert.ok(
+    kode.includes('sub kategori lain'),
+    'menyebut bahwa pengulangan antar sub kategori justru diizinkan — itu jalan keluarnya',
+  );
 
-  const nama = pesanKembar(['categoryId', 'name'], 'Proyek', { code: 'X', name: 'Semen' });
-  assert.ok(nama.includes('Semen'));
-  assert.ok(nama.includes('Proyek'));
+  const nama = pesanKembar(['categoryId', 'subCategoryId', 'name'], { kategori: 'Opex', sub: 'Laundry' },
+    { code: 'X', name: 'Detergen' });
+  assert.ok(nama.includes('Detergen'));
+  assert.ok(nama.includes('Laundry'));
 });

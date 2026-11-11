@@ -95,7 +95,8 @@ export type BarisBarangRab = {
   itemName: string;
   satuan: string;
   kategori: string;
-  subKategori: string | null;
+  /** Departemen pemakainya. Selalu ada: ia bagian dari jati diri barangnya. */
+  subKategori: string;
   accountId: string;
   accountCode: string;
   accountName: string;

@@ -95,7 +95,7 @@ export function UbahBarangDialog({
       label="Ubah"
       varian="tautan"
       judul={`Ubah ${nilai.code}`}
-      keterangan="Memindahkan barang ke kategori lain dibolehkan selama kode dan namanya belum dipakai di kategori tujuan. Akun COA yang diubah di sini berlaku untuk RAB yang disusun sesudahnya, bukan yang sudah ada."
+      keterangan="Memindahkan barang ke kategori atau sub kategori lain dibolehkan selama kode dan namanya belum dipakai di tujuannya. Akun COA yang diubah di sini berlaku untuk RAB yang disusun sesudahnya, bukan yang sudah ada."
     >
       {(tutup) => (
         <FormItem

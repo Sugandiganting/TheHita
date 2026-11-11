@@ -98,11 +98,11 @@ model Account {
   description      String?
   active           Boolean @default(true)
 
-  parent      Account?          @relation("AccountTree", fields: [parentId], references: [id])
-  children    Account[]         @relation("AccountTree")
-  lines       JournalLine[]
-  costItems   ProjectCostItem[]
-  budgetLines BudgetLine[]
+  parent          Account?          @relation("AccountTree", fields: [parentId], references: [id])
+  children        Account[]         @relation("AccountTree")
+  lines           JournalLine[]
+  costItems       ProjectCostItem[]
+  budgetLines     BudgetLine[]
   spendCategories SpendCategory[]
   items           Item[]
 
@@ -319,14 +319,14 @@ model BudgetLine {
 /// dua kali; RAB Purchasing justru harus boleh, karena beberapa barang bisa
 /// bermuara ke akun yang sama. Dua aturan itu tidak bisa hidup di satu indeks.
 model BudgetItemLine {
-  id       String @id @default(cuid())
-  budgetId String
-  itemId   String
+  id        String  @id @default(cuid())
+  budgetId  String
+  itemId    String
   /// Jumlah yang direncanakan, dalam satuan barangnya.
-  quantity Float  @default(0)
+  quantity  Float   @default(0)
   /// Harga satuan yang diperkirakan.
-  unitPrice Float @default(0)
-  notes    String?
+  unitPrice Float   @default(0)
+  notes     String?
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   item   Item   @relation(fields: [itemId], references: [id])
@@ -400,7 +400,9 @@ model Item {
   code          String
   name          String
   categoryId    String
-  subCategoryId String?
+  /// Departemen pemakainya. Wajib, karena departemenlah yang menentukan akun
+  /// beban sebuah barang — lihat catatan keunikan di bawah.
+  subCategoryId String
   unitId        String
   /// Akun beban atau aset yang dikenai pembelian barang ini.
   accountId     String
@@ -408,7 +410,7 @@ model Item {
   active        Boolean @default(true)
 
   category    ItemCategory     @relation(fields: [categoryId], references: [id])
-  subCategory ItemSubCategory? @relation(fields: [subCategoryId], references: [id])
+  subCategory ItemSubCategory  @relation(fields: [subCategoryId], references: [id])
   unit        ItemUnit         @relation(fields: [unitId], references: [id])
   account     Account          @relation(fields: [accountId], references: [id])
   budgetLines BudgetItemLine[]
@@ -416,12 +418,20 @@ model Item {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Kode dan nama unik DI DALAM kategori, bukan menyeluruh. Keduanya dijaga:
-  // kode kembar membuat rekap salah jumlah, nama kembar membuat penyusun RAB
-  // memilih barang yang keliru tanpa ada yang terlihat salah.
-  @@unique([categoryId, code])
-  @@unique([categoryId, name])
+  // Kode dan nama unik di dalam SATU KATEGORI DAN SATU SUB KATEGORI, bukan
+  // menyeluruh. Sub kategori ikut jadi kunci karena barang yang sama memang
+  // dipakai oleh departemen yang berbeda dengan akun beban yang berbeda:
+  // "Sabun Cuci Piring" HK-012 masuk Biaya Cleaning & Supplies di House
+  // Keeping, tetapi Biaya Supplies & Packaging di IGYT, dan satuannya pun
+  // beda (Dr dan Pack). Keduanya barang tersendiri, cuma namanya sama.
+  //
+  // Kode dan nama dua-duanya dijaga: kode kembar membuat rekap salah jumlah,
+  // nama kembar membuat penyusun RAB memilih barang yang keliru tanpa ada
+  // yang terlihat salah.
+  @@unique([categoryId, subCategoryId, code])
+  @@unique([categoryId, subCategoryId, name])
   @@index([categoryId])
+  @@index([subCategoryId])
   @@index([accountId])
 }
 
@@ -445,7 +455,7 @@ model CashPlan {
 
   /// Total uang keluar sebulan bila pola belanja tidak berubah — dipakai
   /// untuk meramalkan kapan kas habis, bukan untuk menghitung plafon.
-  monthlyOutflow Float?
+  monthlyOutflow      Float?
   /// Uang keluar bulan ini yang bukan biaya operasi: renovasi, pembelian aset
   /// tetap, dan cicilan pokok utang. Dikeluarkan lebih dulu sebelum margin
   /// dihitung, supaya bulan yang kebetulan berproyek besar tidak terbaca
@@ -453,7 +463,7 @@ model CashPlan {
   /// memang biaya. null = pakai usulan dari jurnal.
   nonOperatingOutflow Float?
   /// Kebutuhan gaji sebulan; menandai bulan yang saldonya tidak lagi menutupinya.
-  salaryNeed     Float?
+  salaryNeed          Float?
 
   notes String?
 
@@ -506,17 +516,17 @@ model CashCheckpoint {
 
 /// Pembagian plafon belanja mingguan, mis. Purchasing dan petty cash.
 model SpendCategory {
-  id     String @id @default(cuid())
-  planId String
-  label  String
+  id            String  @id @default(cuid())
+  planId        String
+  label         String
   /// Jatah sebulan dalam rupiah, diketik dari RAB departemen masing-masing.
   /// null berarti belum ditetapkan — jatahnya masih dibagi menurut weight.
-  budget Float?
+  budget        Float?
   /// Porsi relatif, dipakai hanya untuk kategori yang budget-nya belum diisi.
   /// Ditinggalkan, bukan dihapus: membuangnya berarti membuang data kategori
   /// lama yang belum sempat diberi jatah sendiri.
-  weight Float  @default(1)
-  sort   Int    @default(0)
+  weight        Float   @default(1)
+  sort          Int     @default(0)
   /// Akun kas departemen ini. Bila diisi, uang yang ditransfer ke akun itu
   /// dihitung sebagai terpakai — uang yang sudah diserahkan ke departemen
   /// dianggap habis, dan memang begitu cara pembukuan ini berjalan: saldo kas
