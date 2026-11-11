@@ -28,6 +28,20 @@ function Pesan({ state }: { state: ActionState }) {
   );
 }
 
+/**
+ * Apa yang sebenarnya dilakukan "Sahkan RAB".
+ *
+ * Ditulis di layar, bukan hanya diketahui yang membuatnya. Tombol yang tidak
+ * mengatakan akibatnya akan ditekan sambil menebak — dan yang ditebak di sini
+ * adalah apakah anggaran yang sudah disepakati masih bisa berubah.
+ */
+const ARTI_STATUS = {
+  DRAFT: 'Masih draf, jadi barisnya masih bisa ditambah, diubah dan dihapus. '
+    + 'Menyahkannya menguncinya — bisa dibuka lagi kapan saja lewat tombol yang sama.',
+  ACTIVE: 'Sudah disahkan, jadi terkunci: barisnya tidak bisa ditambah, diubah atau dihapus. '
+    + 'Kembalikan ke draf dulu bila ada yang perlu dikoreksi.',
+} as const;
+
 /** Sahkan / kembalikan ke draf, salin ke bulan berikutnya, hapus. */
 export function BudgetActions({
   id, status, lineCount,
@@ -85,6 +99,8 @@ export function BudgetActions({
         )}
       </div>
 
+      <p className="text-xs text-slate-500">{draf ? ARTI_STATUS.DRAFT : ARTI_STATUS.ACTIVE}</p>
+
       <Pesan state={statusState} />
       <Pesan state={salinState} />
       <Pesan state={hapusState} />
@@ -105,7 +121,24 @@ function HapusBaris({
   const [state, action] = useActionState(server, initial);
   const [konfirmasi, setKonfirmasi] = useState(false);
 
-  if (disabled) return <span className="text-xs text-slate-400">—</span>;
+  /*
+   * Saat RAB terkunci tombolnya tetap tampak, hanya redup dan tidak bisa
+   * ditekan — sama seperti Ubah di sebelahnya. Menggantinya dengan "—"
+   * membuat satu sel memuat dua perlakuan berbeda untuk satu sebab yang
+   * sama, dan "—" sendiri tidak mengatakan kenapa.
+   */
+  if (disabled) {
+    return (
+      <button
+        type="button"
+        disabled
+        title="RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya."
+        className="text-xs font-medium text-red-600 disabled:text-slate-400 disabled:no-underline"
+      >
+        Hapus
+      </button>
+    );
+  }
 
   if (!konfirmasi) {
     return (
