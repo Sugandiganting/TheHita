@@ -841,8 +841,16 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </Card>
               )}
 
-              {rencana.kategori.length > 0 && (
-                <Card className="card-pad min-w-0">
+              {/*
+                * Kartu ini muncul walau belum ada satu kategori pun.
+                *
+                * Dulu ia hanya muncul begitu kategorinya ada — padahal di
+                * dalamnya justru terletak satu-satunya formulir untuk
+                * menambah kategori. Bulan yang belum punya kategori karena
+                * itu menampilkan "Tambahkan kategori terlebih dahulu" di
+                * panel belanja, tanpa menyediakan tempat untuk melakukannya.
+                */}
+              <Card className="card-pad min-w-0" id="kategori">
                   <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Sudah dipakai: untuk kategori yang ditautkan ke kas departemen, dijumlahkan sendiri dari transfer ke rekening itu sepanjang bulan — uang yang sudah diserahkan dianggap habis. Laporan belanja manual tetap ikut dijumlahkan, jadi jangan mencatat hal yang sama dua kali. Sisa adalah jatah dikurangi yang sudah dipakai.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
@@ -866,6 +874,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
+                        {rencana.kategori.length === 0 && (
+                          <tr>
+                            <td className="td text-slate-500" colSpan={6}>
+                              Belum ada kategori. Tambahkan di bawah — biasanya Purchasing, HR dan
+                              Bank Perusahaan, satu untuk tiap kantong uang yang dipegang terpisah.
+                            </td>
+                          </tr>
+                        )}
                         {rencana.kategori.map((k, i) => {
                           const sumber = data.kategori[i];
                           const sisa = k.sisa;
@@ -988,7 +1004,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <CategoryForm planId={data.id} />
                   </div>
                 </Card>
-              )}
             </>
           )}
 

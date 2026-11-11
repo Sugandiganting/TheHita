@@ -22,8 +22,15 @@ export function PageHeader({
   );
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`card ${className}`}>{children}</div>;
+export function Card({
+  children, className = '', id,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Supaya tautan di tempat lain bisa menunjuk langsung ke kartu ini. */
+  id?: string;
+}) {
+  return <div id={id} className={`card ${className}`}>{children}</div>;
 }
 
 export function SectionTitle({ children, hint }: { children: ReactNode; hint?: string }) {

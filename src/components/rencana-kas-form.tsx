@@ -459,7 +459,18 @@ export function SpendForm({
   const [mode, setMode] = useState<'TAMBAH' | 'SETEL'>('TAMBAH');
 
   if (kategori.length === 0) {
-    return <p className="text-sm text-slate-500">Tambahkan kategori terlebih dahulu.</p>;
+    // Menyebut tempatnya, bukan hanya syaratnya. Formulirnya ada di kartu lain
+    // yang letaknya jauh di halaman yang sama, dan tanpa tautan ini orang
+    // membaca "tambahkan kategori" lalu tidak menemukan di mana.
+    return (
+      <p className="text-sm text-slate-500">
+        Bulan ini belum punya kategori belanja. Tambahkan dulu di{' '}
+        <a href="#kategori" className="font-medium text-brand-600 hover:underline">
+          Plafon dan realisasi per kategori
+        </a>{' '}
+        — biasanya Purchasing, HR dan Bank Perusahaan.
+      </p>
+    );
   }
 
   return (
