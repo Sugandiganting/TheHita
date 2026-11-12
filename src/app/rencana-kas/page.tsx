@@ -1360,7 +1360,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               */}
             {data.usulanRumus && (
               <Card className="card-pad min-w-0">
-                <SectionTitle hint="Separuh kelebihan bulan terakhir yang realisasinya lengkap dibawa ke bulan berikutnya, lalu dikali musim. Separuh, bukan seluruhnya, karena satu bulan ramai belum tentu berulang.">
+                <SectionTitle hint="Dasarnya uang masuk NYATA bulan terakhir yang laporannya lengkap, ditambah separuh kelebihannya di atas target, lalu dikali musim. Target hanya dipakai mengukur berapa kelebihannya, bukan sebagai dasar. Separuh, bukan seluruhnya, karena satu bulan ramai belum tentu berulang.">
                   Asal target bulan ini
                 </SectionTitle>
 
@@ -1401,6 +1401,30 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                             : '—'}
                         </dd>
                       </div>
+                      {/*
+                        * Baris yang dikalikan musim, disebut tersendiri.
+                        *
+                        * Tanpa ini kartunya melompat dari "separuh kelebihan"
+                        * langsung ke "×musim", dan pembacanya harus menebak
+                        * apa yang dikali. Tebakan yang paling masuk akal —
+                        * menjumlahkan dua baris yang bersebelahan, target
+                        * ditambah separuh kelebihan — justru yang keliru:
+                        * dasarnya uang masuk nyata, dan target hanya dipakai
+                        * mengukur berapa kelebihannya.
+                        */}
+                      {data.usulanRumus.masukNyata > data.usulanRumus.t && (
+                        <div className="flex justify-between px-3 py-2">
+                          <dt className="text-slate-600">
+                            Uang masuk nyata + separuh kelebihannya
+                          </dt>
+                          <dd className="font-medium tabular-nums">
+                            {formatRupiah(
+                              data.usulanRumus.masukNyata
+                              + (data.usulanRumus.masukNyata - data.usulanRumus.t) / 2,
+                            )}
+                          </dd>
+                        </div>
+                      )}
                       <div className="flex justify-between px-3 py-2">
                         <dt className="text-slate-600">
                           Pengali musim terhadap {formatPeriod(data.usulanRumus.anchor)}
