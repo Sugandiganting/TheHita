@@ -224,6 +224,7 @@ CREATE TABLE "SpendCategory" (
     "weight" REAL NOT NULL DEFAULT 1,
     "sort" INTEGER NOT NULL DEFAULT 0,
     "cashAccountId" TEXT,
+    "rabKind" TEXT,
     CONSTRAINT "SpendCategory_planId_fkey" FOREIGN KEY ("planId") REFERENCES "CashPlan" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "SpendCategory_cashAccountId_fkey" FOREIGN KEY ("cashAccountId") REFERENCES "Account" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );

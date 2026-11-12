@@ -536,6 +536,16 @@ model SpendCategory {
   /// diketik manual — seperti pembayaran langsung dari rekening bank, yang
   /// memang bukan perpindahan ke kas departemen.
   cashAccountId String?
+  /// Jenis RAB yang menjadi sumber jatah kategori ini: PURCHASING atau UMUM.
+  /// Bila diisi dan `budget` kosong, jatahnya diambil dari jumlah seluruh RAB
+  /// jenis itu pada bulan yang sama — seluruh cabang sekaligus, karena rencana
+  /// kas ini satu untuk segrup dan kantong uangnya pun satu.
+  ///
+  /// Tautannya disebut terang-terangan, bukan ditebak dari nama kategorinya.
+  /// Nama berubah ("Purchasing" jadi "Purchasing & Logistik") tanpa siapa pun
+  /// merasa sedang memutuskan apa-apa, dan jatah yang diam-diam berhenti
+  /// mengikuti RAB tidak menampakkan diri sampai uangnya kurang.
+  rabKind       String?
 
   plan        CashPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
   spends      SpendEntry[]

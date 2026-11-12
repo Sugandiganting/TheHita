@@ -9,6 +9,7 @@ import { COA_TEMPLATE } from '@/lib/coa-template';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import { JENIS_RAB_LABEL, jenisRabSah, periodeBerikutnya, type JenisRab } from '@/lib/rab';
+import { formatRupiahShort } from '@/lib/format';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { SKENARIO_URUT } from '@/lib/target-margin';
@@ -1198,18 +1199,44 @@ export async function saveCategory(_prev: ActionState, formData: FormData): Prom
   return ok('Kategori ditambahkan.');
 }
 
+/**
+ * Mengubah jatah sebuah kategori — atau mengosongkannya.
+ *
+ * Dikosongkan berarti "jangan pakai angka ketikan", dan apa yang menggantikan
+ * tergantung kategorinya: jumlah RAB bulan itu bila ia ditautkan ke RAB, atau
+ * pembagian menurut porsi bila tidak. Dulu kosong selalu ditolak, sehingga
+ * kategori yang pernah sekali diketik tidak punya jalan kembali — dan tautan
+ * ke RAB yang baru dipasang tidak akan pernah berlaku atasnya.
+ */
 export async function updateCategoryBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const budget = angkaAtauNull(formData, 'budget');
 
-  if (budget === null) return fail('Jatah wajib diisi.');
-  if (budget < 0) return fail('Jatah tidak boleh negatif.');
-  const ada = await prisma.spendCategory.findUnique({ where: { id }, select: { label: true } });
+  if (budget !== null && budget < 0) return fail('Jatah tidak boleh negatif.');
+  const ada = await prisma.spendCategory.findUnique({
+    where: { id },
+    select: { label: true, rabKind: true, plan: { select: { period: true } } },
+  });
   if (!ada) return fail('Kategori tidak ditemukan.');
 
   await prisma.spendCategory.update({ where: { id }, data: { budget } });
   segarkanRencanaKas();
-  return ok(`Jatah ${ada.label} diubah.`);
+
+  if (budget !== null) return ok(`Jatah ${ada.label} diubah.`);
+  if (!ada.rabKind) {
+    return ok(`Jatah ${ada.label} dikosongkan, jadi kembali dibagi menurut porsinya.`);
+  }
+  const rab = await prisma.budget.findMany({
+    where: { period: ada.plan.period, kind: ada.rabKind },
+    select: { lines: { select: { amount: true } }, itemLines: { select: { quantity: true, unitPrice: true } } },
+  });
+  const jumlah = rab.reduce((t, b) => t
+    + b.itemLines.reduce((n, l) => n + l.quantity * l.unitPrice, 0)
+    + b.lines.reduce((n, l) => n + l.amount, 0), 0);
+  const nama = JENIS_RAB_LABEL[ada.rabKind as JenisRab];
+  return ok(rab.length === 0
+    ? `Jatah ${ada.label} dikosongkan. Begitu RAB ${nama} bulan ini dibuat, jatahnya mengikuti.`
+    : `Jatah ${ada.label} kini mengikuti RAB ${nama}: ${formatRupiahShort(jumlah)} dari ${rab.length} RAB.`);
 }
 
 /**
@@ -1246,6 +1273,54 @@ export async function updateCategoryAccount(_prev: ActionState, formData: FormDa
   await prisma.spendCategory.update({ where: { id }, data: { cashAccountId: null } });
   segarkanRencanaKas();
   return ok(`Tautan rekening ${ada.label} dilepas. Terpakai kembali diketik manual.`);
+}
+
+/**
+ * Menautkan jatah sebuah kategori ke RAB bulan yang sama.
+ *
+ * Yang ditaut adalah JENIS RAB-nya, bukan satu RAB tertentu: rencana kas ini
+ * satu untuk segrup, jadi yang dipakai jumlah seluruh cabang. Selama jatahnya
+ * sudah pernah diketik, tautan ini belum mengubah apa pun — yang diketik
+ * selalu menang, dan kosongkan jatahnya bila RAB yang hendak dipakai.
+ */
+export async function updateCategoryRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const rabKind = String(formData.get('rabKind') ?? '').trim() || null;
+
+  const ada = await prisma.spendCategory.findUnique({
+    where: { id },
+    select: { label: true, budget: true, plan: { select: { period: true } } },
+  });
+  if (!ada) return fail('Kategori tidak ditemukan.');
+
+  if (rabKind === null) {
+    await prisma.spendCategory.update({ where: { id }, data: { rabKind: null } });
+    segarkanRencanaKas();
+    return ok(`Tautan RAB ${ada.label} dilepas. Jatahnya kembali diketik sendiri.`);
+  }
+  if (!jenisRabSah(rabKind)) return fail('Jenis RAB tidak dikenal.');
+
+  const rab = await prisma.budget.findMany({
+    where: { period: ada.plan.period, kind: rabKind },
+    select: { lines: { select: { amount: true } }, itemLines: { select: { quantity: true, unitPrice: true } } },
+  });
+  const jumlah = rab.reduce((t, b) => t
+    + b.itemLines.reduce((n, l) => n + l.quantity * l.unitPrice, 0)
+    + b.lines.reduce((n, l) => n + l.amount, 0), 0);
+
+  await prisma.spendCategory.update({ where: { id }, data: { rabKind } });
+  segarkanRencanaKas();
+
+  const nama = JENIS_RAB_LABEL[rabKind as JenisRab];
+  if (rab.length === 0) {
+    return ok(`${ada.label} ditautkan ke RAB ${nama}, tetapi bulan ${ada.plan.period} belum punya RAB jenis itu. `
+      + 'Jatahnya ikut begitu RAB-nya dibuat.');
+  }
+  if (ada.budget !== null) {
+    return ok(`${ada.label} ditautkan ke RAB ${nama} (${rab.length} RAB, ${formatRupiahShort(jumlah)}). `
+      + 'Jatah yang sudah diketik masih dipakai — kosongkan bila hendak memakai angka RAB.');
+  }
+  return ok(`${ada.label} memakai jumlah RAB ${nama} bulan ini: ${formatRupiahShort(jumlah)} dari ${rab.length} RAB.`);
 }
 
 export async function deleteCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {

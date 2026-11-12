@@ -6,6 +6,7 @@ import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
   deleteSpend, saveAssumptions, saveCashProjection, saveCategory, saveCheckpoint,
   saveCommitment, saveSpend, toggleCommitmentPaid, updateCategoryAccount, updateCategoryBudget,
+  updateCategoryRab,
   type ActionState,
 } from '@/app/actions';
 import { formatPeriod, formatRupiah } from '@/lib/format';
@@ -365,6 +366,47 @@ export function CategoryAccount({
       </select>
       {!state.ok && state.message && (
         <span className="mt-0.5 block text-[11px] text-red-600">{state.message}</span>
+      )}
+    </form>
+  );
+}
+
+/**
+ * Menautkan jatah kategori ke RAB bulan yang sama.
+ *
+ * Disebut terang-terangan di barisnya, bukan ditebak dari nama kategorinya,
+ * supaya yang membacanya tahu angka di sebelahnya datang dari mana — dan tahu
+ * bahwa ia akan ikut berubah saat RAB-nya diubah.
+ */
+export function CategoryRab({
+  id, rabKind, jenis,
+}: {
+  id: string;
+  rabKind: string | null;
+  jenis: { nilai: string; label: string }[];
+}) {
+  const [state, action] = useActionState(updateCategoryRab, initial);
+  const form = useRef<HTMLFormElement>(null);
+
+  return (
+    <form action={action} ref={form} className="mt-0.5">
+      <input type="hidden" name="id" value={id} />
+      <select
+        name="rabKind"
+        defaultValue={rabKind ?? ''}
+        aria-label="Sumber jatah"
+        onChange={() => form.current?.requestSubmit()}
+        className="w-full max-w-[13rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      >
+        <option value="">jatah — diketik sendiri</option>
+        {jenis.map((j) => (
+          <option key={j.nilai} value={j.nilai}>jatah — dari RAB {j.label}</option>
+        ))}
+      </select>
+      {state.message && (
+        <span className={`mt-0.5 block text-[11px] ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>
+          {state.message}
+        </span>
       )}
     </form>
   );

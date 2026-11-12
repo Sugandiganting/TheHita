@@ -961,6 +961,13 @@ export type RencanaKasDetail = {
      */
     cashAccountId: string | null;
     cashAccountLabel: string | null;
+    /** Jenis RAB yang jadi sumber jatahnya: PURCHASING, UMUM, atau null. */
+    rabKind: string | null;
+    /**
+     * Jumlah seluruh RAB jenis itu pada bulan ini, seluruh cabang. null bila
+     * kategorinya tidak ditautkan ke RAB, atau bulan itu belum punya RAB-nya.
+     */
+    usulanRab: number | null;
     /** Bagian yang dicatat manual lewat Catat belanja. */
     manual: number;
     /** Bagian yang berasal dari transfer ke kas departemen, sebulan penuh. */
@@ -1673,11 +1680,38 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const transferKategori = (accountId: string | null, hanyaSetelahPosisi: boolean) =>
     round(terpakaiDariTransfer(barisTransfer, accountId, { batasPosisi: batas, hanyaSetelahPosisi }));
 
+  /*
+   * Jumlah RAB tiap jenis pada bulan ini, seluruh cabang sekaligus.
+   *
+   * Dijumlahkan lintas cabang karena rencana kas ini satu untuk segrup, dan
+   * kantong uang yang membiayainya pun satu — Petty Cash Purchasing bukan
+   * milik satu cabang. Status draf maupun yang sudah disahkan sama-sama ikut:
+   * yang menentukan berapa uang harus disiapkan adalah rencananya, bukan
+   * sudah atau belum ditandatangani.
+   */
+  const rabBulanIni = await prisma.budget.findMany({
+    where: { period },
+    select: {
+      kind: true,
+      lines: { select: { amount: true } },
+      itemLines: { select: { quantity: true, unitPrice: true } },
+    },
+  });
+  const jumlahRab = new Map<string, number>();
+  for (const b of rabBulanIni) {
+    const nilai = b.kind === 'PURCHASING'
+      ? b.itemLines.reduce((t, l) => t + nilaiBarisBarang(l, round), 0)
+      : b.lines.reduce((t, l) => t + l.amount, 0);
+    jumlahRab.set(b.kind, (jumlahRab.get(b.kind) ?? 0) + nilai);
+  }
+
   const kategori = plan.categories.map((k) => ({
     id: k.id,
     label: k.label,
     weight: k.weight,
     budget: k.budget,
+    rabKind: k.rabKind,
+    usulanRab: k.rabKind ? round(jumlahRab.get(k.rabKind) ?? 0) || null : null,
     cashAccountId: k.cashAccountId,
     cashAccountLabel: k.cashAccount ? `${k.cashAccount.code} ${k.cashAccount.name}` : null,
     manual: terpakaiKategori(k.id, false),
@@ -1789,7 +1823,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         kategori: kategori.map((k) => ({
           label: k.label,
           weight: k.weight,
-          jatah: k.budget,
+          // Yang diketik selalu menang. Tautan ke RAB hanya mengisi yang
+          // dibiarkan kosong — sama seperti tiap usulan lain di aplikasi ini.
+          jatah: k.budget ?? k.usulanRab,
           terpakai: k.terpakai,
           terpakaiBulanIni: k.terpakaiBulanIni,
         })),

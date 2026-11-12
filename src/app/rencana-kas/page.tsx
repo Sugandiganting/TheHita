@@ -14,10 +14,11 @@ import { BulananChart } from '@/components/bulanan-chart';
 import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import { NonOperasiForm } from '@/components/non-operasi-form';
+import { JENIS_RAB, JENIS_RAB_LABEL, type JenisRab } from '@/lib/rab';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryAccount, CategoryBudget, CategoryDelete, CategoryForm, CheckpointDelete,
-  CheckpointForm,
+  AssumptionForm, CategoryAccount, CategoryBudget, CategoryDelete, CategoryForm, CategoryRab,
+  CheckpointDelete, CheckpointForm,
   CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
 import { JadwalTersimpan, PurchaseActions, PurchaseCalculator } from '@/components/belanja-form';
@@ -890,17 +891,40 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                               <td className="td">
                                 {k.label}
                                 {sumber && (
-                                  <CategoryAccount
-                                    id={sumber.id}
-                                    cashAccountId={sumber.cashAccountId}
-                                    akun={akunKas}
-                                  />
+                                  <>
+                                    <CategoryAccount
+                                      id={sumber.id}
+                                      cashAccountId={sumber.cashAccountId}
+                                      akun={akunKas}
+                                    />
+                                    <CategoryRab
+                                      id={sumber.id}
+                                      rabKind={sumber.rabKind}
+                                      jenis={JENIS_RAB.map((j) => ({ nilai: j, label: JENIS_RAB_LABEL[j] }))}
+                                    />
+                                  </>
                                 )}
                               </td>
                               <td className="td num">
                                 {sumber
                                   ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
                                   : formatRupiah(k.jatah)}
+                                {/* Asal angkanya disebut, karena jatah yang ikut
+                                    RAB akan berubah sendiri saat RAB-nya diubah —
+                                    dan itu harus terduga, bukan mengejutkan. */}
+                                {sumber?.rabKind && sumber.budget === null && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-brand-700">
+                                    dari RAB {JENIS_RAB_LABEL[sumber.rabKind as JenisRab]}
+                                    {sumber.usulanRab === null && ' — bulan ini belum ada'}
+                                  </span>
+                                )}
+                                {sumber?.rabKind && sumber.budget !== null && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    diketik sendiri
+                                    {sumber.usulanRab !== null
+                                      && `; RAB ${JENIS_RAB_LABEL[sumber.rabKind as JenisRab]} ${formatRupiahShort(sumber.usulanRab)}`}
+                                  </span>
+                                )}
                                 {!k.ditetapkan && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
                                     belum disimpan
