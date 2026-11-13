@@ -953,6 +953,95 @@ export async function saveBudgetItemLine(_prev: ActionState, formData: FormData)
   return ok(`Anggaran ${item.name} disimpan.`);
 }
 
+/**
+ * Mencatat realisasi satu baris RAB Purchasing.
+ *
+ * Hanya boleh pada RAB yang SUDAH DISAHKAN, dan itu disengaja: realisasi
+ * dibandingkan dengan rencana, jadi rencananya harus berhenti bergerak lebih
+ * dulu. RAB yang masih draf belum menjanjikan apa-apa untuk dibandingkan.
+ *
+ * Kosong berarti "belum dilaporkan" dan mengembalikan baris ini ke keadaan
+ * semula — berbeda dari nol, yang berarti sudah diputuskan tidak jadi dibeli.
+ */
+export async function simpanRealisasiBarang(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const quantity = angkaAtauNull(formData, 'realQuantity');
+  const unitPrice = angkaAtauNull(formData, 'realUnitPrice');
+  const tanggal = String(formData.get('realDate') ?? '').trim();
+  const selesai = String(formData.get('realDone') ?? '') === 'true';
+  const catatan = String(formData.get('realNotes') ?? '').trim();
+
+  const line = await prisma.budgetItemLine.findUnique({
+    where: { id },
+    include: { budget: { select: { status: true } }, item: { select: { name: true, unit: { select: { code: true } } } } },
+  });
+  if (!line) return fail('Baris barang tidak ditemukan.');
+  if (line.budget.status !== 'ACTIVE') {
+    return fail('RAB ini belum disahkan. Realisasi dicatat setelah rencananya berhenti bergerak, '
+      + 'supaya ada yang bisa dibandingkan.');
+  }
+  if ((quantity ?? 0) < 0 || (unitPrice ?? 0) < 0) return fail('Realisasi tidak boleh negatif.');
+  // Separuh keterangan bukan angka: tanpa keduanya, nilainya tidak bisa dihitung.
+  if ((quantity === null) !== (unitPrice === null)) {
+    return fail('Isi jumlah dan harga satuannya sekaligus, atau kosongkan dua-duanya.');
+  }
+  if (selesai && quantity === null) {
+    return fail('Tandai selesai hanya bila jumlahnya sudah diisi — isi 0 bila barangnya tidak jadi dibeli.');
+  }
+
+  await prisma.budgetItemLine.update({
+    where: { id },
+    data: {
+      realQuantity: quantity,
+      realUnitPrice: unitPrice,
+      realDate: tanggal ? new Date(`${tanggal}T00:00:00.000Z`) : null,
+      realDone: selesai,
+      realNotes: catatan || null,
+    },
+  });
+  segarkanRab();
+  if (quantity === null) return ok(`Realisasi ${line.item.name} dikosongkan.`);
+  return ok(`Realisasi ${line.item.name}: ${quantity} ${line.item.unit.code} `
+    + `${selesai ? '— selesai' : '— masih berjalan'}.`);
+}
+
+/** Mencatat realisasi satu baris RAB per akun. Aturannya sama dengan per barang. */
+export async function simpanRealisasiAkun(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const amount = angkaAtauNull(formData, 'realAmount');
+  const tanggal = String(formData.get('realDate') ?? '').trim();
+  const selesai = String(formData.get('realDone') ?? '') === 'true';
+  const catatan = String(formData.get('realNotes') ?? '').trim();
+
+  const line = await prisma.budgetLine.findUnique({
+    where: { id },
+    include: { budget: { select: { status: true } }, account: { select: { code: true, name: true } } },
+  });
+  if (!line) return fail('Baris anggaran tidak ditemukan.');
+  if (line.budget.status !== 'ACTIVE') {
+    return fail('RAB ini belum disahkan. Realisasi dicatat setelah rencananya berhenti bergerak, '
+      + 'supaya ada yang bisa dibandingkan.');
+  }
+  if ((amount ?? 0) < 0) return fail('Realisasi tidak boleh negatif.');
+  if (selesai && amount === null) {
+    return fail('Tandai selesai hanya bila nominalnya sudah diisi — isi 0 bila tidak jadi keluar.');
+  }
+
+  await prisma.budgetLine.update({
+    where: { id },
+    data: {
+      realAmount: amount,
+      realDate: tanggal ? new Date(`${tanggal}T00:00:00.000Z`) : null,
+      realDone: selesai,
+      realNotes: catatan || null,
+    },
+  });
+  segarkanRab();
+  if (amount === null) return ok(`Realisasi ${line.account.name} dikosongkan.`);
+  return ok(`Realisasi ${line.account.code} ${line.account.name} tercatat`
+    + `${selesai ? ' dan ditandai selesai' : ', masih berjalan'}.`);
+}
+
 export async function deleteBudgetItemLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
   const line = await prisma.budgetItemLine.findUnique({

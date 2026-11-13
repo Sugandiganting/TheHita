@@ -304,6 +304,15 @@ model BudgetLine {
   amount    Float   @default(0)
   notes     String?
 
+  /// Nominal yang sungguh keluar. null berarti belum dilaporkan; 0 berarti
+  /// sudah diputuskan tidak jadi. Tidak ada jumlah dan harga satuan di sini,
+  /// karena RAB selain Purchasing memang disusun per akun: gaji dan listrik
+  /// tidak punya satuan.
+  realAmount Float?
+  realDate   DateTime?
+  realDone   Boolean   @default(false)
+  realNotes  String?
+
   budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   account Account @relation(fields: [accountId], references: [id])
 
@@ -327,6 +336,20 @@ model BudgetItemLine {
   /// Harga satuan yang diperkirakan.
   unitPrice Float   @default(0)
   notes     String?
+
+  /// Jumlah yang sungguh dibeli. null berarti belum dilaporkan sama sekali —
+  /// berbeda dari 0, yang berarti sudah diputuskan tidak jadi dibeli.
+  realQuantity  Float?
+  /// Harga satuan yang sungguh dibayar.
+  realUnitPrice Float?
+  /// Tanggal realisasinya; dipakai menempatkan belanja itu pada waktunya.
+  realDate      DateTime?
+  /// Sudah selesai dibeli. Hanya yang selesai yang boleh dihitung sebagai
+  /// penghematan: baris yang baru dibeli separuh masih mungkin menghabiskan
+  /// sisa anggarannya, dan menyebutnya hemat lebih dulu adalah menghitung
+  /// uang yang belum tentu ada.
+  realDone      Boolean   @default(false)
+  realNotes     String?
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   item   Item   @relation(fields: [itemId], references: [id])

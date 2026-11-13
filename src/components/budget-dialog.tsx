@@ -2,7 +2,7 @@
 
 import { DialogTombol } from './dialog';
 import {
-  BudgetForm, BudgetItemLineForm, BudgetLineForm,
+  BudgetForm, BudgetItemLineForm, BudgetLineForm, RealisasiAkunForm, RealisasiBarangForm,
   type AkunOption, type BarangOption, type ScopeOption,
 } from './budget-form';
 
@@ -116,6 +116,70 @@ export function TambahBarangRabDialog({
       keterangan="Akun bebannya ikut dari master barang, dan nilainya dihitung dari jumlah kali harga satuan."
     >
       {(tutup) => <BudgetItemLineForm budgetId={budgetId} items={items} onTutup={tutup} />}
+    </DialogTombol>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Realisasi — hanya pada RAB yang sudah disahkan                      */
+/* ------------------------------------------------------------------ */
+
+export function RealisasiBarangDialog({
+  lineId, nama, satuan, anggaran, nilai, defaultDate, sudahAda,
+}: {
+  lineId: string;
+  nama: string;
+  satuan: string;
+  anggaran: number;
+  nilai: {
+    quantity: number | null; unitPrice: number | null;
+    tanggal: string | null; selesai: boolean; catatan: string | null;
+  };
+  defaultDate: string;
+  /** Sudah pernah dilaporkan; mengubah bunyi tombolnya. */
+  sudahAda: boolean;
+}) {
+  return (
+    <DialogTombol
+      label={sudahAda ? 'Ubah realisasi' : 'Catat realisasi'}
+      varian="tautan"
+      judul={`Realisasi ${nama}`}
+      keterangan="Rencananya sudah terkunci karena RAB ini disahkan; yang dicatat di sini apa yang sungguh terjadi."
+    >
+      {(tutup) => (
+        <RealisasiBarangForm
+          lineId={lineId} nama={nama} satuan={satuan} anggaran={anggaran}
+          nilai={nilai} defaultDate={defaultDate} onTutup={tutup}
+        />
+      )}
+    </DialogTombol>
+  );
+}
+
+export function RealisasiAkunDialog({
+  lineId, nama, anggaran, nilai, defaultDate, sudahAda,
+}: {
+  lineId: string;
+  nama: string;
+  anggaran: number;
+  nilai: { amount: number | null; tanggal: string | null; selesai: boolean; catatan: string | null };
+  defaultDate: string;
+  sudahAda: boolean;
+}) {
+  return (
+    <DialogTombol
+      label={sudahAda ? 'Ubah realisasi' : 'Catat realisasi'}
+      varian="tautan"
+      lebar="sm"
+      judul={`Realisasi ${nama}`}
+      keterangan="Rencananya sudah terkunci karena RAB ini disahkan; yang dicatat di sini apa yang sungguh terjadi."
+    >
+      {(tutup) => (
+        <RealisasiAkunForm
+          lineId={lineId} nama={nama} anggaran={anggaran}
+          nilai={nilai} defaultDate={defaultDate} onTutup={tutup}
+        />
+      )}
     </DialogTombol>
   );
 }

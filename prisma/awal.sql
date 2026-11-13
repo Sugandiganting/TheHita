@@ -156,6 +156,10 @@ CREATE TABLE "BudgetLine" (
     "accountId" TEXT NOT NULL,
     "amount" REAL NOT NULL DEFAULT 0,
     "notes" TEXT,
+    "realAmount" REAL,
+    "realDate" DATETIME,
+    "realDone" BOOLEAN NOT NULL DEFAULT false,
+    "realNotes" TEXT,
     CONSTRAINT "BudgetLine_budgetId_fkey" FOREIGN KEY ("budgetId") REFERENCES "Budget" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "BudgetLine_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -168,6 +172,11 @@ CREATE TABLE "BudgetItemLine" (
     "quantity" REAL NOT NULL DEFAULT 0,
     "unitPrice" REAL NOT NULL DEFAULT 0,
     "notes" TEXT,
+    "realQuantity" REAL,
+    "realUnitPrice" REAL,
+    "realDate" DATETIME,
+    "realDone" BOOLEAN NOT NULL DEFAULT false,
+    "realNotes" TEXT,
     CONSTRAINT "BudgetItemLine_budgetId_fkey" FOREIGN KEY ("budgetId") REFERENCES "Budget" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "BudgetItemLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );

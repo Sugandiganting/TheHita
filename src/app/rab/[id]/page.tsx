@@ -3,9 +3,10 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getBudgetDetail } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
-import { JENIS_RAB_LABEL } from '@/lib/rab';
+import { JENIS_RAB_LABEL, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
+  RealisasiBarangDialog,
   TambahAnggaranDialog, TambahBarangRabDialog, UbahAnggaranDialog, UbahBarangRabDialog,
 } from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
@@ -42,6 +43,12 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   if (!rab) notFound();
 
   const disahkan = rab.status === 'ACTIVE';
+  // Tanggal bawaan realisasi: hari ini bila RAB-nya bulan berjalan, selain itu
+  // tanggal 1 bulan RAB-nya — supaya realisasi bulan lalu tidak tanpa sengaja
+  // tercatat di bulan ini.
+  const hariIni = new Date().toISOString().slice(0, 10);
+  const tanggalBawaanRealisasi = hariIni.startsWith(rab.period) ? hariIni : `${rab.period}-01`;
+  const hematBaris = (b: BarisBarangRab) => penghematanBaris(b);
   const purchasing = rab.kind === 'PURCHASING';
   const barisPerAkun = new Map(lines.map((l) => [l.accountId, l]));
   const r = rab.ringkasan;
@@ -150,6 +157,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <th className="th num">Jumlah</th>
                       <th className="th num">Harga satuan</th>
                       <th className="th num">Dianggarkan</th>
+                      {/* Kolom realisasi hanya ada artinya setelah rencananya
+                          berhenti bergerak, jadi ia baru muncul begitu RAB
+                          disahkan. Sebelum itu tidak ada yang bisa dibandingkan. */}
+                      {disahkan && <th className="th num">Realisasi dilaporkan</th>}
+                      {disahkan && <th className="th num">Hemat</th>}
                       <th className="th num">Aksi</th>
                     </tr>
                   </thead>
@@ -172,8 +184,53 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         </td>
                         <td className="td num">{formatRupiah(b.unitPrice)}</td>
                         <td className="td num">{formatRupiah(b.anggaran)}</td>
+                        {disahkan && (
+                          <td className="td num">
+                            {b.realisasi.nilai === null ? (
+                              <span className="text-xs text-slate-400">belum</span>
+                            ) : (
+                              <>
+                                {formatRupiah(b.realisasi.nilai)}
+                                <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                  {b.realisasi.quantity} {b.satuan}
+                                  {!b.realisasi.selesai && ' · sebagian'}
+                                </span>
+                              </>
+                            )}
+                          </td>
+                        )}
+                        {disahkan && (
+                          <td className="td num">
+                            {hematBaris(b) === null ? (
+                              <span className="text-xs text-slate-400">—</span>
+                            ) : (
+                              <span className={hematBaris(b)! < 0 ? 'font-medium text-red-600' : 'text-emerald-700'}>
+                                {formatRupiah(hematBaris(b)!)}
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="td num">
                           <span className="flex items-center justify-end gap-3">
+                            {disahkan && (
+                              <RealisasiBarangDialog
+                                lineId={b.lineId}
+                                nama={`${b.itemCode} ${b.itemName}`}
+                                satuan={b.satuan}
+                                anggaran={b.anggaran}
+                                sudahAda={b.realisasi.nilai !== null}
+                                defaultDate={tanggalBawaanRealisasi}
+                                nilai={{
+                                  quantity: b.realisasi.quantity,
+                                  unitPrice: b.realisasi.unitPrice,
+                                  tanggal: b.realisasi.tanggal
+                                    ? b.realisasi.tanggal.toISOString().slice(0, 10)
+                                    : null,
+                                  selesai: b.realisasi.selesai,
+                                  catatan: b.realisasi.catatan,
+                                }}
+                              />
+                            )}
                             <UbahBarangRabDialog
                               budgetId={rab.id}
                               items={opsiBarang}
@@ -196,6 +253,16 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <td className="td num">
                         {formatRupiah(rab.barang.reduce((s, b) => s + b.anggaran, 0))}
                       </td>
+                      {disahkan && (
+                        <td className="td num">
+                          {formatRupiah(rab.barang.reduce((s, b) => s + (b.realisasi.nilai ?? 0), 0))}
+                        </td>
+                      )}
+                      {disahkan && (
+                        <td className="td num">
+                          {formatRupiah(rab.barang.reduce((s, b) => s + (hematBaris(b) ?? 0), 0))}
+                        </td>
+                      )}
                       <td className="td num">—</td>
                     </tr>
                   </tfoot>
@@ -209,11 +276,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
           <SectionTitle
             hint={
               purchasing
-                ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya.'
+                ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya. Realisasi di sini datang dari JURNAL — berbeda dari kolom "realisasi dilaporkan" di tabel barang, yang Anda catat sendiri per barang.'
                 : 'Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.'
             }
           >
-            {purchasing ? 'Anggaran dan realisasi per akun' : 'Rincian anggaran'}
+            {purchasing ? 'Anggaran dan realisasi per akun — menurut jurnal' : 'Rincian anggaran'}
           </SectionTitle>
 
           {r.baris.length === 0 ? (

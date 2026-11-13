@@ -105,6 +105,46 @@ export type BarisBarangRab = {
   /** Jumlah kali harga satuan. Tidak disimpan, supaya tidak pernah berbeda. */
   anggaran: number;
   catatan: string | null;
+  realisasi: RealisasiBaris;
+};
+
+/**
+ * Realisasi satu baris RAB.
+ *
+ * Tiga keadaan yang harus dibedakan, dan hanya dua di antaranya yang berupa
+ * angka:
+ *
+ *   belum   — belum dilaporkan sama sekali. Anggarannya masih mungkin terpakai
+ *             penuh, jadi ia tetap dihitung sebagai uang yang akan keluar.
+ *   berjalan — sudah dibeli sebagian, tetapi belum ditandai selesai. Sisanya
+ *             masih mungkin keluar, jadi juga belum boleh disebut hemat.
+ *   selesai — sudah tuntas. Selisihnya terhadap anggaran barulah penghematan,
+ *             dan nol pada yang selesai berarti sungguh tidak jadi dibeli.
+ *
+ * Perbedaan "belum" dan "nol" itu bukan kehalusan: yang satu berarti uangnya
+ * masih akan keluar, yang lain berarti tidak akan. Menyamakan keduanya membuat
+ * rencana kas salah justru pada angka yang paling dipakai.
+ */
+export type RealisasiBaris = {
+  /** null berarti belum dilaporkan. */
+  quantity: number | null;
+  unitPrice: number | null;
+  tanggal: Date | null;
+  selesai: boolean;
+  catatan: string | null;
+  /** Jumlah kali harga satuan; null selama belum dilaporkan. */
+  nilai: number | null;
+};
+
+export type StatusRealisasi = 'BELUM' | 'BERJALAN' | 'SELESAI';
+
+export const statusRealisasi = (r: RealisasiBaris): StatusRealisasi =>
+  (r.selesai ? 'SELESAI' : r.nilai === null ? 'BELUM' : 'BERJALAN');
+
+export const LABEL_REALISASI: Record<StatusRealisasi, string> = {
+  BELUM: 'Belum direalisasi',
+  BERJALAN: 'Sebagian',
+  SELESAI: 'Selesai',
 };
 
 /**
@@ -120,6 +160,40 @@ export function nilaiBarisBarang(
   pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
 ): number {
   return pembulatan(baris.quantity * baris.unitPrice);
+}
+
+/**
+ * Penghematan sebuah baris: anggaran dikurangi realisasinya.
+ *
+ * Hanya baris yang SELESAI yang menghasilkan angka. Yang belum selesai masih
+ * mungkin menghabiskan sisa anggarannya, dan menghitungnya sebagai hemat
+ * berarti membelanjakan uang yang belum tentu ada.
+ *
+ * Boleh negatif: belanja yang melebihi anggarannya adalah pemborosan, dan
+ * menyembunyikannya di balik nol membuat total penghematan terbaca lebih
+ * besar daripada yang sungguh dihemat.
+ */
+export function penghematanBaris(
+  baris: { anggaran: number; realisasi: RealisasiBaris },
+  pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
+): number | null {
+  if (!baris.realisasi.selesai || baris.realisasi.nilai === null) return null;
+  return pembulatan(baris.anggaran - baris.realisasi.nilai);
+}
+
+/**
+ * Uang yang masih akan keluar dari sebuah baris.
+ *
+ * Yang sudah selesai tidak akan keluar lagi, berapa pun sisa anggarannya.
+ * Yang belum selesai diperkirakan memakai anggarannya — dikurangi yang sudah
+ * sempat dibelanjakan, supaya belanja bertahap tidak terhitung dua kali.
+ */
+export function sisaAkanKeluar(
+  baris: { anggaran: number; realisasi: RealisasiBaris },
+  pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
+): number {
+  if (baris.realisasi.selesai) return 0;
+  return pembulatan(Math.max(0, baris.anggaran - (baris.realisasi.nilai ?? 0)));
 }
 
 /**

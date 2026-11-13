@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   anggaranPerAkun, barisMasukScope, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
-  periodeBerikutnya, ringkasRab, scopeBersamaKah,
-  type BarisBarangRab, type BarisRab, type BarisRealisasi,
+  penghematanBaris, periodeBerikutnya, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
+  statusRealisasi,
+  type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
 } from '../src/lib/rab.ts';
 
 /**
@@ -122,7 +123,9 @@ const barang = (o: Partial<BarisBarangRab>): BarisBarangRab => ({
   lineId: 'l1', itemId: 'i1', itemCode: 'BTN', itemName: 'Beton Instan',
   satuan: 'SAK', kategori: 'Operasional', subKategori: 'Engineering',
   accountId: 'a1', accountCode: '6150.01', accountName: 'Biaya Pemeliharaan',
-  quantity: 0, unitPrice: 0, anggaran: 0, catatan: null, ...o,
+  quantity: 0, unitPrice: 0, anggaran: 0, catatan: null,
+  realisasi: { quantity: null, unitPrice: null, tanggal: null, selesai: false, catatan: null, nilai: null },
+  ...o,
 });
 
 test('nilai baris barang adalah jumlah kali harga satuan', () => {
@@ -190,4 +193,78 @@ test('rekap per akun dari RAB Purchasing bisa langsung diringkas seperti RAB umu
   assert.equal(ringkas.totalRealisasi, 2_500_000);
   assert.equal(ringkas.totalSisa, -500_000);
   assert.equal(ringkas.jumlahLewat, 1);
+});
+
+/* ------------------------------------------------------------------ */
+/* Realisasi RAB                                                       */
+/* ------------------------------------------------------------------ */
+
+const realisasi = (o: Partial<RealisasiBaris>): RealisasiBaris => ({
+  quantity: null, unitPrice: null, tanggal: null, selesai: false, catatan: null, nilai: null, ...o,
+});
+
+test('tiga keadaan realisasi dibedakan, bukan dua', () => {
+  // "Belum dilaporkan" dan "nol" bukan hal yang sama: yang satu berarti
+  // uangnya masih akan keluar, yang lain berarti tidak akan.
+  assert.equal(statusRealisasi(realisasi({})), 'BELUM');
+  assert.equal(statusRealisasi(realisasi({ quantity: 2, unitPrice: 50, nilai: 100 })), 'BERJALAN');
+  assert.equal(statusRealisasi(realisasi({ quantity: 0, unitPrice: 0, nilai: 0, selesai: true })), 'SELESAI');
+});
+
+test('hanya baris yang selesai menghasilkan penghematan', () => {
+  const b = (r: RealisasiBaris) => ({ anggaran: 1_000_000, realisasi: r });
+  assert.equal(penghematanBaris(b(realisasi({}))), null, 'belum dilaporkan belum tentu hemat');
+  assert.equal(
+    penghematanBaris(b(realisasi({ quantity: 1, unitPrice: 400_000, nilai: 400_000 }))),
+    null,
+    'baru sebagian — sisanya masih mungkin keluar',
+  );
+  assert.equal(
+    penghematanBaris(b(realisasi({ quantity: 1, unitPrice: 400_000, nilai: 400_000, selesai: true }))),
+    600_000,
+  );
+});
+
+test('tidak jadi dibeli adalah penghematan penuh, bukan baris yang hilang', () => {
+  assert.equal(
+    penghematanBaris({
+      anggaran: 1_000_000,
+      realisasi: realisasi({ quantity: 0, unitPrice: 0, nilai: 0, selesai: true }),
+    }),
+    1_000_000,
+  );
+});
+
+test('belanja yang melewati anggarannya tampil negatif, tidak disembunyikan', () => {
+  // Menyembunyikannya di balik nol membuat total penghematan terbaca lebih
+  // besar daripada yang sungguh dihemat.
+  assert.equal(
+    penghematanBaris({
+      anggaran: 1_000_000,
+      realisasi: realisasi({ quantity: 1, unitPrice: 1_250_000, nilai: 1_250_000, selesai: true }),
+    }),
+    -250_000,
+  );
+});
+
+test('sisa yang akan keluar: selesai nol, belum penuh, sebagian sisanya', () => {
+  const b = (r: RealisasiBaris) => ({ anggaran: 1_000_000, realisasi: r });
+  assert.equal(sisaAkanKeluar(b(realisasi({}))), 1_000_000);
+  assert.equal(sisaAkanKeluar(b(realisasi({ quantity: 1, unitPrice: 400_000, nilai: 400_000 }))), 600_000);
+  assert.equal(
+    sisaAkanKeluar(b(realisasi({ quantity: 1, unitPrice: 400_000, nilai: 400_000, selesai: true }))),
+    0,
+    'yang sudah selesai tidak akan keluar lagi, berapa pun sisa anggarannya',
+  );
+});
+
+test('realisasi yang melewati anggaran tidak membuat sisa jadi negatif', () => {
+  // Sisa negatif akan menambah plafon belanja alih-alih menguranginya.
+  assert.equal(
+    sisaAkanKeluar({
+      anggaran: 1_000_000,
+      realisasi: realisasi({ quantity: 1, unitPrice: 1_250_000, nilai: 1_250_000 }),
+    }),
+    0,
+  );
 });

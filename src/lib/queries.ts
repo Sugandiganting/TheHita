@@ -840,6 +840,17 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     unitPrice: l.unitPrice,
     anggaran: nilaiBarisBarang(l, round),
     catatan: l.notes,
+    realisasi: {
+      quantity: l.realQuantity,
+      unitPrice: l.realUnitPrice,
+      tanggal: l.realDate,
+      selesai: l.realDone,
+      catatan: l.realNotes,
+      // null bila salah satunya belum diisi: separuh keterangan bukan angka.
+      nilai: l.realQuantity === null || l.realUnitPrice === null
+        ? null
+        : round(l.realQuantity * l.realUnitPrice),
+    },
   }));
 
   // Baris anggaran RAB ini, selalu di tingkat akun supaya bisa dibandingkan

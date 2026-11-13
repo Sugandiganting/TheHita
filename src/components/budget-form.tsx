@@ -2,7 +2,11 @@
 
 import { useActionState, useEffect, useMemo, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { saveBudget, saveBudgetItemLine, saveBudgetLine, type ActionState } from '@/app/actions';
+import {
+  saveBudget, saveBudgetItemLine, saveBudgetLine,
+  simpanRealisasiAkun, simpanRealisasiBarang,
+  type ActionState,
+} from '@/app/actions';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 import { JENIS_RAB, JENIS_RAB_LABEL, nilaiBarisBarang } from '@/lib/rab';
 import { formatRupiah } from '@/lib/format';
@@ -400,6 +404,199 @@ export function BudgetItemLineForm({
       )}
 
       <SubmitButton label={mengubah ? 'Perbarui baris' : 'Simpan ke RAB'} onTutup={onTutup} />
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Realisasi — hanya pada RAB yang sudah disahkan                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Mencatat realisasi satu baris RAB Purchasing.
+ *
+ * Barang, jumlah dan harga yang DIRENCANAKAN tidak bisa disentuh di sini:
+ * begitu RAB disahkan, rencananya berhenti bergerak supaya ada yang bisa
+ * dibandingkan. Yang terbuka justru kebalikannya — apa yang sungguh terjadi.
+ */
+export function RealisasiBarangForm({
+  lineId, nama, satuan, anggaran, nilai, defaultDate, onTutup,
+}: {
+  lineId: string;
+  nama: string;
+  satuan: string;
+  anggaran: number;
+  nilai: {
+    quantity: number | null; unitPrice: number | null;
+    tanggal: string | null; selesai: boolean; catatan: string | null;
+  };
+  defaultDate: string;
+  onTutup?: () => void;
+}) {
+  const [state, formAction] = useActionState(simpanRealisasiBarang, initial);
+  const [quantity, setQuantity] = useState(nilai.quantity === null ? '' : String(nilai.quantity));
+  const [unitPrice, setUnitPrice] = useState(nilai.unitPrice === null ? '' : String(nilai.unitPrice));
+  const [selesai, setSelesai] = useState(nilai.selesai);
+
+  const jumlah = Number(quantity.replace(',', '.'));
+  const harga = Number(unitPrice);
+  const terisi = quantity.trim() !== '' && unitPrice.trim() !== ''
+    && Number.isFinite(jumlah) && Number.isFinite(harga);
+  const realisasi = terisi ? nilaiBarisBarang({ quantity: jumlah, unitPrice: harga }) : null;
+  const hemat = realisasi === null ? null : anggaran - realisasi;
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <input type="hidden" name="id" value={lineId} />
+      <input type="hidden" name="realDone" value={selesai ? 'true' : 'false'} />
+
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        {nama} — dianggarkan <strong className="text-slate-900">{formatRupiah(anggaran)}</strong>
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor="rl-jumlah">Jumlah yang dibeli ({satuan})</label>
+          <input
+            id="rl-jumlah"
+            name="realQuantity"
+            className="input"
+            inputMode="decimal"
+            placeholder="20"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="rl-harga">Harga satuan sebenarnya</label>
+          <MoneyInput id="rl-harga" name="realUnitPrice" placeholder="65.000"
+            value={unitPrice} onChange={setUnitPrice} />
+        </div>
+      </div>
+
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-sm">
+        Realisasi <strong>{realisasi === null ? '—' : formatRupiah(realisasi)}</strong>
+        {hemat !== null && (
+          <span className={`ml-2 ${hemat < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+            {hemat < 0 ? 'lewat ' : 'hemat '}
+            {formatRupiah(Math.abs(hemat))}
+          </span>
+        )}
+        <span className="mt-0.5 block text-xs text-slate-500">
+          Dikosongkan berarti belum dilaporkan, dan anggarannya tetap dihitung akan keluar. Isi{' '}
+          <strong>0</strong> lalu tandai selesai bila barangnya tidak jadi dibeli.
+        </span>
+      </p>
+
+      <div>
+        <label className="label" htmlFor="rl-tanggal">Tanggal realisasi</label>
+        <input id="rl-tanggal" type="date" name="realDate" className="input"
+          defaultValue={nilai.tanggal ?? defaultDate} />
+      </div>
+
+      <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={selesai}
+          onChange={(e) => setSelesai(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium text-slate-900">Selesai dibeli</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Hanya yang selesai dihitung sebagai penghematan, dan berhenti dihitung akan keluar.
+            Yang baru dibeli separuh masih mungkin menghabiskan sisa anggarannya.
+          </span>
+        </span>
+      </label>
+
+      <div>
+        <label className="label" htmlFor="rl-catatan">Catatan</label>
+        <input id="rl-catatan" name="realNotes" className="input" placeholder="Opsional"
+          defaultValue={nilai.catatan ?? ''} />
+      </div>
+
+      {state.message && (
+        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+      )}
+
+      <SubmitButton label="Simpan realisasi" onTutup={onTutup} />
+    </form>
+  );
+}
+
+/** Mencatat realisasi satu baris RAB per akun. Tanpa jumlah dan satuan. */
+export function RealisasiAkunForm({
+  lineId, nama, anggaran, nilai, defaultDate, onTutup,
+}: {
+  lineId: string;
+  nama: string;
+  anggaran: number;
+  nilai: { amount: number | null; tanggal: string | null; selesai: boolean; catatan: string | null };
+  defaultDate: string;
+  onTutup?: () => void;
+}) {
+  const [state, formAction] = useActionState(simpanRealisasiAkun, initial);
+  const [amount, setAmount] = useState(nilai.amount === null ? '' : String(nilai.amount));
+  const [selesai, setSelesai] = useState(nilai.selesai);
+
+  const nominal = Number(amount);
+  const terisi = amount.trim() !== '' && Number.isFinite(nominal);
+  const hemat = terisi ? anggaran - nominal : null;
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <input type="hidden" name="id" value={lineId} />
+      <input type="hidden" name="realDone" value={selesai ? 'true' : 'false'} />
+
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        {nama} — dianggarkan <strong className="text-slate-900">{formatRupiah(anggaran)}</strong>
+      </p>
+
+      <div>
+        <label className="label" htmlFor="rl-nominal">Nominal yang sungguh keluar</label>
+        <MoneyInput id="rl-nominal" name="realAmount" placeholder="5.000.000"
+          value={amount} onChange={setAmount} />
+        <p className="mt-1 text-xs text-slate-500">
+          Dikosongkan berarti belum dilaporkan. Isi <strong>0</strong> lalu tandai selesai bila
+          tidak jadi keluar.
+        </p>
+      </div>
+
+      {hemat !== null && (
+        <p className={`text-sm ${hemat < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+          {hemat < 0 ? 'Lewat ' : 'Hemat '}{formatRupiah(Math.abs(hemat))}
+        </p>
+      )}
+
+      <div>
+        <label className="label" htmlFor="rl-tanggal-akun">Tanggal realisasi</label>
+        <input id="rl-tanggal-akun" type="date" name="realDate" className="input"
+          defaultValue={nilai.tanggal ?? defaultDate} />
+      </div>
+
+      <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 text-sm">
+        <input type="checkbox" className="mt-0.5" checked={selesai}
+          onChange={(e) => setSelesai(e.target.checked)} />
+        <span>
+          <span className="font-medium text-slate-900">Selesai</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Hanya yang selesai dihitung sebagai penghematan, dan berhenti dihitung akan keluar.
+          </span>
+        </span>
+      </label>
+
+      <div>
+        <label className="label" htmlFor="rl-catatan-akun">Catatan</label>
+        <input id="rl-catatan-akun" name="realNotes" className="input" placeholder="Opsional"
+          defaultValue={nilai.catatan ?? ''} />
+      </div>
+
+      {state.message && (
+        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+      )}
+
+      <SubmitButton label="Simpan realisasi" onTutup={onTutup} />
     </form>
   );
 }
