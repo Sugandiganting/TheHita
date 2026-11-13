@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   anggaranPerAkun, barisMasukScope, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
-  penghematanBaris, periodeBerikutnya, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
+  penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
 } from '../src/lib/rab.ts';
@@ -267,4 +267,40 @@ test('realisasi yang melewati anggaran tidak membuat sisa jadi negatif', () => {
     }),
     0,
   );
+});
+
+test('rekap RAB memisahkan yang belum tersentuh dari yang sedang berjalan', () => {
+  // Rancangan kas hanya boleh menganggap "belum" sebagai uang yang pasti
+  // masih dibutuhkan. Baris yang sudah sebagian berjalan dihitung terpisah,
+  // karena sisanya belum tentu sebesar anggarannya.
+  const r = rekapRab([
+    { anggaran: 1_000_000, realisasi: realisasi({}) },
+    { anggaran: 2_000_000, realisasi: realisasi({ quantity: 1, unitPrice: 800_000, nilai: 800_000 }) },
+    { anggaran: 3_000_000, realisasi: realisasi({ quantity: 1, unitPrice: 2_500_000, nilai: 2_500_000, selesai: true }) },
+  ]);
+  assert.equal(r.anggaran, 6_000_000);
+  assert.equal(r.realisasi, 3_300_000, 'hanya yang dilaporkan, baris BELUM tidak menyumbang nol pun');
+  assert.equal(r.belum, 1_000_000);
+  assert.equal(r.berjalan, 2_000_000);
+  assert.equal(r.selesai, 3_000_000);
+  assert.equal(r.hemat, 500_000, 'hemat hanya dari baris yang selesai');
+  assert.deepEqual(r.jumlah, { BELUM: 1, BERJALAN: 1, SELESAI: 1 });
+});
+
+test('rekap RAB tanpa satu baris pun bernilai nol, bukan NaN', () => {
+  // Bulan yang RAB-nya belum diisi harus terbaca nol di rancangan kas, dan
+  // nol harus bisa dijumlahkan.
+  const r = rekapRab([]);
+  assert.equal(r.anggaran, 0);
+  assert.equal(r.belum, 0);
+  assert.deepEqual(r.jumlah, { BELUM: 0, BERJALAN: 0, SELESAI: 0 });
+});
+
+test('rekap RAB: item yang dibatalkan jadi hemat penuh dan tidak lagi dianggap butuh uang', () => {
+  // Qty 0 yang ditandai selesai adalah cara melaporkan "tidak jadi dibeli".
+  const r = rekapRab([
+    { anggaran: 4_000_000, realisasi: realisasi({ quantity: 0, unitPrice: 0, nilai: 0, selesai: true }) },
+  ]);
+  assert.equal(r.belum, 0, 'tidak boleh ikut menekan plafon belanja');
+  assert.equal(r.hemat, 4_000_000);
 });

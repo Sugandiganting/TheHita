@@ -6,7 +6,7 @@ import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import { JENIS_RAB_LABEL, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
-  RealisasiBarangDialog,
+  RealisasiAkunDialog, RealisasiBarangDialog,
   TambahAnggaranDialog, TambahBarangRabDialog, UbahAnggaranDialog, UbahBarangRabDialog,
 } from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
@@ -25,7 +25,10 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
     }),
     prisma.budgetLine.findMany({
       where: { budgetId: id },
-      select: { id: true, accountId: true, amount: true, notes: true },
+      select: {
+        id: true, accountId: true, amount: true, notes: true,
+        realAmount: true, realDate: true, realDone: true, realNotes: true,
+      },
     }),
     prisma.item.findMany({
       where: { active: true },
@@ -50,6 +53,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   const tanggalBawaanRealisasi = hariIni.startsWith(rab.period) ? hariIni : `${rab.period}-01`;
   const hematBaris = (b: BarisBarangRab) => penghematanBaris(b);
   const purchasing = rab.kind === 'PURCHASING';
+  // Pada RAB purchasing, realisasi dilaporkan per barang di tabel di atas;
+  // tabel per akun di bawahnya hanya rangkuman menurut jurnal. Baru pada RAB
+  // selain purchasing baris akun itulah rinciannya, jadi di sanalah
+  // realisasinya dicatat.
+  const realisasiAkun = disahkan && !purchasing;
   const barisPerAkun = new Map(lines.map((l) => [l.accountId, l]));
   const r = rab.ringkasan;
 
@@ -277,7 +285,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
             hint={
               purchasing
                 ? 'Beberapa barang bisa bermuara ke akun yang sama. Perbandingan dengan jurnal hanya mungkin di tingkat akun, karena jurnal tidak mencatat barangnya. Realisasi di sini datang dari JURNAL — berbeda dari kolom "realisasi dilaporkan" di tabel barang, yang Anda catat sendiri per barang.'
-                : 'Realisasi diambil dari jurnal bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi.'
+                : 'Kolom "jurnal" datang dari pembukuan bulan ini, mengikuti aturan penanggung yang sama dengan laporan laba rugi. Kolom "dilaporkan" Anda catat sendiri per baris setelah RAB disahkan, lengkap dengan status selesai — dari situlah penghematan dihitung. Keduanya sengaja berdiri sendiri: jurnal mencatat uang yang keluar, laporan mencatat apa yang sudah tuntas dibeli.'
             }
           >
             {purchasing ? 'Anggaran dan realisasi per akun — menurut jurnal' : 'Rincian anggaran'}
@@ -296,7 +304,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                   <tr>
                     <th className="th">Akun</th>
                     <th className="th num">Dianggarkan</th>
-                    <th className="th num">Realisasi</th>
+                    <th className="th num">{realisasiAkun ? 'Realisasi (jurnal)' : 'Realisasi'}</th>
+                    {/* Dua kolom tambahan hanya setelah RAB disahkan, sama seperti
+                        di tabel barang: sebelum itu tidak ada yang bisa dicatat. */}
+                    {realisasiAkun && <th className="th num">Realisasi dilaporkan</th>}
+                    {realisasiAkun && <th className="th num">Hemat</th>}
                     <th className="th num">Sisa</th>
                     <th className="th num">Terpakai</th>
                     {!purchasing && <th className="th num">Aksi</th>}
@@ -314,6 +326,40 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       </td>
                       <td className="td num">{b.anggaran > 0 ? formatRupiah(b.anggaran) : '—'}</td>
                       <td className="td num">{formatRupiah(b.realisasi)}</td>
+                      {realisasiAkun && (
+                        <td className="td num">
+                          {(() => {
+                            const l = barisPerAkun.get(b.accountId);
+                            if (!l || l.realAmount === null) {
+                              return <span className="text-xs text-slate-400">belum dilaporkan</span>;
+                            }
+                            return (
+                              <>
+                                {formatRupiah(l.realAmount)}
+                                <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                  {l.realDone ? 'selesai' : 'sebagian'}
+                                </span>
+                              </>
+                            );
+                          })()}
+                        </td>
+                      )}
+                      {realisasiAkun && (
+                        <td className="td num">
+                          {(() => {
+                            const l = barisPerAkun.get(b.accountId);
+                            const hemat = l && l.realDone && l.realAmount !== null
+                              ? l.amount - l.realAmount
+                              : null;
+                            if (hemat === null) return <span className="text-xs text-slate-400">—</span>;
+                            return (
+                              <span className={hemat < 0 ? 'font-medium text-red-600' : 'text-emerald-700'}>
+                                {formatRupiah(hemat)}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                      )}
                       <td className={`td num ${b.sisa < 0 ? 'font-medium text-red-600' : ''}`}>
                         {formatRupiah(b.sisa)}
                       </td>
@@ -334,6 +380,22 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                                 disabled={disahkan}
                               />
                               <BudgetLineDelete id={barisPerAkun.get(b.accountId)!.id} disabled={disahkan} />
+                              {realisasiAkun && (
+                                <RealisasiAkunDialog
+                                  lineId={barisPerAkun.get(b.accountId)!.id}
+                                  nama={`${b.accountCode} ${b.accountName}`}
+                                  anggaran={barisPerAkun.get(b.accountId)!.amount}
+                                  nilai={{
+                                    amount: barisPerAkun.get(b.accountId)!.realAmount,
+                                    tanggal: barisPerAkun.get(b.accountId)!.realDate
+                                      ?.toISOString().slice(0, 10) ?? null,
+                                    selesai: barisPerAkun.get(b.accountId)!.realDone,
+                                    catatan: barisPerAkun.get(b.accountId)!.realNotes,
+                                  }}
+                                  defaultDate={tanggalBawaanRealisasi}
+                                  sudahAda={barisPerAkun.get(b.accountId)!.realAmount !== null}
+                                />
+                              )}
                             </span>
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
@@ -348,6 +410,26 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                     <td className="td">Total</td>
                     <td className="td num">{formatRupiah(r.totalAnggaran)}</td>
                     <td className="td num">{formatRupiah(r.totalRealisasi)}</td>
+                    {realisasiAkun && (
+                      <td className="td num">
+                        {formatRupiah(lines.reduce((t, l) => t + (l.realAmount ?? 0), 0))}
+                      </td>
+                    )}
+                    {realisasiAkun && (
+                      <td className="td num">
+                        {(() => {
+                          const hemat = lines.reduce(
+                            (t, l) => t + (l.realDone && l.realAmount !== null ? l.amount - l.realAmount : 0),
+                            0,
+                          );
+                          return (
+                            <span className={hemat < 0 ? 'text-red-600' : hemat > 0 ? 'text-emerald-700' : ''}>
+                              {formatRupiah(hemat)}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
                     <td className={`td num ${r.totalSisa < 0 ? 'text-red-600' : ''}`}>
                       {formatRupiah(r.totalSisa)}
                     </td>

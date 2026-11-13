@@ -7,8 +7,10 @@
 import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import {
-  anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, ringkasRab, scopeBersamaKah,
-  type BarisBarangRab, type BarisRab, type JenisRab, type RingkasanRab,
+  anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
+  ringkasRab, scopeBersamaKah,
+  type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
+  type RingkasanRab,
 } from './rab';
 import { barisBulan, type BarisBulan } from './bulanan';
 import { arusKasBulanan, type ArusBulan, type LaporanBulan } from './arus-kas';
@@ -973,13 +975,18 @@ export type RencanaKasDetail = {
      */
     cashAccountId: string | null;
     cashAccountLabel: string | null;
-    /** Jenis RAB yang jadi sumber jatahnya: PURCHASING, UMUM, atau null. */
+    /** Jenis RAB yang jadi sumber angkanya: PURCHASING, UMUM, atau null. */
     rabKind: string | null;
     /**
-     * Jumlah seluruh RAB jenis itu pada bulan ini, seluruh cabang. null bila
-     * kategorinya tidak ditautkan ke RAB, atau bulan itu belum punya RAB-nya.
+     * Rekap seluruh RAB jenis itu pada bulan ini, seluruh cabang: dianggarkan
+     * berapa, sudah direalisasi berapa, belum tersentuh berapa.
+     *
+     * null bila kategorinya belum ditautkan ke RAB. Kategori yang sudah
+     * ditautkan tetapi bulan itu belum punya RAB-nya mendapat rekap bernilai
+     * nol, bukan null — "belum ada RAB" dan "belum ditautkan" dua hal berbeda,
+     * dan yang pertama tetap harus terbaca sebagai nol di layar.
      */
-    usulanRab: number | null;
+    rab: RekapRab | null;
     /** Bagian yang dicatat manual lewat Catat belanja. */
     manual: number;
     /** Bagian yang berasal dari transfer ke kas departemen, sebulan penuh. */
@@ -1720,17 +1727,62 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     where: { period },
     select: {
       kind: true,
-      lines: { select: { amount: true } },
-      itemLines: { select: { quantity: true, unitPrice: true } },
+      lines: {
+        select: {
+          amount: true, realAmount: true, realDate: true, realDone: true, realNotes: true,
+        },
+      },
+      itemLines: {
+        select: {
+          quantity: true, unitPrice: true,
+          realQuantity: true, realUnitPrice: true, realDate: true, realDone: true, realNotes: true,
+        },
+      },
     },
   });
-  const jumlahRab = new Map<string, number>();
+  // Seluruh baris RAB bulan ini dikumpulkan menurut jenisnya, lalu direkap
+  // sekali. Yang dibutuhkan rancangan kas bukan hanya totalnya: ia perlu tahu
+  // berapa yang sudah direalisasi dan berapa yang belum tersentuh sama sekali,
+  // karena hanya yang kedua itulah uang yang pasti masih harus disiapkan.
+  //
+  // RAB yang masih draf pun ikut: yang menentukan berapa uang harus disiapkan
+  // adalah rencananya, bukan sudah atau belum ditandatangani. Baris draf selalu
+  // berstatus BELUM, karena realisasi baru bisa diinput setelah RAB disahkan.
+  const barisPerJenis = new Map<string, { anggaran: number; realisasi: RealisasiBaris }[]>();
   for (const b of rabBulanIni) {
-    const nilai = b.kind === 'PURCHASING'
-      ? b.itemLines.reduce((t, l) => t + nilaiBarisBarang(l, round), 0)
-      : b.lines.reduce((t, l) => t + l.amount, 0);
-    jumlahRab.set(b.kind, (jumlahRab.get(b.kind) ?? 0) + nilai);
+    const baris = b.kind === 'PURCHASING'
+      ? b.itemLines.map((l) => ({
+          anggaran: nilaiBarisBarang(l, round),
+          realisasi: {
+            quantity: l.realQuantity,
+            unitPrice: l.realUnitPrice,
+            tanggal: l.realDate,
+            selesai: l.realDone,
+            catatan: l.realNotes,
+            // null bila salah satunya belum diisi: separuh keterangan bukan angka.
+            nilai: l.realQuantity === null || l.realUnitPrice === null
+              ? null
+              : round(l.realQuantity * l.realUnitPrice),
+          } satisfies RealisasiBaris,
+        }))
+      : b.lines.map((l) => ({
+          anggaran: l.amount,
+          realisasi: {
+            quantity: null,
+            unitPrice: null,
+            tanggal: l.realDate,
+            selesai: l.realDone,
+            catatan: l.realNotes,
+            nilai: l.realAmount,
+          } satisfies RealisasiBaris,
+        }));
+    const kumpulan = barisPerJenis.get(b.kind) ?? [];
+    kumpulan.push(...baris);
+    barisPerJenis.set(b.kind, kumpulan);
   }
+  const rekapPerJenis = new Map<string, RekapRab>(
+    [...barisPerJenis].map(([kind, baris]) => [kind, rekapRab(baris, round)]),
+  );
 
   const kategori = plan.categories.map((k) => ({
     id: k.id,
@@ -1738,7 +1790,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     weight: k.weight,
     budget: k.budget,
     rabKind: k.rabKind,
-    usulanRab: k.rabKind ? round(jumlahRab.get(k.rabKind) ?? 0) || null : null,
+    rab: k.rabKind ? (rekapPerJenis.get(k.rabKind) ?? REKAP_KOSONG) : null,
     cashAccountId: k.cashAccountId,
     cashAccountLabel: k.cashAccount ? `${k.cashAccount.code} ${k.cashAccount.name}` : null,
     manual: terpakaiKategori(k.id, false),
@@ -1850,11 +1902,19 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         kategori: kategori.map((k) => ({
           label: k.label,
           weight: k.weight,
-          // Yang diketik selalu menang. Tautan ke RAB hanya mengisi yang
-          // dibiarkan kosong — sama seperti tiap usulan lain di aplikasi ini.
-          jatah: k.budget ?? k.usulanRab,
-          terpakai: k.terpakai,
-          terpakaiBulanIni: k.terpakaiBulanIni,
+          // Kategori yang ditautkan ke RAB mengambil ketiga angkanya dari sana
+          // dan tidak bisa ditimpa dengan tangan: RAB-lah keputusannya, dan dua
+          // angka untuk satu hal berarti salah satunya pasti ketinggalan.
+          // Kategori yang belum ditautkan tetap memakai jatah yang diketik,
+          // supaya menautkan bisa dilakukan satu per satu tanpa ada bulan yang
+          // mendadak kosong.
+          jatah: k.rab ? k.rab.anggaran : k.budget,
+          terpakai: k.rab ? k.rab.realisasi : k.terpakai,
+          terpakaiBulanIni: k.rab ? k.rab.realisasi : k.terpakaiBulanIni,
+          // Hanya baris RAB yang belum tersentuh sama sekali yang pasti masih
+          // butuh uang. Tanpa RAB angka ini tidak diketahui, dan diturunkan
+          // dari jatah dikurangi belanja seperti sebelumnya.
+          belum: k.rab ? k.rab.belum : null,
         })),
       })
     : null;

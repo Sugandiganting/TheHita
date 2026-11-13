@@ -787,3 +787,46 @@ test('tanpa laju terukur, bulan berjalan tetap diprorata seperti semula', () => 
     keJt(jt(260.6) + (jt(402.8) - jt(260.6)) * (3 / 31)),
   );
 });
+
+test('kategori yang ikut RAB memakai anggaran yang belum direalisasi sebagai sisanya', () => {
+  // RAB 60 juta, 40 juta di antaranya sudah dibeli dengan harga 25 juta.
+  // Cara lama membaca sisanya 60 − 25 = 35 juta, padahal barangnya sudah
+  // dibeli: yang sungguh masih akan keluar hanya 20 juta.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [
+      { label: 'Purchasing', weight: 20, jatah: jt(60), terpakaiBulanIni: jt(25), belum: jt(20) },
+    ],
+  });
+  assert.equal(keJt(r.kategori[0].jatah), 60);
+  assert.equal(keJt(r.kategori[0].terpakai), 25);
+  assert.equal(keJt(r.kategori[0].sisa), 20, 'bukan 35: yang sudah dibeli tidak akan keluar lagi');
+  assert.equal(r.kategori[0].dariRab, true);
+});
+
+test('kategori tanpa tautan RAB tetap memakai jatah dikurangi belanja', () => {
+  // Menautkan dilakukan satu per satu, jadi kedua cara harus bisa hidup
+  // bersama dalam satu tabel tanpa ada baris yang mendadak kosong.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [{ label: 'Bank Perusahaan', weight: 7, jatah: jt(60), terpakaiBulanIni: jt(25) }],
+  });
+  assert.equal(keJt(r.kategori[0].sisa), 35);
+  assert.equal(r.kategori[0].dariRab, false);
+});
+
+test('RAB yang seluruhnya sudah selesai tidak lagi menekan plafon mingguan', () => {
+  // Nol di kolom "belum" harus berarti nol, bukan jatuh kembali ke jatah
+  // dikurangi belanja — itulah cara paling mudah memotong kas dua kali.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    terpakai: undefined,
+    kategori: [
+      { label: 'Purchasing', weight: 20, jatah: jt(60), terpakaiBulanIni: jt(52), belum: 0 },
+    ],
+  });
+  assert.equal(r.kategori[0].sisa, 0);
+  assert.equal(r.kategori[0].perMinggu, 0);
+});

@@ -55,10 +55,13 @@ export async function buatRencanaLanjutan(period: Period): Promise<Lanjutan> {
   const kategori = sebelumnya?.categories.length
     ? sebelumnya.categories.map((k) => ({
         label: k.label, weight: k.weight, budget: k.budget, sort: k.sort,
-        // Tautan ke kas departemen ikut dibawa. Tanpa ini, bulan baru lahir
-        // tanpa tautan dan "terpakai dari transfer" terbaca nol — bukan
-        // sebagai kesalahan, melainkan sebagai departemen yang belum belanja.
+        // Kedua tautannya ikut dibawa. Tanpa ini bulan baru lahir tanpa tautan,
+        // dan angkanya terbaca nol — bukan sebagai kesalahan, melainkan sebagai
+        // departemen yang belum belanja. Yang paling menyesatkan justru tautan
+        // ke RAB: seluruh jatah kategori itu akan hilang dari layar sampai
+        // seseorang sadar harus menautkannya lagi.
         cashAccountId: k.cashAccountId,
+        rabKind: k.rabKind,
       }))
     : KATEGORI_BAWAAN;
 

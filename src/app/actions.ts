@@ -1405,9 +1405,14 @@ export async function updateCategoryRab(_prev: ActionState, formData: FormData):
     return ok(`${ada.label} ditautkan ke RAB ${nama}, tetapi bulan ${ada.plan.period} belum punya RAB jenis itu. `
       + 'Jatahnya ikut begitu RAB-nya dibuat.');
   }
-  if (ada.budget !== null) {
-    return ok(`${ada.label} ditautkan ke RAB ${nama} (${rab.length} RAB, ${formatRupiahShort(jumlah)}). `
-      + 'Jatah yang sudah diketik masih dipakai — kosongkan bila hendak memakai angka RAB.');
+  // Jatah yang pernah diketik disebut bila berbeda, karena angka di layar akan
+  // berubah seketika dan penyebabnya harus jelas — bukan terbaca seperti data
+  // yang hilang. Angkanya sendiri tidak dihapus: melepas tautannya mengembalikan
+  // jatah itu apa adanya.
+  if (ada.budget !== null && ada.budget !== jumlah) {
+    return ok(`${ada.label} memakai jumlah RAB ${nama} bulan ini: ${formatRupiahShort(jumlah)} `
+      + `dari ${rab.length} RAB. Jatah yang diketik sebelumnya (${formatRupiahShort(ada.budget)}) `
+      + 'tidak lagi dipakai, tetapi tetap tersimpan bila tautannya dilepas.');
   }
   return ok(`${ada.label} memakai jumlah RAB ${nama} bulan ini: ${formatRupiahShort(jumlah)} dari ${rab.length} RAB.`);
 }

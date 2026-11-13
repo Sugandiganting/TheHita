@@ -197,6 +197,62 @@ export function sisaAkanKeluar(
 }
 
 /**
+ * Rekap sekumpulan baris RAB: dianggarkan berapa, sudah direalisasi berapa,
+ * dan yang belum tersentuh berapa.
+ *
+ * Tiga angka ini menjawab tiga pertanyaan berbeda, dan sengaja tidak dibuat
+ * saling menjumlah. `anggaran` adalah rencananya; `realisasi` adalah uang yang
+ * sungguh keluar menurut laporan; `belum` adalah anggaran baris yang belum
+ * dilaporkan sama sekali. Yang terakhir inilah yang dipakai rancangan kas,
+ * karena hanya baris yang belum tersentuh yang pasti masih butuh uang —
+ * baris yang sudah sebagian berjalan dihitung terpisah supaya tidak
+ * mengaburkan keduanya.
+ */
+export type RekapRab = {
+  anggaran: number;
+  /** Uang yang dilaporkan sudah keluar. Baris yang belum dilaporkan tidak ikut. */
+  realisasi: number;
+  /** Anggaran baris yang belum dilaporkan sama sekali. */
+  belum: number;
+  /** Anggaran baris yang sudah dilaporkan tetapi belum ditandai selesai. */
+  berjalan: number;
+  /** Anggaran baris yang sudah ditandai selesai. */
+  selesai: number;
+  /** Penghematan dari baris yang selesai saja; minus berarti lewat anggaran. */
+  hemat: number;
+  /** Jumlah baris menurut statusnya. */
+  jumlah: Record<StatusRealisasi, number>;
+};
+
+export const REKAP_KOSONG: RekapRab = {
+  anggaran: 0, realisasi: 0, belum: 0, berjalan: 0, selesai: 0, hemat: 0,
+  jumlah: { BELUM: 0, BERJALAN: 0, SELESAI: 0 },
+};
+
+export function rekapRab(
+  baris: { anggaran: number; realisasi: RealisasiBaris }[],
+  pembulatan: (n: number) => number = (n) => Math.round(n * 100) / 100,
+): RekapRab {
+  const r = { ...REKAP_KOSONG, jumlah: { BELUM: 0, BERJALAN: 0, SELESAI: 0 } };
+  for (const b of baris) {
+    const status = statusRealisasi(b.realisasi);
+    r.anggaran += b.anggaran;
+    r.realisasi += b.realisasi.nilai ?? 0;
+    r.jumlah[status] += 1;
+    if (status === 'BELUM') r.belum += b.anggaran;
+    else if (status === 'BERJALAN') r.berjalan += b.anggaran;
+    else {
+      r.selesai += b.anggaran;
+      r.hemat += penghematanBaris(b, pembulatan) ?? 0;
+    }
+  }
+  for (const k of ['anggaran', 'realisasi', 'belum', 'berjalan', 'selesai', 'hemat'] as const) {
+    r[k] = pembulatan(r[k]);
+  }
+  return r;
+}
+
+/**
  * Menjumlahkan baris-baris barang menjadi anggaran per akun.
  *
  * Beberapa barang boleh bermuara ke akun yang sama — semen dan besi keduanya

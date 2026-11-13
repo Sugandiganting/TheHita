@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getCashAccounts, getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
+import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
@@ -17,7 +17,7 @@ import { NonOperasiForm } from '@/components/non-operasi-form';
 import { JENIS_RAB, JENIS_RAB_LABEL, type JenisRab } from '@/lib/rab';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryAccount, CategoryBudget, CategoryDelete, CategoryForm, CategoryRab,
+  AssumptionForm, CategoryBudget, CategoryDelete, CategoryForm, CategoryRab,
   CheckpointDelete, CheckpointForm,
   CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
 } from '@/components/rencana-kas-form';
@@ -90,7 +90,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   const daftar = await getRencanaKasPeriods();
   const dipilih = one(params.periode) ?? daftar[0] ?? currentPeriod();
   const data = await getRencanaKas(dipilih);
-  const akunKas = await getCashAccounts();
 
   const pemilih = (
     <Card className="card-pad">
@@ -852,7 +851,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 * panel belanja, tanpa menyediakan tempat untuk melakukannya.
                 */}
               <Card className="card-pad min-w-0" id="kategori">
-                  <SectionTitle hint="Jatah tiap departemen diketik sendiri dari RAB-nya. Sudah dipakai: untuk kategori yang ditautkan ke kas departemen, dijumlahkan sendiri dari transfer ke rekening itu sepanjang bulan — uang yang sudah diserahkan dianggap habis. Laporan belanja manual tetap ikut dijumlahkan, jadi jangan mencatat hal yang sama dua kali. Sisa adalah jatah dikurangi yang sudah dipakai.">
+                  <SectionTitle hint="Kategori yang ditautkan ke RAB mengambil ketiga angkanya dari sana dan tidak bisa diketik: jatah adalah total RAB jenis itu bulan ini seluruh cabang, sudah direalisasi adalah yang dilaporkan di menu RAB, dan belum direalisasi adalah anggaran baris yang belum dilaporkan sama sekali. Ketiganya tidak saling menjumlah — jatah adalah rencana, realisasi adalah uang nyata. Baris yang sudah sebagian berjalan disebut terpisah. Kategori yang belum ditautkan masih memakai jatah yang diketik sendiri, dengan sisa = jatah − belanja.">
                     Plafon dan realisasi per kategori
                   </SectionTitle>
                   <div className="overflow-x-auto">
@@ -868,8 +867,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         <tr>
                           <th className="th">Kategori</th>
                           <th className="th num">Jatah bulan ini</th>
-                          <th className="th num">Sudah dipakai</th>
-                          <th className="th num">Sisa</th>
+                          <th className="th num">Sudah direalisasi</th>
+                          <th className="th num">Belum direalisasi</th>
                           <th className="th num">Plafon/minggu</th>
                           <th className="th num">Aksi</th>
                         </tr>
@@ -890,65 +889,86 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                             <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
                               <td className="td">
                                 {k.label}
+                                {/* Tinggal satu tautan di sini: jenis RAB. Tautan ke kas
+                                    departemen dulu dipakai menghitung "sudah dipakai" dari
+                                    transfer, dan sejak angka itu diambil dari realisasi RAB
+                                    ia tidak lagi menentukan apa pun — transfer ke petty cash
+                                    purchasing memang belum berarti barangnya sudah dibeli.
+                                    Tautan yang sudah tersimpan tetap dipakai oleh kategori
+                                    yang belum ditautkan ke RAB. */}
                                 {sumber && (
-                                  <>
-                                    <CategoryAccount
-                                      id={sumber.id}
-                                      cashAccountId={sumber.cashAccountId}
-                                      akun={akunKas}
-                                    />
-                                    <CategoryRab
-                                      id={sumber.id}
-                                      rabKind={sumber.rabKind}
-                                      jenis={JENIS_RAB.map((j) => ({ nilai: j, label: JENIS_RAB_LABEL[j] }))}
-                                    />
-                                  </>
+                                  <CategoryRab
+                                    id={sumber.id}
+                                    rabKind={sumber.rabKind}
+                                    jenis={JENIS_RAB.map((j) => ({ nilai: j, label: JENIS_RAB_LABEL[j] }))}
+                                  />
                                 )}
                               </td>
                               <td className="td num">
-                                {sumber
-                                  ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
-                                  : formatRupiah(k.jatah)}
-                                {/* Asal angkanya disebut, karena jatah yang ikut
-                                    RAB akan berubah sendiri saat RAB-nya diubah —
-                                    dan itu harus terduga, bukan mengejutkan. */}
-                                {sumber?.rabKind && sumber.budget === null && (
+                                {/* Kategori yang ditautkan ke RAB tidak bisa diketik:
+                                    RAB-lah keputusannya, dan angka yang bisa ditimpa di
+                                    sini akan diam-diam ketinggalan tiap kali RAB berubah.
+                                    Yang belum ditautkan tetap bisa diketik supaya
+                                    menautkan bisa satu per satu. */}
+                                {sumber?.rab
+                                  ? formatRupiah(k.jatah)
+                                  : sumber
+                                    ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
+                                    : formatRupiah(k.jatah)}
+                                {sumber?.rab && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-brand-700">
                                     dari RAB {JENIS_RAB_LABEL[sumber.rabKind as JenisRab]}
-                                    {sumber.usulanRab === null && ' — bulan ini belum ada'}
+                                    {sumber.rab.anggaran === 0 && ' — bulan ini belum ada'}
                                   </span>
                                 )}
-                                {sumber?.rabKind && sumber.budget !== null && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    diketik sendiri
-                                    {sumber.usulanRab !== null
-                                      && `; RAB ${JENIS_RAB_LABEL[sumber.rabKind as JenisRab]} ${formatRupiahShort(sumber.usulanRab)}`}
-                                  </span>
-                                )}
-                                {!k.ditetapkan && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    belum disimpan
+                                {/* Satu keterangan saja, dan yang benar: angka di kotak
+                                    isian bisa berasal dari pembagian menurut porsi, bukan
+                                    dari ketikan siapa pun. Menyebutnya "diketik sendiri"
+                                    membuat orang mengira ada yang pernah menetapkannya. */}
+                                {sumber && !sumber.rab && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
+                                    {k.ditetapkan
+                                      ? 'diketik sendiri — tautkan ke RAB agar ikut otomatis'
+                                      : 'belum ditetapkan — sementara dibagi menurut porsi'}
                                   </span>
                                 )}
                               </td>
                               <td className="td num">
                                 {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
-                                {sumber && sumber.transfer > 0 && sumber.manual > 0 && (
+                                {/* Jumlah barisnya disebut, bukan hanya rupiahnya: nol
+                                    rupiah dari sepuluh baris yang belum dilaporkan dan nol
+                                    rupiah dari sepuluh baris yang dibatalkan terlihat sama
+                                    di kolom angka, padahal yang pertama masih butuh uang. */}
+                                {sumber?.rab && sumber.rab.jumlah.SELESAI > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    {sumber.rab.jumlah.SELESAI} baris selesai
+                                    {sumber.rab.hemat !== 0 && (
+                                      <>
+                                        {' · '}
+                                        <span className={sumber.rab.hemat < 0 ? 'text-red-600' : 'text-emerald-700'}>
+                                          {sumber.rab.hemat < 0 ? 'lewat ' : 'hemat '}
+                                          {formatRupiahShort(Math.abs(sumber.rab.hemat))}
+                                        </span>
+                                      </>
+                                    )}
+                                  </span>
+                                )}
+                                {sumber?.rab && sumber.rab.jumlah.SELESAI === 0 && sumber.rab.anggaran > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    belum ada yang dilaporkan selesai
+                                  </span>
+                                )}
+                                {sumber && !sumber.rab && sumber.transfer > 0 && sumber.manual > 0 && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
                                     transfer {formatRupiahShort(sumber.transfer)} + manual{' '}
                                     {formatRupiahShort(sumber.manual)}
                                   </span>
                                 )}
-                                {sumber && sumber.transfer > 0 && sumber.manual === 0 && (
+                                {sumber && !sumber.rab && sumber.transfer > 0 && sumber.manual === 0 && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
                                     dari transfer
                                     {sumber.transferPerCabang.length > 1
                                       && ` · ${sumber.transferPerCabang.length} cabang`}
-                                  </span>
-                                )}
-                                {sumber && sumber.cashAccountId !== null && sumber.transfer === 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    belum ada transfer bulan ini
                                   </span>
                                 )}
                               </td>
@@ -957,6 +977,21 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 {sisa < 0 && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-red-600">
                                     lewat jatah
+                                  </span>
+                                )}
+                                {/* Yang sedang berjalan bukan "belum" dan bukan "selesai":
+                                    sisanya masih mungkin keluar, tetapi belum tentu sebesar
+                                    anggarannya. Disebut terpisah supaya angka di atasnya
+                                    tidak terbaca sebagai seluruh yang masih akan keluar. */}
+                                {sumber?.rab && sumber.rab.berjalan > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
+                                    + {formatRupiahShort(sumber.rab.berjalan)} sedang berjalan
+                                    {` (${sumber.rab.jumlah.BERJALAN} baris)`}
+                                  </span>
+                                )}
+                                {sumber?.rab && sumber.rab.jumlah.BELUM > 0 && (
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                    {sumber.rab.jumlah.BELUM} baris belum tersentuh
                                   </span>
                                 )}
                               </td>
@@ -982,6 +1017,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           </td>
                           <td className="td num">
                             {formatRupiah(rencana.kategori.reduce((t, k) => t + k.sisa, 0))}
+                            {data.kategori.some((k) => (k.rab?.berjalan ?? 0) > 0) && (
+                              <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
+                                + {formatRupiahShort(
+                                  data.kategori.reduce((t, k) => t + (k.rab?.berjalan ?? 0), 0),
+                                )}{' '}
+                                sedang berjalan
+                              </span>
+                            )}
                           </td>
                           <td className="td num" colSpan={2} />
                         </tr>
@@ -1013,15 +1056,19 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     </p>
                   )}
 
+                  {/* Dua kolom angka di tabel ini tidak saling menjumpai, dan itu
+                      perlu dikatakan: jatah adalah rencana, realisasi adalah uang
+                      nyata, dan selisih keduanya bukan "sisa jatah" melainkan
+                      penghematan ditambah yang belum dibeli. Tanpa kalimat ini
+                      pembacanya akan menjumlahkan sendiri dan menyimpulkan ada
+                      angka yang salah. */}
                   <p className="mt-3 text-xs text-slate-500">
-                    Seluruh belanja {formatPeriod(data.period)}{' '}
-                    <strong>
-                      {formatRupiah(data.kategori.reduce((s2, k) => s2 + k.terpakaiBulanIni, 0))}
-                    </strong>
-                    , seluruhnya memotong kolom sisa di atas. Angka{' '}
-                    <strong>boleh belanja</strong> di kartu paling atas memakai aturan yang
-                    berbeda: di sana belanja sebelum tanggal posisi kas tidak dipotong lagi, karena
-                    sudah keluar dari saldo yang dilaporkan.
+                    Kolom <strong>jatah</strong> dan <strong>sudah direalisasi</strong> mengukur
+                    dua hal berbeda, jadi selisihnya bukan kolom ketiga: yang masih akan keluar
+                    adalah <strong>belum direalisasi</strong>, sedangkan baris yang sudah selesai
+                    dengan harga di bawah anggarannya menjadi penghematan, bukan jatah yang masih
+                    bisa dipakai. Angka <strong>boleh belanja</strong> di kartu paling atas
+                    memakai aturan lain lagi: ia berangkat dari kas yang ada, bukan dari RAB.
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">

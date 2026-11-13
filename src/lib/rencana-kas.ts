@@ -63,6 +63,17 @@ export type Kategori = {
   terpakai?: number;
   /** Yang sudah dibelanjakan sejak awal bulan, termasuk sebelum posisi kas. */
   terpakaiBulanIni?: number;
+  /**
+   * Anggaran RAB yang belum direalisasi sama sekali — uang yang pasti masih
+   * harus disiapkan bulan ini.
+   *
+   * Kosong berarti kategorinya belum ditautkan ke RAB; sisanya lalu diturunkan
+   * dari jatah dikurangi belanja seperti cara lama. Dibedakan karena keduanya
+   * menjawab pertanyaan berbeda: "jatah masih sisa berapa" bisa besar justru
+   * ketika belanjanya memang belum dimulai, sedangkan yang dibutuhkan rancangan
+   * kas adalah "berapa yang masih akan keluar".
+   */
+  belum?: number | null;
 };
 
 export type Masukan = {
@@ -142,8 +153,16 @@ export type PorsiKategori = {
   /** Jatahnya diketik sendiri, bukan hasil pembagian menurut porsi. */
   ditetapkan: boolean;
   terpakai: number;
-  /** jatah − terpakai. Minus berarti kategori ini sudah lewat jatahnya. */
+  /**
+   * Yang masih akan keluar dari kategori ini.
+   *
+   * Untuk kategori yang ditautkan ke RAB: anggaran baris yang belum
+   * direalisasi sama sekali. Untuk yang belum ditautkan: jatah − terpakai,
+   * yang bisa minus bila kategorinya sudah lewat jatahnya.
+   */
   sisa: number;
+  /** Sisanya berasal dari RAB, bukan dari jatah dikurangi belanja. */
+  dariRab: boolean;
   /** Sisa dibagi jumlah minggu yang tersisa. */
   perMinggu: number;
 };
@@ -381,13 +400,20 @@ export function hitungRencana(m: Masukan): Rencana {
     const ditetapkan = k.jatah != null && k.jatah >= 0;
     const dipakai = k.terpakaiBulanIni ?? k.terpakai ?? 0;
     const jatah = ditetapkan ? (k.jatah as number) : bagianJatah[i];
-    const sisa = jatah - dipakai;
+    // Kategori yang ditautkan ke RAB memakai anggaran baris yang belum
+    // tersentuh, bukan jatah dikurangi belanja. Keduanya bisa jauh berbeda:
+    // RAB yang sudah separuh direalisasi dengan harga di bawah anggaran
+    // menyisakan jatah yang besar, padahal barangnya sudah dibeli dan uangnya
+    // tidak akan keluar lagi.
+    const dariRab = k.belum != null;
+    const sisa = dariRab ? (k.belum as number) : jatah - dipakai;
     return {
       label: k.label,
       jatah,
       ditetapkan,
       terpakai: dipakai,
       sisa,
+      dariRab,
       // Dinolkan saat jatahnya sudah terlampaui: "boleh belanja minus tiga
       // belas juta seminggu" bukan aturan yang bisa dijalankan siapa pun.
       perMinggu: potongan.length > 0 ? bulatkan(Math.max(0, sisa) / potongan.length) : 0,
