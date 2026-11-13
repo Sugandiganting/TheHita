@@ -302,6 +302,13 @@ model BudgetLine {
   budgetId  String
   accountId String
   amount    Float   @default(0)
+  /// Perkiraan tanggal belanja, diisi selagi RAB masih draf.
+  ///
+  /// Dipakai rancangan kas mingguan untuk menempatkan rencana belanja ini pada
+  /// minggunya, bukan merata sebulan. null berarti belum ditentukan, dan baris
+  /// itu disebar rata sepanjang sisa bulan seperti sebelumnya — "belum tahu
+  /// kapan" bukan hal yang sama dengan "awal bulan".
+  planDate  DateTime?
   notes     String?
 
   /// Nominal yang sungguh keluar. null berarti belum dilaporkan; 0 berarti
@@ -335,6 +342,13 @@ model BudgetItemLine {
   quantity  Float   @default(0)
   /// Harga satuan yang diperkirakan.
   unitPrice Float   @default(0)
+  /// Perkiraan tanggal belanja, diisi selagi RAB masih draf.
+  ///
+  /// Dipakai rancangan kas mingguan untuk menempatkan rencana belanja ini pada
+  /// minggunya, bukan merata sebulan. null berarti belum ditentukan, dan baris
+  /// itu disebar rata sepanjang sisa bulan seperti sebelumnya — "belum tahu
+  /// kapan" bukan hal yang sama dengan "awal bulan".
+  planDate  DateTime?
   notes     String?
 
   /// Jumlah yang sungguh dibeli. null berarti belum dilaporkan sama sekali —

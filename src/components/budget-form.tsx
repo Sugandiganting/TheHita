@@ -9,11 +9,15 @@ import {
 } from '@/app/actions';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
 import { JENIS_RAB, JENIS_RAB_LABEL, nilaiBarisBarang } from '@/lib/rab';
-import { formatRupiah } from '@/lib/format';
+import { formatPeriod, formatRupiah } from '@/lib/format';
+import { hariDalamBulan } from '@/lib/tren-masuk';
 import { SearchableSelect, type PickerOption } from './searchable-select';
 import { MoneyInput } from './money-input';
 
 const initial: ActionState = { ok: false, message: '' };
+
+/** Tanggal terakhir sebuah bulan "YYYY-MM", untuk batas atas kolom tanggal. */
+const akhirBulan = (period: string) => `${period}-${String(hariDalamBulan(period)).padStart(2, '0')}`;
 
 export type ScopeOption = {
   code: string;
@@ -126,13 +130,15 @@ export type AkunOption = { id: string; code: string; name: string; type: string 
 export function BudgetLineForm({
   budgetId,
   accounts,
+  periode,
   values,
   disabled,
   onTutup,
 }: {
   budgetId: string;
   accounts: AkunOption[];
-  values?: { accountId: string; amount: number; notes: string | null };
+  periode: string;
+  values?: { accountId: string; amount: number; notes: string | null; planDate: string | null };
   disabled?: boolean;
   onTutup?: () => void;
 }) {
@@ -195,6 +201,28 @@ export function BudgetLineForm({
         </p>
       </div>
 
+      {/* Perkiraan tanggal belanja — bukan realisasi.
+          Rancangan kas mingguan memakainya untuk menempatkan rencana belanja
+          ini pada minggunya. Dibiarkan kosong pun tidak apa-apa: barisnya
+          disebar rata sepanjang sisa bulan, karena "belum tahu kapan" bukan
+          hal yang sama dengan "awal bulan". */}
+      <div>
+        <label className="label" htmlFor="rab-line-plan">Perkiraan tanggal belanja</label>
+        <input
+          id="rab-line-plan"
+          name="planDate"
+          type="date"
+          className="input"
+          min={`${periode}-01`}
+          max={akhirBulan(periode)}
+          defaultValue={values?.planDate ?? ''}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Opsional, dan harus di dalam {formatPeriod(periode)}. Dipakai rancangan kas mingguan
+          untuk tahu di minggu mana uangnya dibutuhkan; dikosongkan berarti disebar rata.
+        </p>
+      </div>
+
       <div>
         <label className="label" htmlFor="rab-line-notes">Catatan</label>
         <input id="rab-line-notes" name="notes" className="input" placeholder="Opsional" defaultValue={values?.notes ?? ''} />
@@ -231,14 +259,19 @@ export type BarangOption = {
 export function BudgetItemLineForm({
   budgetId,
   items,
+  periode,
   values,
   disabled,
   onTutup,
 }: {
   budgetId: string;
   items: BarangOption[];
+  periode: string;
   /** Diisi saat mengoreksi baris yang sudah ada. */
-  values?: { itemId: string; quantity: number; unitPrice: number; catatan: string | null };
+  values?: {
+    itemId: string; quantity: number; unitPrice: number;
+    catatan: string | null; planDate: string | null;
+  };
   disabled?: boolean;
   onTutup?: () => void;
 }) {
@@ -386,6 +419,28 @@ export function BudgetItemLineForm({
           Jumlah kali harga satuan. Dihitung, bukan diketik, jadi tidak bisa berbeda dengan keduanya.
         </span>
       </p>
+
+      {/* Perkiraan tanggal belanja — bukan realisasi.
+          Rancangan kas mingguan memakainya untuk menempatkan rencana belanja
+          ini pada minggunya. Dibiarkan kosong pun tidak apa-apa: barisnya
+          disebar rata sepanjang sisa bulan, karena "belum tahu kapan" bukan
+          hal yang sama dengan "awal bulan". */}
+      <div>
+        <label className="label" htmlFor="rab-barang-plan">Perkiraan tanggal belanja</label>
+        <input
+          id="rab-barang-plan"
+          name="planDate"
+          type="date"
+          className="input"
+          min={`${periode}-01`}
+          max={akhirBulan(periode)}
+          defaultValue={values?.planDate ?? ''}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Opsional, dan harus di dalam {formatPeriod(periode)}. Dipakai rancangan kas mingguan
+          untuk tahu di minggu mana uangnya dibutuhkan; dikosongkan berarti disebar rata.
+        </p>
+      </div>
 
       <div>
         <label className="label" htmlFor="rab-barang-notes">Catatan</label>

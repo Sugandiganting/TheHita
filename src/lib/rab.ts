@@ -104,6 +104,11 @@ export type BarisBarangRab = {
   unitPrice: number;
   /** Jumlah kali harga satuan. Tidak disimpan, supaya tidak pernah berbeda. */
   anggaran: number;
+  /**
+   * Perkiraan tanggal belanja, diisi selagi RAB masih draf. null berarti
+   * belum ditentukan — bukan "awal bulan".
+   */
+  rencanaTanggal: Date | null;
   catatan: string | null;
   realisasi: RealisasiBaris;
 };

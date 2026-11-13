@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getBudgetDetail } from '@/lib/queries';
-import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
+import { formatDate, formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import { JENIS_RAB_LABEL, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
@@ -26,7 +26,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
     prisma.budgetLine.findMany({
       where: { budgetId: id },
       select: {
-        id: true, accountId: true, amount: true, notes: true,
+        id: true, accountId: true, amount: true, notes: true, planDate: true,
         realAmount: true, realDate: true, realDone: true, realNotes: true,
       },
     }),
@@ -52,6 +52,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   const hariIni = new Date().toISOString().slice(0, 10);
   const tanggalBawaanRealisasi = hariIni.startsWith(rab.period) ? hariIni : `${rab.period}-01`;
   const hematBaris = (b: BarisBarangRab) => penghematanBaris(b);
+  const keIsoTanggal = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
   const purchasing = rab.kind === 'PURCHASING';
   // Pada RAB purchasing, realisasi dilaporkan per barang di tabel di atas;
   // tabel per akun di bawahnya hanya rangkuman menurut jurnal. Baru pada RAB
@@ -83,9 +84,13 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         }
         action={
           purchasing ? (
-            <TambahBarangRabDialog budgetId={rab.id} items={opsiBarang} disabled={disahkan} />
+            <TambahBarangRabDialog
+              budgetId={rab.id} items={opsiBarang} periode={rab.period} disabled={disahkan}
+            />
           ) : (
-            <TambahAnggaranDialog budgetId={rab.id} accounts={accounts} disabled={disahkan} />
+            <TambahAnggaranDialog
+              budgetId={rab.id} accounts={accounts} periode={rab.period} disabled={disahkan}
+            />
           )
         }
       />
@@ -165,6 +170,10 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <th className="th num">Jumlah</th>
                       <th className="th num">Harga satuan</th>
                       <th className="th num">Dianggarkan</th>
+                      {/* Perkiraan tanggal belanja ada sejak draf — justru di
+                          sanalah gunanya, karena rancangan kas mingguan
+                          memakainya untuk tahu kapan uangnya dibutuhkan. */}
+                      <th className="th">Rencana belanja</th>
                       {/* Kolom realisasi hanya ada artinya setelah rencananya
                           berhenti bergerak, jadi ia baru muncul begitu RAB
                           disahkan. Sebelum itu tidak ada yang bisa dibandingkan. */}
@@ -192,6 +201,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         </td>
                         <td className="td num">{formatRupiah(b.unitPrice)}</td>
                         <td className="td num">{formatRupiah(b.anggaran)}</td>
+                        <td className="td">
+                          {b.rencanaTanggal
+                            ? formatDate(b.rencanaTanggal)
+                            : <span className="text-xs text-slate-400">belum ditentukan</span>}
+                        </td>
                         {disahkan && (
                           <td className="td num">
                             {b.realisasi.nilai === null ? (
@@ -243,9 +257,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                               budgetId={rab.id}
                               items={opsiBarang}
                               nama={`${b.itemCode} ${b.itemName}`}
+                              periode={rab.period}
                               nilai={{
                                 itemId: b.itemId, quantity: b.quantity,
                                 unitPrice: b.unitPrice, catatan: b.catatan,
+                                planDate: keIsoTanggal(b.rencanaTanggal),
                               }}
                               disabled={disahkan}
                             />
@@ -304,6 +320,11 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                   <tr>
                     <th className="th">Akun</th>
                     <th className="th num">Dianggarkan</th>
+                    {/* Hanya pada RAB selain purchasing: di sanalah baris akun
+                        memang rinciannya, jadi di sanalah tanggalnya diisi. Pada
+                        RAB purchasing tabel ini cuma rangkuman, dan tanggalnya
+                        ada di tabel barang. */}
+                    {!purchasing && <th className="th">Rencana belanja</th>}
                     <th className="th num">{realisasiAkun ? 'Realisasi (jurnal)' : 'Realisasi'}</th>
                     {/* Dua kolom tambahan hanya setelah RAB disahkan, sama seperti
                         di tabel barang: sebelum itu tidak ada yang bisa dicatat. */}
@@ -325,6 +346,13 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         )}
                       </td>
                       <td className="td num">{b.anggaran > 0 ? formatRupiah(b.anggaran) : '—'}</td>
+                      {!purchasing && (
+                        <td className="td">
+                          {barisPerAkun.get(b.accountId)?.planDate
+                            ? formatDate(barisPerAkun.get(b.accountId)!.planDate!)
+                            : <span className="text-xs text-slate-400">belum ditentukan</span>}
+                        </td>
+                      )}
                       <td className="td num">{formatRupiah(b.realisasi)}</td>
                       {realisasiAkun && (
                         <td className="td num">
@@ -372,10 +400,12 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                                 budgetId={rab.id}
                                 accounts={accounts}
                                 nama={`${b.accountCode} ${b.accountName}`}
+                                periode={rab.period}
                                 nilai={{
                                   accountId: b.accountId,
                                   amount: barisPerAkun.get(b.accountId)!.amount,
                                   notes: barisPerAkun.get(b.accountId)!.notes,
+                                  planDate: keIsoTanggal(barisPerAkun.get(b.accountId)!.planDate),
                                 }}
                                 disabled={disahkan}
                               />
@@ -409,6 +439,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                   <tr>
                     <td className="td">Total</td>
                     <td className="td num">{formatRupiah(r.totalAnggaran)}</td>
+                    {!purchasing && <td className="td">—</td>}
                     <td className="td num">{formatRupiah(r.totalRealisasi)}</td>
                     {realisasiAkun && (
                       <td className="td num">

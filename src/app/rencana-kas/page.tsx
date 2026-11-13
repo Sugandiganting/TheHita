@@ -161,6 +161,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
         ],
       })
     : null;
+  // Rencana belanja RAB per minggu, dicari menurut tanggal mulai minggunya.
+  const rencanaMinggu = new Map((rencana?.minggu ?? []).map((m) => [m.mulai.toISOString(), m]));
   // Bulan yang isinya terbawa dari bulan sebelumnya dan belum disentuh sama
   // sekali. Diturunkan dari keadaan, bukan dari penanda sesaat, supaya
   // keterangannya tetap muncul kalau halamannya dimuat ulang.
@@ -697,9 +699,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </p>
               </Card>
 
+              {/* Dicocokkan menurut tanggal mulai minggunya. Baris yang sudah
+                  lewat tidak punya pasangan di rencana — belanjanya sudah
+                  terjadi, dan merencanakannya lagi tidak ada artinya. */}
               {mingguan && mingguan.baris.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Baris yang sudah lewat memakai laporan posisi kas, jadi uang masuknya angka nyata — bukan hasil membagi rata. Plafon dasar selalu boleh dipakai; tambahan baru dibuka bila uang masuk kumulatif sudah mencapai ambangnya.">
+                  <SectionTitle hint="Baris yang sudah lewat memakai laporan posisi kas, jadi uang masuknya angka nyata — bukan hasil membagi rata. Plafon dasar selalu boleh dipakai; tambahan baru dibuka bila uang masuk kumulatif sudah mencapai ambangnya. Rencana belanja adalah RAB bulan ini yang uangnya belum keluar, ditaruh di minggu perkiraan tanggalnya; ia tidak mengubah plafon, hanya memperlihatkan minggu mana yang merencanakan lebih banyak daripada yang sanggup dibayar.">
                     Aturan mingguan
                   </SectionTitle>
 
@@ -733,6 +738,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                           <th className="th">Minggu</th>
                           <th className="th num">Plafon dasar</th>
                           <th className="th num">Maksimum</th>
+                          <th className="th num">Rencana belanja</th>
                           <th className="th num">Target masuk</th>
                           <th className="th num">Masuk nyata</th>
                         </tr>
@@ -785,6 +791,43 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                   </span>
                                 ) : null}
                               </td>
+                              {/* Rencana belanja RAB minggu ini, disandingkan dengan
+                                  plafonnya. Plafon menjawab "kas sanggup berapa",
+                                  kolom ini menjawab "yang direncanakan berapa" —
+                                  dan yang perlu dilihat justru ketika keduanya
+                                  berselisih, karena di situlah belanja perlu digeser
+                                  atau uang masuk perlu dikejar lebih dulu. */}
+                              <td className="td num">
+                                {(() => {
+                                  const w = rencanaMinggu.get(b.mulai.toISOString());
+                                  if (!w || w.rencanaRab === 0) {
+                                    return <span className="text-xs text-slate-400">—</span>;
+                                  }
+                                  const maks = (b.plafonDasar ?? 0) + (b.tambahan ?? 0);
+                                  const lewat = b.plafonDasar !== null && w.rencanaRab > maks;
+                                  return (
+                                    <>
+                                      <span className={lewat ? 'font-medium text-red-600' : ''}>
+                                        {formatRupiah(w.rencanaRab)}
+                                      </span>
+                                      {w.rencanaRabBertanggal === 0 ? (
+                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                          disebar rata
+                                        </span>
+                                      ) : w.rencanaRabBertanggal < w.rencanaRab ? (
+                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                          {formatRupiahShort(w.rencanaRabBertanggal)} bertanggal
+                                        </span>
+                                      ) : null}
+                                      {lewat && (
+                                        <span className="mt-0.5 block text-[11px] font-medium text-red-600">
+                                          lewat plafon {formatRupiahShort(w.rencanaRab - maks)}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </td>
                               <td className="td num text-slate-500">{formatRupiah(b.target)}</td>
                               {/* Selisihnya menempel pada angka nyatanya, bukan jadi kolom
                                   sendiri: satu kolom lagi mendorong seluruh perbandingan
@@ -820,6 +863,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                             {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar + m.tambahan, 0))}
                           </td>
                           <td className="td num">
+                            {rencana.rencanaRab === 0 ? '—' : formatRupiah(rencana.rencanaRab)}
+                          </td>
+                          <td className="td num">
                             {formatRupiah(
                               mingguan.baris
                                 .filter((b) => !b.lalu && b.dalamBulan)
@@ -831,6 +877,31 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       </tfoot>
                     </table>
                   </div>
+
+                  {/* Dua hal yang tidak terbaca dari angka di kolomnya sendiri:
+                      berapa yang belum punya tanggal (jadi hanya ditebak
+                      tempatnya) dan berapa yang tanggalnya sudah lewat tetapi
+                      belum dilaporkan. Keduanya mengubah arti seluruh kolom,
+                      jadi disebut tepat di bawahnya. */}
+                  {(rencana.rencanaRabTanpaTanggal > 0 || rencana.rencanaRabTerlambat > 0) && (
+                    <p className="mt-3 text-xs text-slate-500">
+                      {rencana.rencanaRabTanpaTanggal > 0 && (
+                        <>
+                          <strong>{formatRupiah(rencana.rencanaRabTanpaTanggal)}</strong> dari rencana
+                          belanja itu belum punya perkiraan tanggal, jadi disebar rata menurut panjang
+                          tiap minggu. Isi tanggalnya di menu RAB supaya tahu minggu mana yang
+                          sebenarnya padat.{' '}
+                        </>
+                      )}
+                      {rencana.rencanaRabTerlambat > 0 && (
+                        <>
+                          <strong>{formatRupiah(rencana.rencanaRabTerlambat)}</strong> tanggalnya sudah
+                          lewat tetapi belum dilaporkan terealisasi, jadi ditarik ke minggu pertama —
+                          uangnya tetap harus keluar.
+                        </>
+                      )}
+                    </p>
+                  )}
 
                   <p className="mt-3 text-xs text-slate-500">
                     Target masuk adalah laju harian skenario normal dikalikan jumlah hari barisnya,

@@ -119,6 +119,24 @@ export type Masukan = {
    * tempo. Dua pembayaran yang berbeda, jadi keduanya memang dikurangkan.
    */
   kebutuhanGaji?: number;
+  /**
+   * Rencana belanja RAB bulan ini yang uangnya belum keluar, satu entri per
+   * baris RAB.
+   *
+   * Dipakai hanya untuk menempatkan belanja pada minggunya — ia tidak
+   * mengubah plafon, karena plafon menjawab "berapa yang kas sanggup" dan ini
+   * menjawab "kapan uangnya dibutuhkan". Keduanya disandingkan supaya
+   * terlihat bila sebuah minggu merencanakan lebih banyak daripada yang
+   * sanggup dibayar minggu itu.
+   */
+  rencanaRab?: RencanaBelanjaRab[];
+};
+
+/** Satu baris RAB yang uangnya belum keluar, dengan perkiraan tanggalnya. */
+export type RencanaBelanjaRab = {
+  /** null berarti belum ditentukan; disebar rata sepanjang sisa bulan. */
+  tanggal: Date | null;
+  nilai: number;
 };
 
 export type Minggu = {
@@ -130,6 +148,13 @@ export type Minggu = {
   tambahan: number;
   /** Uang masuk kumulatif bulan ini yang harus tercapai agar tambahan dibuka. */
   targetMasuk: number;
+  /**
+   * Rencana belanja RAB yang jatuh di minggu ini: yang bertanggal di sini,
+   * ditambah bagian merata dari yang belum bertanggal.
+   */
+  rencanaRab: number;
+  /** Bagian yang memang bertanggal di minggu ini. */
+  rencanaRabBertanggal: number;
 };
 
 export type HasilSkenario = {
@@ -240,6 +265,18 @@ export type Rencana = {
   skenario: Record<Skenario, HasilSkenario>;
   minggu: Minggu[];
   kategori: PorsiKategori[];
+  /** Seluruh rencana belanja RAB yang uangnya belum keluar di sisa bulan ini. */
+  rencanaRab: number;
+  /** Bagian yang belum punya tanggal, jadi hanya bisa disebar rata. */
+  rencanaRabTanpaTanggal: number;
+  /**
+   * Bagian yang tanggalnya sudah lewat tetapi belum dilaporkan terealisasi.
+   *
+   * Ditaruh di minggu pertama, bukan dibuang: uangnya memang masih harus
+   * keluar, dan menyembunyikannya membuat minggu pertama terlihat lebih lega
+   * daripada keadaannya.
+   */
+  rencanaRabTerlambat: number;
 };
 
 /** Ke kelipatan PEMBULATAN terdekat, tetap benar untuk angka negatif. */
@@ -366,6 +403,34 @@ export function hitungRencana(m: Masukan): Rencana {
   const bagianDasar = bagiProporsional(dasar, bobotHari);
   const bagianTambahan = bagiProporsional(tambahanTotal, bobotHari);
 
+  // Rencana belanja RAB ditempatkan pada minggunya. Yang bertanggal masuk ke
+  // minggu tanggalnya; yang tanggalnya sudah lewat tetapi belum terealisasi
+  // ditarik ke minggu pertama, karena uangnya tetap harus keluar dan menundanya
+  // di layar hanya membuat minggu pertama terlihat lebih lega. Yang belum
+  // bertanggal disebar menurut panjang tiap minggu — bukan ditaruh di depan,
+  // karena "belum tahu kapan" bukan berarti "secepatnya".
+  const rencanaMasuk = m.rencanaRab ?? [];
+  const bertanggal = rencanaMasuk.filter((r) => r.tanggal !== null);
+  const tanpaTanggal = rencanaMasuk
+    .filter((r) => r.tanggal === null)
+    .reduce((t, r) => t + r.nilai, 0);
+  const bagianTanpaTanggal = bagiProporsional(tanpaTanggal, bobotHari);
+  const perMingguBertanggal = potongan.map(() => 0);
+  let terlambat = 0;
+  for (const r of bertanggal) {
+    const t = r.tanggal as Date;
+    const i = potongan.findIndex(
+      (p) => selisihHari(p.mulai, t) >= 0 && selisihHari(t, p.selesai) >= 0,
+    );
+    if (i >= 0) {
+      perMingguBertanggal[i] += r.nilai;
+    } else if (potongan.length > 0 && selisihHari(t, potongan[0].mulai) > 0) {
+      perMingguBertanggal[0] += r.nilai;
+      terlambat += r.nilai;
+    }
+    // Tanggal sesudah akhir jendela tidak ikut: uangnya keluar di bulan lain.
+  }
+
   const kejarNormal = Math.max(0, m.proyeksi.NORMAL - m.masukSampaiKini);
   let kumulatifHari = 0;
   const minggu: Minggu[] = potongan.map((p, i) => {
@@ -375,6 +440,8 @@ export function hitungRencana(m: Masukan): Rencana {
       plafonDasar: bagianDasar[i],
       tambahan: bagianTambahan[i],
       targetMasuk: bulatkan(m.masukSampaiKini + (kejarNormal * kumulatifHari) / hari),
+      rencanaRab: perMingguBertanggal[i] + bagianTanpaTanggal[i],
+      rencanaRabBertanggal: perMingguBertanggal[i],
     };
   });
 
@@ -426,6 +493,9 @@ export function hitungRencana(m: Masukan): Rencana {
     jatahKategori: kategori.reduce((t, k) => t + k.jatah, 0),
     jatahKas,
     skenario, minggu, kategori,
+    rencanaRab: minggu.reduce((t, w) => t + w.rencanaRab, 0),
+    rencanaRabTanpaTanggal: tanpaTanggal,
+    rencanaRabTerlambat: terlambat,
   };
 }
 

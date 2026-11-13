@@ -15,8 +15,8 @@ const proyeksi = [
 
 /** Minggu rencana dari 17 Okt sampai akhir bulan, seperti pecahMinggu membuatnya. */
 const minggu: Minggu[] = [
-  { mulai: hari(17), selesai: hari(23), hari: 7, plafonDasar: jt(50), tambahan: jt(10), targetMasuk: jt(230) },
-  { mulai: hari(24), selesai: hari(31), hari: 8, plafonDasar: jt(60), tambahan: 0, targetMasuk: jt(310) },
+  { mulai: hari(17), selesai: hari(23), hari: 7, plafonDasar: jt(50), tambahan: jt(10), targetMasuk: jt(230), rencanaRab: 0, rencanaRabBertanggal: 0 },
+  { mulai: hari(24), selesai: hari(31), hari: 8, plafonDasar: jt(60), tambahan: 0, targetMasuk: jt(310), rencanaRab: 0, rencanaRabBertanggal: 0 },
 ];
 
 const laporan = [
@@ -90,7 +90,7 @@ test('baris yang menyeberang pergantian bulan memakai laju kedua bulannya', () =
     hariIni: hari(26),
     laporan: [{ date: hari(24), incomeToDate: jt(300) }],
     minggu: [
-      { mulai: hari(25), selesai: hari(31), hari: 7, plafonDasar: jt(40), tambahan: 0, targetMasuk: jt(310) },
+      { mulai: hari(25), selesai: hari(31), hari: 7, plafonDasar: jt(40), tambahan: 0, targetMasuk: jt(310), rencanaRab: 0, rencanaRabBertanggal: 0 },
     ],
   });
   const depan = r.baris.filter((b) => !b.lalu);

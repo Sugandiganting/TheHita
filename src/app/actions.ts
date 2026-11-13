@@ -874,6 +874,28 @@ export async function deleteBudget(_prev: ActionState, formData: FormData): Prom
   redirect('/rab');
 }
 
+/**
+ * Membaca perkiraan tanggal belanja sebuah baris RAB.
+ *
+ * Kosong berarti belum ditentukan, dan itu keadaan yang sah: rancangan kas
+ * menyebar baris tanpa tanggal merata sepanjang sisa bulan. Yang ditolak
+ * adalah tanggal di luar bulan RAB-nya — RAB Desember yang barisnya
+ * bertanggal Januari akan menghilang dari rencana kas bulan mana pun.
+ */
+function bacaTanggalRencana(
+  formData: FormData,
+  period: string,
+): { nilai: Date | null } | { salah: string } {
+  const mentah = String(formData.get('planDate') ?? '').trim();
+  if (!mentah) return { nilai: null };
+  const tanggal = new Date(`${mentah}T00:00:00.000Z`);
+  if (Number.isNaN(tanggal.getTime())) return { salah: 'Tanggal rencana belanja tidak terbaca.' };
+  if (!mentah.startsWith(period)) {
+    return { salah: `Tanggal rencana belanja harus di dalam bulan RAB ini (${period}).` };
+  }
+  return { nilai: tanggal };
+}
+
 export async function saveBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const budgetId = String(formData.get('budgetId') ?? '');
   const accountId = String(formData.get('accountId') ?? '');
@@ -884,7 +906,9 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
   if (!Number.isFinite(amount) || amount <= 0) return fail('Nominal anggaran harus lebih dari nol.');
 
   const [budget, account] = await Promise.all([
-    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true, kind: true } }),
+    prisma.budget.findUnique({
+      where: { id: budgetId }, select: { id: true, status: true, kind: true, period: true },
+    }),
     prisma.account.findUnique({ where: { id: accountId }, select: { type: true, isHeader: true, name: true } }),
   ]);
   if (!budget) return fail('RAB tidak ditemukan.');
@@ -897,11 +921,13 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
   if (!['EXPENSE', 'COGS'].includes(account.type)) {
     return fail(`${account.name} bukan akun beban. RAB hanya untuk biaya.`);
   }
+  const rencana = bacaTanggalRencana(formData, budget.period);
+  if ('salah' in rencana) return fail(rencana.salah);
 
   await prisma.budgetLine.upsert({
     where: { budgetId_accountId: { budgetId, accountId } },
-    update: { amount, notes: notes || null },
-    create: { budgetId, accountId, amount, notes: notes || null },
+    update: { amount, notes: notes || null, planDate: rencana.nilai },
+    create: { budgetId, accountId, amount, notes: notes || null, planDate: rencana.nilai },
   });
   segarkanRab();
   return ok('Anggaran disimpan.');
@@ -927,7 +953,9 @@ export async function saveBudgetItemLine(_prev: ActionState, formData: FormData)
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) return fail('Harga satuan harus lebih dari nol.');
 
   const [budget, item] = await Promise.all([
-    prisma.budget.findUnique({ where: { id: budgetId }, select: { id: true, status: true, kind: true } }),
+    prisma.budget.findUnique({
+      where: { id: budgetId }, select: { id: true, status: true, kind: true, period: true },
+    }),
     prisma.item.findUnique({
       where: { id: itemId },
       select: { active: true, name: true, account: { select: { name: true, isHeader: true } } },
@@ -944,10 +972,13 @@ export async function saveBudgetItemLine(_prev: ActionState, formData: FormData)
     return fail(`Akun ${item.account.name} adalah akun induk. Perbaiki akun barang ini dulu di master barang.`);
   }
 
+  const rencana = bacaTanggalRencana(formData, budget.period);
+  if ('salah' in rencana) return fail(rencana.salah);
+
   await prisma.budgetItemLine.upsert({
     where: { budgetId_itemId: { budgetId, itemId } },
-    update: { quantity, unitPrice, notes: notes || null },
-    create: { budgetId, itemId, quantity, unitPrice, notes: notes || null },
+    update: { quantity, unitPrice, notes: notes || null, planDate: rencana.nilai },
+    create: { budgetId, itemId, quantity, unitPrice, notes: notes || null, planDate: rencana.nilai },
   });
   segarkanRab();
   return ok(`Anggaran ${item.name} disimpan.`);
@@ -1097,6 +1128,9 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
       kind: budget.kind,
       status: 'DRAFT',
       notes: budget.notes,
+      // Perkiraan tanggal belanja sengaja tidak ikut disalin: tanggalnya milik
+      // bulan asalnya, dan memindahkannya ke bulan baru berarti menebak hari
+      // yang sama akan cocok lagi — padahal tanggal 31 tidak ada di tiap bulan.
       lines: { create: budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes })) },
       // Jumlah dan harga satuan disalin apa adanya. Harga tahun depan memang
       // belum tentu sama, tetapi menaikkannya sendiri berarti menebak — dan

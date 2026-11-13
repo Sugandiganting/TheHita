@@ -830,3 +830,89 @@ test('RAB yang seluruhnya sudah selesai tidak lagi menekan plafon mingguan', () 
   assert.equal(r.kategori[0].sisa, 0);
   assert.equal(r.kategori[0].perMinggu, 0);
 });
+
+/* ------------------------------------------------------------------ */
+/* Rencana belanja RAB: menempatkan belanja pada minggunya             */
+/* ------------------------------------------------------------------ */
+
+test('baris RAB bertanggal jatuh di minggu tanggalnya, bukan dibagi rata', () => {
+  // Inilah gunanya perkiraan tanggal: dua belanja besar di minggu yang sama
+  // adalah masalah kas, dan membaginya rata sebulan menyembunyikan masalah itu.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    rencanaRab: [
+      { tanggal: tgl('2026-10-12'), nilai: jt(30) },
+      { tanggal: tgl('2026-10-28'), nilai: jt(20) },
+    ],
+  });
+  // Jendela 10–31 Okt dipecah jadi minggu-minggu; 12 Okt di yang pertama.
+  const pertama = r.minggu[0];
+  assert.equal(keJt(pertama.rencanaRab), 30);
+  assert.equal(keJt(pertama.rencanaRabBertanggal), 30);
+  assert.equal(keJt(r.minggu[r.minggu.length - 1].rencanaRab), 20);
+  assert.equal(keJt(r.rencanaRab), 50);
+  assert.equal(r.rencanaRabTanpaTanggal, 0);
+});
+
+test('baris tanpa tanggal disebar menurut panjang minggunya, bukan ditaruh di depan', () => {
+  // "Belum tahu kapan" bukan berarti "secepatnya". Menaruhnya di minggu
+  // pertama akan membuat minggu itu selalu terlihat kelebihan beban.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    rencanaRab: [{ tanggal: null, nilai: jt(44) }],
+  });
+  assert.equal(keJt(r.rencanaRabTanpaTanggal), 44);
+  assert.equal(keJt(r.rencanaRab), 44, 'seluruhnya tetap terhitung');
+  for (const m of r.minggu) {
+    assert.equal(m.rencanaRabBertanggal, 0);
+    assert.ok(m.rencanaRab > 0, 'tiap minggu kebagian');
+  }
+  // Minggu yang lebih panjang kebagian lebih banyak.
+  const terpanjang = [...r.minggu].sort((a, b) => b.hari - a.hari)[0];
+  const terpendek = [...r.minggu].sort((a, b) => a.hari - b.hari)[0];
+  assert.ok(terpanjang.rencanaRab >= terpendek.rencanaRab);
+});
+
+test('rencana yang tanggalnya sudah lewat ditarik ke minggu pertama, tidak hilang', () => {
+  // Uangnya tetap harus keluar. Menyembunyikannya membuat minggu pertama
+  // terlihat lebih lega daripada keadaannya.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    rencanaRab: [{ tanggal: tgl('2026-10-03'), nilai: jt(15) }],
+  });
+  assert.equal(keJt(r.minggu[0].rencanaRab), 15);
+  assert.equal(keJt(r.rencanaRabTerlambat), 15);
+});
+
+test('rencana bertanggal di luar bulan tidak ikut dihitung', () => {
+  // RAB Oktober dengan baris bertanggal November: uangnya keluar di bulan
+  // lain, jadi tidak boleh menekan plafon Oktober.
+  const r = hitungRencana({
+    ...rapat9Okt,
+    rencanaRab: [{ tanggal: tgl('2026-11-05'), nilai: jt(15) }],
+  });
+  assert.equal(r.rencanaRab, 0);
+  assert.equal(r.rencanaRabTerlambat, 0);
+});
+
+test('tanpa rencana belanja RAB, tabel mingguan tetap terhitung seperti biasa', () => {
+  const r = hitungRencana(rapat9Okt);
+  assert.equal(r.rencanaRab, 0);
+  for (const m of r.minggu) assert.equal(m.rencanaRab, 0);
+});
+
+test('rencana belanja tidak mengubah plafon mingguan', () => {
+  // Plafon menjawab "kas sanggup berapa", rencana menjawab "direncanakan
+  // berapa". Membiarkan yang kedua menggeser yang pertama berarti kehilangan
+  // satu-satunya angka yang bisa dipakai menolak belanja.
+  const tanpa = hitungRencana(rapat9Okt);
+  const dengan = hitungRencana({
+    ...rapat9Okt,
+    rencanaRab: [{ tanggal: tgl('2026-10-12'), nilai: jt(500) }],
+  });
+  assert.deepEqual(
+    dengan.minggu.map((m) => [m.plafonDasar, m.tambahan]),
+    tanpa.minggu.map((m) => [m.plafonDasar, m.tambahan]),
+  );
+  assert.deepEqual(dengan.skenario, tanpa.skenario);
+});

@@ -841,6 +841,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     quantity: l.quantity,
     unitPrice: l.unitPrice,
     anggaran: nilaiBarisBarang(l, round),
+    rencanaTanggal: l.planDate,
     catatan: l.notes,
     realisasi: {
       quantity: l.realQuantity,
@@ -1729,12 +1730,13 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       kind: true,
       lines: {
         select: {
-          amount: true, realAmount: true, realDate: true, realDone: true, realNotes: true,
+          amount: true, planDate: true,
+          realAmount: true, realDate: true, realDone: true, realNotes: true,
         },
       },
       itemLines: {
         select: {
-          quantity: true, unitPrice: true,
+          quantity: true, unitPrice: true, planDate: true,
           realQuantity: true, realUnitPrice: true, realDate: true, realDone: true, realNotes: true,
         },
       },
@@ -1783,6 +1785,37 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const rekapPerJenis = new Map<string, RekapRab>(
     [...barisPerJenis].map(([kind, baris]) => [kind, rekapRab(baris, round)]),
   );
+
+  // Rencana belanja RAB untuk tabel mingguan: tiap baris dengan perkiraan
+  // tanggalnya dan sisa uang yang masih akan keluar darinya.
+  //
+  // Yang dipakai di sini sisaAkanKeluar, bukan "belum tersentuh" seperti pada
+  // tabel kategori. Keduanya menjawab pertanyaan berbeda: tabel kategori
+  // bertanya berapa rencana yang belum dimulai, tabel mingguan bertanya berapa
+  // uang yang masih harus disiapkan — dan baris yang baru dibeli separuh masih
+  // menuntut sisanya.
+  const rencanaRab: { tanggal: Date | null; nilai: number }[] = [];
+  for (const b of rabBulanIni) {
+    const baris = b.kind === 'PURCHASING'
+      ? b.itemLines.map((l) => ({
+          planDate: l.planDate,
+          anggaran: nilaiBarisBarang(l, round),
+          nilai: l.realQuantity === null || l.realUnitPrice === null
+            ? null
+            : round(l.realQuantity * l.realUnitPrice),
+          selesai: l.realDone,
+        }))
+      : b.lines.map((l) => ({
+          planDate: l.planDate,
+          anggaran: l.amount,
+          nilai: l.realAmount,
+          selesai: l.realDone,
+        }));
+    for (const l of baris) {
+      const sisa = l.selesai ? 0 : Math.max(0, round(l.anggaran - (l.nilai ?? 0)));
+      if (sisa > 0) rencanaRab.push({ tanggal: l.planDate, nilai: sisa });
+    }
+  }
 
   const kategori = plan.categories.map((k) => ({
     id: k.id,
@@ -1894,6 +1927,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         // Gaji bulan depan disisihkan dari plafon: gaji dibayar di awal bulan,
         // jadi yang menutupinya adalah saldo akhir bulan ini.
         kebutuhanGaji: gaji,
+        rencanaRab,
         komitmen: plan.commitments.map((k) => ({
           label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
         })),
