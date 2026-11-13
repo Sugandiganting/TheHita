@@ -1445,12 +1445,27 @@ export async function getRencanaKasPeriods(): Promise<Period[]> {
 /** Sebanyak apa riwayat yang dipakai menghitung rata-rata laju harian. */
 const RIWAYAT_LAJU_BULAN = 6;
 
-/** Uang masuk bulanan, dipakai sebagai dasar usulan tiga skenario. */
+/**
+ * Uang masuk bulanan, dipakai sebagai dasar usulan tiga skenario dan
+ * ditampilkan sebagai riwayat di panel proyeksi.
+ *
+ * Diambil dari laporan posisi kas, bukan dari jurnal — alasan yang sama dengan
+ * getArusKas di atas: selama jurnalnya belum tuntas dirapikan, angka yang
+ * diketik sendiri justru yang bisa dipercaya. Dulu fungsi ini membaca jurnal
+ * sementara rumus target membaca laporan posisi kas, sehingga satu layar bisa
+ * menyebut uang masuk bulan yang sama dua kali dengan angka yang berbeda: pada
+ * kartu "Asal target" angka laporan, pada daftar riwayat di bawahnya nol,
+ * karena bulan itu memang belum sempat dijurnal.
+ *
+ * Bulan yang tidak punya laporan posisi kas tidak muncul sama sekali, bukan
+ * muncul sebagai nol. Nol berarti "tidak ada uang masuk", dan itu pernyataan
+ * yang berbeda dari "belum dilaporkan".
+ */
 async function riwayatUangMasuk(sebelum: Period, bulan = 6): Promise<{ period: Period; cashIn: number }[]> {
   const mulai = addMonths(sebelum, -bulan);
   const selesai = addMonths(sebelum, -1);
-  const actuals = await getMonthlyActuals(mulai, selesai);
-  return actuals.map((a) => ({ period: a.period, cashIn: round(a.cashIn) }));
+  const arus = await getArusKas(mulai, selesai);
+  return arus.map((a) => ({ period: a.period, cashIn: round(a.masuk) }));
 }
 
 /** Uang keluar bulanan, dipakai mengusulkan pengeluaran rutin sebulan. */

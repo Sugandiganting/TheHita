@@ -252,6 +252,26 @@ export function PurchaseCalculator({
         </div>
       )}
 
+      {/*
+        * Batas aman nol bukan batas aman.
+        *
+        * Batas itu adalah kebutuhan gaji sebulan, dan kebutuhan gaji boleh
+        * kosong. Bila kosong, batasnya jatuh ke nol dan seluruh panel ini
+        * berubah arti tanpa mengubah kata-katanya: "aman" tidak lagi berarti
+        * kas masih menutup gaji bulan depan, melainkan sekadar kas belum
+        * minus. Disebut di atas, sebelum harga diketik, karena yang keliru
+        * bukan rencana belanjanya melainkan dasar penilaiannya.
+        */}
+      {context.minCashBuffer === 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <strong>Batas amannya sedang nol</strong>, karena <em>Kebutuhan gaji per bulan</em> belum
+          diisi di panel <em>Asumsi bulanan</em>. Yang dinilai di sini karena itu baru
+          &ldquo;kas tidak minus&rdquo;, bukan &ldquo;kas masih menutup gaji bulan depan&rdquo; —
+          jauh lebih longgar daripada yang tertulis di atas. Isi angkanya supaya penilaiannya
+          berarti seperti yang dijanjikan.
+        </div>
+      )}
+
       {!rencana && context.maxAffordableNow > 0 && (
         <p className="text-sm text-slate-500">
           Sekali dibayar sekaligus sekarang, kemampuan belanja maksimum{' '}
@@ -289,24 +309,6 @@ export function PurchaseCalculator({
               </p>
             )}
 
-            {/*
-              * Batas aman nol bukan batas aman.
-              *
-              * Batas itu adalah kebutuhan gaji sebulan, dan kebutuhan gaji
-              * boleh kosong. Bila kosong, batasnya jatuh ke nol dan penilaian
-              * ini berubah arti tanpa mengubah kata-katanya: "aman" tidak lagi
-              * berarti kas masih menutup gaji, melainkan sekadar kas belum
-              * minus — jauh lebih longgar daripada yang dijanjikan kalimat di
-              * atasnya, dan tidak ada apa pun di layar yang menyebutnya.
-              */}
-            {context.minCashBuffer === 0 && (
-              <p className="mt-2 rounded-md bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
-                <strong>Batas amannya sedang nol</strong>, karena{' '}
-                <em>Kebutuhan gaji per bulan</em> belum diisi di Asumsi bulanan. Jadi yang dinilai
-                di sini baru &ldquo;kas tidak minus&rdquo;, bukan &ldquo;kas masih menutup
-                gaji&rdquo;. Isi angkanya supaya penilaian ini berarti seperti yang tertulis.
-              </p>
-            )}
 
             {/* Usulan yang sama bisa berarti dua hal yang berlawanan: memecah
                 lebih banyak supaya cukup, atau justru tidak perlu dipecah
