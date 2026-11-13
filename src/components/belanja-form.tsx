@@ -289,6 +289,25 @@ export function PurchaseCalculator({
               </p>
             )}
 
+            {/*
+              * Batas aman nol bukan batas aman.
+              *
+              * Batas itu adalah kebutuhan gaji sebulan, dan kebutuhan gaji
+              * boleh kosong. Bila kosong, batasnya jatuh ke nol dan penilaian
+              * ini berubah arti tanpa mengubah kata-katanya: "aman" tidak lagi
+              * berarti kas masih menutup gaji, melainkan sekadar kas belum
+              * minus — jauh lebih longgar daripada yang dijanjikan kalimat di
+              * atasnya, dan tidak ada apa pun di layar yang menyebutnya.
+              */}
+            {context.minCashBuffer === 0 && (
+              <p className="mt-2 rounded-md bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
+                <strong>Batas amannya sedang nol</strong>, karena{' '}
+                <em>Kebutuhan gaji per bulan</em> belum diisi di Asumsi bulanan. Jadi yang dinilai
+                di sini baru &ldquo;kas tidak minus&rdquo;, bukan &ldquo;kas masih menutup
+                gaji&rdquo;. Isi angkanya supaya penilaian ini berarti seperti yang tertulis.
+              </p>
+            )}
+
             {/* Usulan yang sama bisa berarti dua hal yang berlawanan: memecah
                 lebih banyak supaya cukup, atau justru tidak perlu dipecah
                 sebanyak itu. Keduanya harus berbunyi berbeda. */}
