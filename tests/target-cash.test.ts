@@ -52,16 +52,25 @@ test('tanpa target pesimis, tingkatnya tidak bisa ditentukan', () => {
 
 /* ----------------------------------------------------------- satu langkah */
 
-test('separuh kelebihan dibawa ke bulan berikutnya, lalu dikali musim', () => {
+test('dasarnya target yang tercapai, lalu separuh kelebihannya, lalu musim', () => {
   // 400 melampaui target 350 sebesar 50; separuhnya 25.
-  // (400 + 25) × 1 = 425
-  assert.equal(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, 1), 425);
+  // (350 + 25) × 1 = 375 — setengah jalan dari target lama menuju kenyataan.
+  assert.equal(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, 1), 375);
+});
+
+test('dasarnya target, bukan uang masuk nyata', () => {
+  // Memakai uang masuk sebagai dasar menambahkan kelebihan itu satu setengah
+  // kali, dan targetnya berakhir di atas bulan yang baru saja lewat — 425,
+  // melampaui 400 yang sungguh masuk.
+  const hasil = targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, 1);
+  assert.ok(hasil < 400, `target ${hasil} tidak boleh melampaui bulan yang baru lewat`);
+  assert.notEqual(hasil, 425);
 });
 
 test('separuh, bukan seluruhnya', () => {
   assert.equal(BAGIAN_KELEBIHAN, 0.5);
-  const penuh = targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, 1);
-  assert.ok(penuh < 450, 'membawa seluruh kelebihan akan menghasilkan 450');
+  const separuh = targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, 1);
+  assert.ok(separuh < 400, 'membawa seluruh kelebihan akan menghasilkan 400');
 });
 
 test('tepat di target tidak membawa kelebihan apa pun', () => {
@@ -75,10 +84,10 @@ test('di bawah target kembali ke target, bukan ikut jatuh', () => {
 
 test('musim dipasang sesudah kelebihannya dihitung, bukan sebelumnya', () => {
   const c = 0.928;
-  // Dibulatkan ke sen seperti modul hitung lain; (400 + 25) × c lebih dulu,
-  // bukan (400 × c) + 25 — urutan itu yang membedakan 394,40 dari 396,20.
-  assert.equal(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, c), 394.4);
-  assert.notEqual(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, c), 396.2);
+  // Dibulatkan ke sen seperti modul hitung lain; (350 + 25) × c lebih dulu,
+  // bukan (350 × c) + 25 — urutan itu yang membedakan 348 dari 349,80.
+  assert.equal(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, c), 348);
+  assert.notEqual(targetBerikutnya(400, { skenario: 'NORMAL', t: 350 }, c), 349.8);
 });
 
 /* ------------------------------------------------------------ pengali musim */
@@ -135,7 +144,7 @@ test('bulan pertama memakai rumus, bulan sesudahnya hanya dikali musim', () => {
 
   assert.equal(r.length, 2);
   assert.equal(r[0].dariRealisasi, true);
-  assert.equal(r[0].target.NORMAL, 394.4);
+  assert.equal(r[0].target.NORMAL, 348);
 
   // Desember: tidak ada kelebihan lagi, hanya musim November→Desember.
   assert.equal(r[1].dariRealisasi, false);

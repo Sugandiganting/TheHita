@@ -1360,7 +1360,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               */}
             {data.usulanRumus && (
               <Card className="card-pad min-w-0">
-                <SectionTitle hint="Dasarnya uang masuk NYATA bulan terakhir yang laporannya lengkap, ditambah separuh kelebihannya di atas target, lalu dikali musim. Target hanya dipakai mengukur berapa kelebihannya, bukan sebagai dasar. Separuh, bukan seluruhnya, karena satu bulan ramai belum tentu berulang.">
+                <SectionTitle hint="Dasarnya TARGET YANG TERCAPAI bulan terakhir yang laporannya lengkap, ditambah separuh kelebihan uang masuknya di atas target itu, lalu dikali musim. Jadi targetnya bergerak setengah jalan dari target lama menuju kenyataan — separuh, bukan seluruhnya, karena satu bulan ramai belum tentu berulang.">
                   Asal target bulan ini
                 </SectionTitle>
 
@@ -1406,20 +1406,19 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         *
                         * Tanpa ini kartunya melompat dari "separuh kelebihan"
                         * langsung ke "×musim", dan pembacanya harus menebak
-                        * apa yang dikali. Tebakan yang paling masuk akal —
-                        * menjumlahkan dua baris yang bersebelahan, target
-                        * ditambah separuh kelebihan — justru yang keliru:
-                        * dasarnya uang masuk nyata, dan target hanya dipakai
-                        * mengukur berapa kelebihannya.
+                        * apa yang dikali — padahal di situlah seluruh arti
+                        * rumusnya: dasarnya target yang tercapai, bukan uang
+                        * masuk yang nyata, sehingga targetnya berhenti di
+                        * tengah jalan menuju kenyataan.
                         */}
                       {data.usulanRumus.masukNyata > data.usulanRumus.t && (
                         <div className="flex justify-between px-3 py-2">
                           <dt className="text-slate-600">
-                            Uang masuk nyata + separuh kelebihannya
+                            Target yang tercapai + separuh kelebihannya
                           </dt>
                           <dd className="font-medium tabular-nums">
                             {formatRupiah(
-                              data.usulanRumus.masukNyata
+                              data.usulanRumus.t
                               + (data.usulanRumus.masukNyata - data.usulanRumus.t) / 2,
                             )}
                           </dd>

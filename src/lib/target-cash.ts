@@ -7,13 +7,16 @@
  *     t   = target yang tercapai di bulan itu (pesimis, normal, atau optimis)
  *     c   = pengali musim bulan dihitung terhadap bulan sebelumnya
  *
- *     bila n−1 > t :  n = ((n−1) + ((n−1) − t) × 50%) × c
+ *     bila n−1 > t :  n = (t + ((n−1) − t) × 50%) × c
  *     selain itu   :  n = t × c
  *
  * Setengah selisih itulah inti rumusnya: bulan yang melampaui targetnya
- * membawa separuh kelebihannya ke bulan berikutnya. Separuh, bukan seluruhnya,
- * karena satu bulan ramai belum tentu berulang — dan bukan nol, karena kalau
- * tidak, target tidak pernah naik betapapun baiknya kenyataan.
+ * menggeser target berikutnya setengah jalan menuju kenyataan. Dasarnya target
+ * yang tercapai, bukan uang masuknya — memakai uang masuk berarti menambahkan
+ * kelebihan itu satu setengah kali, dan targetnya berakhir di atas bulan yang
+ * baru saja lewat. Separuh, bukan seluruhnya, karena satu bulan ramai belum
+ * tentu berulang; dan bukan nol, karena kalau tidak, target tidak pernah naik
+ * betapapun baiknya kenyataan.
  *
  * Yang di bawah tingkat terendah tidak menyeret targetnya ikut jatuh: ia
  * kembali ke target pesimis. Bulan buruk yang menurunkan target bulan depan
@@ -85,6 +88,16 @@ export function pengaliMusim(asal: Period, tujuan: Period, pola: PolaMusim): num
 /**
  * Satu langkah rumus: target bulan berikutnya dari sebuah bulan yang
  * realisasinya sudah lengkap.
+ *
+ * Dasarnya TARGET YANG TERCAPAI, bukan uang masuk yang nyata. Dari situ
+ * separuh kelebihannya ditambahkan, sehingga targetnya bergerak setengah
+ * jalan dari target lama menuju kenyataan — lalu dikali musim.
+ *
+ * Perbedaannya bukan soal selera. Memakai uang masuk nyata sebagai dasar
+ * berarti menambahkan kelebihan itu satu setengah kali, dan targetnya
+ * berakhir di atas bulan yang baru saja lewat; memakai target sebagai dasar
+ * membuatnya berhenti di tengah. Satu bulan ramai belum tentu berulang, dan
+ * target yang melampaui bulan terbaik belum tentu bisa dikejar.
  */
 export function targetBerikutnya(
   masukNyata: number,
@@ -93,7 +106,7 @@ export function targetBerikutnya(
   pembulatan: (n: number) => number = bulat,
 ): number {
   if (masukNyata > tingkat.t) {
-    return pembulatan((masukNyata + (masukNyata - tingkat.t) * BAGIAN_KELEBIHAN) * c);
+    return pembulatan((tingkat.t + (masukNyata - tingkat.t) * BAGIAN_KELEBIHAN) * c);
   }
   return pembulatan(tingkat.t * c);
 }

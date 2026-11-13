@@ -900,9 +900,10 @@ export type RencanaKasDetail = {
   tersimpan: Record<Skenario, number | null>;
   usulan: Record<Skenario, number> | null;
   /**
-   * Target dari rumus: separuh kelebihan bulan terakhir yang realisasinya
-   * lengkap, dirantai ke depan lewat musim. null bila titik tumpunya belum
-   * ada — bulan yang laporannya lengkap dan targetnya pernah ditetapkan.
+   * Target dari rumus: target yang tercapai bulan terakhir yang realisasinya
+   * lengkap, ditambah separuh kelebihan uang masuknya, dirantai ke depan lewat
+   * musim. null bila titik tumpunya belum ada — bulan yang laporannya lengkap
+   * dan targetnya pernah ditetapkan.
    */
   usulanRumus: {
     /** Bulan yang jadi titik tumpu. */

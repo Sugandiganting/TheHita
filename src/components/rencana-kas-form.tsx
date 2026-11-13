@@ -192,7 +192,7 @@ export function ProjectionForm({
               {usul !== undefined && (
                 <span className="mt-0.5 block text-slate-400">
                   {dariRumus !== null
-                    ? `dari realisasi ${formatPeriod(usulanRumus!.anchor)} beserta separuh kelebihannya, dikali musim`
+                    ? `dari target ${formatPeriod(usulanRumus!.anchor)} beserta separuh kelebihan realisasinya, dikali musim`
                     : dariMusim !== null
                       ? `dari ${formatPeriod(usulanMusim!.dari)} menurut pola musim di Master Data`
                       : 'rata-rata uang masuk beberapa bulan terakhir'}
