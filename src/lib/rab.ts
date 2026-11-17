@@ -534,3 +534,24 @@ export function deretBulanSesudah(dari: string, sampai: string): string[] {
   }
   return hasil;
 }
+
+/**
+ * Apa yang terjadi pada satu bulan tujuan saat RAB disalin.
+ *
+ * Menimpa hanya boleh atas RAB yang masih bisa diubah tangan sendiri: draf,
+ * dan belum pernah dilaporkan realisasinya. RAB yang disahkan terkunci justru
+ * supaya angkanya tidak berubah diam-diam; realisasi yang sudah dicatat adalah
+ * kenyataan, dan menimpa barisnya ikut menghapus kenyataan itu.
+ */
+export type NasibSalin = 'buat' | 'timpa' | 'lewat-ada' | 'lewat-disahkan' | 'lewat-realisasi';
+
+export function nasibBulanSalin(
+  tujuan: { status: string; adaRealisasi: boolean } | null,
+  timpa: boolean,
+): NasibSalin {
+  if (!tujuan) return 'buat';
+  if (!timpa) return 'lewat-ada';
+  if (tujuan.status === 'ACTIVE') return 'lewat-disahkan';
+  if (tujuan.adaRealisasi) return 'lewat-realisasi';
+  return 'timpa';
+}

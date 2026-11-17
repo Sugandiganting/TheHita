@@ -347,7 +347,10 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   anggaran tidak berubah diam-diam setelah disepakati.
 - **Salin ke bulan lain** menyalin nominalnya apa adanya ke tiap bulan sampai bulan yang
   dipilih, dan selalu menghasilkan draf. Bulan yang sudah punya RAB sejenis dilewati,
-  tidak ditimpa. Yang menyusun anggaran tetap orangnya, bukan sistem.
+  kecuali dicentang **Timpa**: isinya lalu diganti dengan RAB yang disalin, untuk
+  meneruskan perubahan anggaran ke bulan-bulan sesudahnya. RAB yang sudah disahkan atau
+  sudah ada realisasinya tidak pernah ditimpa. Yang menyusun anggaran tetap orangnya,
+  bukan sistem.
 - **Satu akun boleh dianggarkan beberapa kali** pada RAB selain Purchasing, misalnya
   Neuviz, Guestpro, dan STAAH yang sama-sama Biaya Software dan Langganan. Catatannya
   yang membedakan, jadi catatan wajib diisi begitu akunnya sudah ada di RAB itu.

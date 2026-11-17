@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, gabungJenisRab, kodeJenisDariNama, namaJenis, nilaiBarisBarang, pemilikSisa,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, gabungJenisRab, kodeJenisDariNama, namaJenis, nasibBulanSalin, nilaiBarisBarang, pemilikSisa,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -416,4 +416,20 @@ test('deret bulan sesudah: satu bulan, atau kosong bila tujuannya tidak sesudah 
   assert.deepEqual(deretBulanSesudah('2026-11', '2026-12'), ['2026-12']);
   assert.deepEqual(deretBulanSesudah('2026-11', '2026-11'), []);
   assert.deepEqual(deretBulanSesudah('2026-11', '2026-08'), []);
+});
+
+/* Salin dengan pilihan menimpa RAB yang sudah ada di bulan tujuan. */
+test('salin: bulan tanpa RAB selalu dibuat', () => {
+  assert.equal(nasibBulanSalin(null, false), 'buat');
+  assert.equal(nasibBulanSalin(null, true), 'buat');
+});
+
+test('salin tanpa pilihan timpa: yang sudah ada dilewati', () => {
+  assert.equal(nasibBulanSalin({ status: 'DRAFT', adaRealisasi: false }, false), 'lewat-ada');
+});
+
+test('salin dengan timpa: hanya draf tanpa realisasi yang ditimpa', () => {
+  assert.equal(nasibBulanSalin({ status: 'DRAFT', adaRealisasi: false }, true), 'timpa');
+  assert.equal(nasibBulanSalin({ status: 'ACTIVE', adaRealisasi: false }, true), 'lewat-disahkan');
+  assert.equal(nasibBulanSalin({ status: 'DRAFT', adaRealisasi: true }, true), 'lewat-realisasi');
 });

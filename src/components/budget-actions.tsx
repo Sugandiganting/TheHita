@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { DialogTombol } from './dialog';
 import { formatPeriod } from '@/lib/format';
@@ -245,6 +245,12 @@ function SalinRabForm({
   const [state, action] = useActionState(duplicateBudget, initial);
   const pertama = periodeBerikutnya(period);
   const [sampai, setSampai] = useState(pertama);
+  const [timpa, setTimpa] = useState(false);
+  // Selesai menyalin, pilihan timpa kembali kosong. Formulir sendiri ikut
+  // dikosongkan setelah terkirim, dan centang yang hilang sementara tulisan di
+  // sebelahnya masih berkata "timpa" membuat orang tidak tahu mana yang benar.
+  // Menimpa juga sebaiknya dipilih ulang dengan sadar tiap kali.
+  useEffect(() => { setTimpa(false); }, [state]);
   const bulan = deretBulanSesudah(period, sampai);
   const kebanyakan = bulan.length > MAKS_BULAN_SALIN;
 
@@ -270,15 +276,28 @@ function SalinRabForm({
               ? `Paling jauh ${MAKS_BULAN_SALIN} bulan sekaligus. Periksa lagi tahunnya.`
               : bulan.length === 1
                 ? `Satu RAB baru untuk ${formatPeriod(bulan[0])}, berisi ${lineCount} baris.`
-                : `${bulan.length} RAB baru, ${formatPeriod(bulan[0])} sampai ${formatPeriod(bulan[bulan.length - 1])}, `
-                  + `masing-masing ${lineCount} baris. Bulan yang sudah punya RAB sejenis dilewati, tidak ditimpa.`}
+                : `${bulan.length} bulan, ${formatPeriod(bulan[0])} sampai ${formatPeriod(bulan[bulan.length - 1])}, `
+                  + `masing-masing ${lineCount} baris.`}
         </p>
       </div>
+      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+        <input type="checkbox" name="timpa" value="ya" checked={timpa}
+          onChange={(e) => setTimpa(e.target.checked)} className="mt-0.5" />
+        <span className="text-sm">
+          <span className="font-medium">Timpa RAB yang sudah ada di bulan-bulan itu</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {timpa
+              ? 'Seluruh baris RAB sejenis di bulan-bulan itu diganti dengan isi RAB ini, termasuk perkiraan tanggal belanjanya. '
+                + 'RAB yang sudah disahkan atau sudah ada realisasinya tetap tidak disentuh.'
+              : 'Tanpa centang, bulan yang sudah punya RAB sejenis dilewati — cocok untuk mengisi bulan yang masih kosong saja.'}
+          </span>
+        </span>
+      </label>
       {state.message && (
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <KirimSalin label={bulan.length > 1 ? `Salin ke ${bulan.length} bulan` : 'Salin'} />
+        <KirimSalin label={`${timpa ? 'Salin & timpa' : 'Salin'}${bulan.length > 1 ? ` ke ${bulan.length} bulan` : ''}`} />
         <button type="button" className="btn-secondary" onClick={onTutup}>Tutup</button>
       </div>
     </form>
