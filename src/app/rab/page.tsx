@@ -6,7 +6,7 @@ import { formatPeriod, formatRupiah } from '@/lib/format';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { JENIS_RAB_LABEL } from '@/lib/rab';
+import { JENIS_RAB_LABEL, urutkanRabTerdekat } from '@/lib/rab';
 import { type ScopeOption } from '@/components/budget-form';
 import { RabBaruDialog } from '@/components/budget-dialog';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
@@ -52,7 +52,10 @@ async function daftarScope(): Promise<ScopeOption[]> {
 }
 
 export default async function RabPage() {
-  const [daftar, scopes] = await Promise.all([getBudgetList(), daftarScope()]);
+  const [semua, scopes] = await Promise.all([getBudgetList(), daftarScope()]);
+  // Bulan berjalan di atas, lalu bulan-bulan depan, baru yang sudah lewat.
+  const kini = currentPeriod();
+  const daftar = urutkanRabTerdekat(semua, kini);
 
   return (
     <>
@@ -106,7 +109,12 @@ export default async function RabPage() {
                         {JENIS_RAB_LABEL[r.kind]}
                       </Badge>
                     </td>
-                    <td className="td">{formatPeriod(r.period)}</td>
+                    <td className="td">
+                      {formatPeriod(r.period)}
+                      {r.period === kini && (
+                        <span className="ml-2 text-xs font-medium text-brand-700">bulan ini</span>
+                      )}
+                    </td>
                     <td className="td">
                       <Badge tone={r.status === 'ACTIVE' ? 'brand' : 'slate'}>
                         {r.status === 'ACTIVE' ? 'Disahkan' : 'Draf'}

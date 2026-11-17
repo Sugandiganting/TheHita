@@ -357,3 +357,40 @@ export function periodeBerikutnya(period: string): string {
     ? `${tahun + 1}-01`
     : `${tahun}-${String(bulan + 1).padStart(2, '0')}`;
 }
+
+/**
+ * Urutan bulan dari yang paling dekat dengan bulan berjalan.
+ *
+ *   bulan ini → bulan depan → dua bulan lagi → … → bulan lalu → dua bulan lalu → …
+ *
+ * Bulan yang akan datang didahulukan daripada yang sudah lewat pada jarak yang
+ * sama, karena RAB yang masih bisa diubah lebih sering dicari daripada yang
+ * tinggal menunggu laporan realisasinya. Mengurutkan menurut bulan saja, naik
+ * atau turun, menaruh bulan ini di tengah daftar begitu RAB disusun beberapa
+ * bulan ke depan — dan dua belas baris pertama jadi bulan yang belum perlu
+ * disentuh.
+ *
+ * Periode berformat YYYY-MM, jadi membandingkannya sebagai teks sudah benar.
+ */
+export function bandingkanBulanTerdekat(a: string, b: string, kini: string): number {
+  if (a === b) return 0;
+  const aDepan = a >= kini;
+  const bDepan = b >= kini;
+  if (aDepan !== bDepan) return aDepan ? -1 : 1;
+  // Sama-sama ke depan: yang lebih awal lebih dekat. Sama-sama lewat: yang lebih akhir.
+  return aDepan ? (a < b ? -1 : 1) : (a > b ? -1 : 1);
+}
+
+/**
+ * Daftar RAB diurutkan dari bulan terdekat, lalu pemilik, lalu jenis — urutan
+ * yang sama di dalam satu bulan seperti sebelumnya. Tidak mengubah daftar asal.
+ */
+export function urutkanRabTerdekat<T extends { period: string; scope: string; kind: string }>(
+  daftar: readonly T[],
+  kini: string,
+): T[] {
+  return [...daftar].sort((x, y) =>
+    bandingkanBulanTerdekat(x.period, y.period, kini)
+    || x.scope.localeCompare(y.scope)
+    || x.kind.localeCompare(y.kind));
+}

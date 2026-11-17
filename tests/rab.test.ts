@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   anggaranPerAkun, barisMasukScope, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
-  statusRealisasi,
+  statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
 } from '../src/lib/rab.ts';
 
@@ -303,4 +303,37 @@ test('rekap RAB: item yang dibatalkan jadi hemat penuh dan tidak lagi dianggap b
   ]);
   assert.equal(r.belum, 0, 'tidak boleh ikut menekan plafon belanja');
   assert.equal(r.hemat, 4_000_000);
+});
+
+/*
+ * Urutan daftar RAB: bulan terdekat di atas. Bulan ini lebih dulu, lalu bulan
+ * depan dan seterusnya, baru bulan-bulan yang sudah lewat dari yang terbaru.
+ */
+test('daftar RAB: bulan ini, lalu bulan depan berurutan, lalu bulan lalu dari yang terbaru', () => {
+  const rab = (period: string, scope = 'THL', kind = 'PURCHASING') => ({ period, scope, kind });
+  const hasil = urutkanRabTerdekat(
+    [rab('2027-07'), rab('2026-09'), rab('2026-11'), rab('2027-01'), rab('2026-12'), rab('2026-10')],
+    '2026-11',
+  ).map((r) => r.period);
+  assert.deepEqual(hasil, ['2026-11', '2026-12', '2027-01', '2027-07', '2026-10', '2026-09']);
+});
+
+test('daftar RAB: di dalam satu bulan tetap urut pemilik lalu jenis', () => {
+  const hasil = urutkanRabTerdekat(
+    [
+      { period: '2026-11', scope: 'THU', kind: 'PURCHASING' },
+      { period: '2026-11', scope: 'IGYT', kind: 'UMUM' },
+      { period: '2026-11', scope: 'IGYT', kind: 'PURCHASING' },
+    ],
+    '2026-11',
+  ).map((r) => `${r.scope}/${r.kind}`);
+  assert.deepEqual(hasil, ['IGYT/PURCHASING', 'IGYT/UMUM', 'THU/PURCHASING']);
+});
+
+test('daftar RAB: tahun berganti tidak mengacaukan urutan', () => {
+  const hasil = urutkanRabTerdekat(
+    [{ period: '2026-12', scope: 'A', kind: 'X' }, { period: '2027-01', scope: 'A', kind: 'X' }],
+    '2027-01',
+  ).map((r) => r.period);
+  assert.deepEqual(hasil, ['2027-01', '2026-12']);
 });

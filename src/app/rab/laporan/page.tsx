@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { getBudgetDetail, getBudgetList } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
-import { JENIS_RAB_LABEL } from '@/lib/rab';
+import { JENIS_RAB_LABEL, bandingkanBulanTerdekat } from '@/lib/rab';
+import { currentPeriod } from '@/lib/period';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,12 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
     );
   }
 
-  const periode = [...new Set(semua.map((r) => r.period))].sort().reverse();
+  // Bulan terdekat lebih dulu, sama dengan daftar di Input RAB — sehingga yang
+  // terbuka tanpa memilih apa pun adalah bulan berjalan, bukan bulan terjauh
+  // yang kebetulan sudah disusun anggarannya.
+  const kini = currentPeriod();
+  const periode = [...new Set(semua.map((r) => r.period))]
+    .sort((a, b) => bandingkanBulanTerdekat(a, b, kini));
   const dipilih = one(params.periode) ?? periode[0];
   const bulanIni = semua.filter((r) => r.period === dipilih);
 
