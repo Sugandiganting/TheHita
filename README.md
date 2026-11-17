@@ -340,6 +340,11 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   anggaran tidak berubah diam-diam setelah disepakati.
 - **Salin ke bulan berikutnya** menyalin nominalnya apa adanya dan selalu menghasilkan
   draf. Yang menyusun anggaran tetap orangnya, bukan sistem.
+- **Satu akun boleh dianggarkan beberapa kali** pada RAB selain Purchasing, misalnya
+  Neuviz, Guestpro, dan STAAH yang sama-sama Biaya Software dan Langganan. Catatannya
+  yang membedakan, jadi catatan wajib diisi begitu akunnya sudah ada di RAB itu.
+  Realisasi dilaporkan per baris; perbandingan dengan jurnal tetap per akun, karena
+  jurnal tidak mencatat tagihan mana yang dibayar.
 
 ### COA
 Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di Indonesia).
@@ -486,6 +491,7 @@ di [`src/lib/beban-bersama.ts`](src/lib/beban-bersama.ts), bukan diterka dari pe
 | | GuestPro 1 (Uluwatu + IGYT) | GuestPro 2 (Legian + Sri Krisna + Laundry) |
 |---|---|---|
 | Listrik | **Uluwatu + IGYT** — satu meteran | sudah bertanda cabang |
+| Air PDAM (`6120.10`) | **Uluwatu + IGYT** — satu meteran | Legian + Sri Krisna |
 | Software & Langganan | Uluwatu | **Legian** |
 | Gaji & Service Karyawan | Uluwatu | **Legian + Sri Krisna** — stafnya orang yang sama, berpindah lokasi |
 | Bonus & Gaji Management | Uluwatu | **Legian + Sri Krisna** |

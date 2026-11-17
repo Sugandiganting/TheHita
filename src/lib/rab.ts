@@ -394,3 +394,54 @@ export function urutkanRabTerdekat<T extends { period: string; scope: string; ki
     || x.scope.localeCompare(y.scope)
     || x.kind.localeCompare(y.kind));
 }
+
+/**
+ * Apakah catatan sebuah baris RAB umum cukup untuk membedakannya dari baris
+ * lain yang memakai akun yang sama. null bila cukup; selain itu alasannya.
+ *
+ * Satu akun boleh dianggarkan beberapa kali — Neuviz, Guestpro dan STAAH
+ * sama-sama Biaya Software dan Langganan — tetapi hanya catatannya yang
+ * membedakan baris-baris itu, saat diubah, saat realisasinya dilaporkan, dan
+ * saat dibaca di rancangan kas. Dua baris yang tidak bisa dibedakan bukan dua
+ * tagihan, melainkan satu tagihan yang tercatat dua kali.
+ *
+ * `lainnya` adalah catatan baris lain di RAB yang sama dengan akun yang sama,
+ * tidak termasuk baris yang sedang disimpan.
+ */
+export function cekCatatanAkunGanda(
+  lainnya: readonly (string | null)[],
+  catatan: string,
+  namaAkun: string,
+): string | null {
+  if (lainnya.length === 0) return null;
+  const bersih = catatan.trim();
+  if (!bersih) {
+    return `${namaAkun} sudah ada di RAB ini. Isi catatan untuk membedakannya — `
+      + 'misalnya nama tagihannya: Neuviz, Guestpro.';
+  }
+  const kunci = bersih.toLocaleLowerCase('id-ID');
+  if (lainnya.some((c) => (c ?? '').trim().toLocaleLowerCase('id-ID') === kunci)) {
+    return `${namaAkun} dengan catatan "${bersih}" sudah ada di RAB ini. `
+      + 'Ubah baris yang ada, atau beri catatan yang berbeda.';
+  }
+  return null;
+}
+
+/**
+ * Anggaran RAB umum di tingkat akun: baris-baris yang memakai akun yang sama
+ * dijumlahkan. Tingkat inilah yang bisa dibandingkan dengan jurnal, karena
+ * jurnal hanya mencatat akunnya — bukan tagihan mana yang dimaksud.
+ */
+export function anggaranAkunDariBaris<T extends { accountId: string; amount: number }>(
+  baris: readonly T[],
+  info: (b: T) => { code: string; name: string },
+  pembulatan: (n: number) => number = (n) => n,
+): Map<string, { code: string; name: string; anggaran: number }> {
+  const hasil = new Map<string, { code: string; name: string; anggaran: number }>();
+  for (const b of baris) {
+    const cur = hasil.get(b.accountId);
+    if (cur) cur.anggaran = pembulatan(cur.anggaran + b.amount);
+    else hasil.set(b.accountId, { ...info(b), anggaran: b.amount });
+  }
+  return hasil;
+}

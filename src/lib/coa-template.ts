@@ -185,6 +185,7 @@ export const COA_TEMPLATE: CoaSeed[] = [
   { code: '6120.07', name: 'Biaya Diskon Tamu', type: 'EXPENSE', subtype: 'ADMIN', cashflow: 'OPERATING', parent: '6120' },
   { code: '6120.08', name: 'Biaya Refund dan Kompensasi Tamu', type: 'EXPENSE', subtype: 'ADMIN', cashflow: 'OPERATING', parent: '6120' },
   { code: '6120.09', name: 'Biaya Lain-lain', type: 'EXPENSE', subtype: 'OTHER', cashflow: 'OPERATING', parent: '6120' },
+  { code: '6120.10', name: 'Biaya Air (PDAM)', type: 'EXPENSE', subtype: 'UTILITIES', cashflow: 'OPERATING', parent: '6120', description: 'Tagihan air PDAM. Bukan air isi ulang atau galon — keduanya di 6160.' },
   { code: '6130', name: 'Biaya Karyawan', type: 'EXPENSE', subtype: 'PAYROLL', isHeader: true, parent: '6100' },
   { code: '6130.01', name: 'Biaya Gaji Karyawan', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6130' },
   { code: '6130.02', name: 'Biaya Service Karyawan', type: 'EXPENSE', subtype: 'PAYROLL', cashflow: 'OPERATING', parent: '6130' },

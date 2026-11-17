@@ -38,7 +38,7 @@ export function TambahAnggaranDialog({
       lebar="sm"
       disabled={disabled}
       title={disabled ? 'RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.' : undefined}
-      keterangan="Satu baris per akun beban. Akunnya bisa dicari — ketik nomor atau namanya."
+      keterangan="Akunnya bisa dicari — ketik nomor atau namanya. Akun yang sama boleh dipakai lagi untuk tagihan lain, dibedakan lewat catatan."
     >
       {(tutup) => (
         <BudgetLineForm budgetId={budgetId} accounts={accounts} periode={periode} onTutup={tutup} />
@@ -89,7 +89,7 @@ export function UbahAnggaranDialog({
   budgetId: string;
   accounts: AkunOption[];
   periode: string;
-  nilai: { accountId: string; amount: number; notes: string | null; planDate: string | null };
+  nilai: { id: string; accountId: string; amount: number; notes: string | null; planDate: string | null };
   /** Nama akunnya, untuk judul dialognya. */
   nama: string;
   disabled: boolean;

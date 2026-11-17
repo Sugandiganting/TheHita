@@ -464,9 +464,6 @@ CREATE INDEX "BudgetLine_budgetId_idx" ON "BudgetLine"("budgetId");
 CREATE INDEX "BudgetLine_accountId_idx" ON "BudgetLine"("accountId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "BudgetLine_budgetId_accountId_key" ON "BudgetLine"("budgetId", "accountId");
-
--- CreateIndex
 CREATE INDEX "BudgetItemLine_budgetId_idx" ON "BudgetItemLine"("budgetId");
 
 -- CreateIndex

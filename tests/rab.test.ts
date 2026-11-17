@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranPerAkun, barisMasukScope, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -336,4 +336,38 @@ test('daftar RAB: tahun berganti tidak mengacaukan urutan', () => {
     '2027-01',
   ).map((r) => r.period);
   assert.deepEqual(hasil, ['2027-01', '2026-12']);
+});
+
+/*
+ * Satu akun boleh dianggarkan beberapa kali di RAB umum, asal catatannya
+ * membedakan. Dulu baris kedua diam-diam menimpa yang pertama.
+ */
+test('akun yang pertama kali dipakai tidak butuh catatan', () => {
+  assert.equal(cekCatatanAkunGanda([], '', 'Biaya Software'), null);
+});
+
+test('akun yang sudah ada wajib diberi catatan', () => {
+  assert.match(cekCatatanAkunGanda([null], '  ', 'Biaya Software')!, /Isi catatan/);
+});
+
+test('catatan yang sama untuk akun yang sama ditolak, besar kecil huruf tidak dihitung', () => {
+  assert.match(cekCatatanAkunGanda(['Neuviz'], ' neuviz ', 'Biaya Software')!, /sudah ada/);
+});
+
+test('catatan yang berbeda diterima, walau baris pertama tanpa catatan', () => {
+  assert.equal(cekCatatanAkunGanda([null, 'Neuviz'], 'Guestpro', 'Biaya Software'), null);
+});
+
+test('anggaran per akun menjumlahkan baris dengan akun yang sama', () => {
+  const hasil = anggaranAkunDariBaris(
+    [
+      { accountId: 'sw', amount: 1_332_000 },
+      { accountId: 'air', amount: 128_780 },
+      { accountId: 'sw', amount: 1_556_500 },
+    ],
+    (b) => ({ code: b.accountId, name: b.accountId }),
+  );
+  assert.equal(hasil.size, 2);
+  assert.equal(hasil.get('sw')!.anggaran, 2_888_500);
+  assert.equal(hasil.get('air')!.anggaran, 128_780);
 });

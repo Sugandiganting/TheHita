@@ -323,7 +323,10 @@ model BudgetLine {
   budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   account Account @relation(fields: [accountId], references: [id])
 
-  @@unique([budgetId, accountId])
+  // Satu akun boleh muncul di beberapa baris, dibedakan oleh catatannya:
+  // Neuviz, Guestpro dan STAAH sama-sama Biaya Software dan Langganan, tetapi
+  // tiga tagihan yang dibayar dan dilaporkan sendiri-sendiri. Dulu satu akun
+  // satu baris, dan baris kedua diam-diam menimpa yang pertama.
   @@index([budgetId])
   @@index([accountId])
 }

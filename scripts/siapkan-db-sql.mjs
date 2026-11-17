@@ -27,6 +27,17 @@ function tahanDiulang(sql) {
     .replace(/CREATE INDEX "/g, 'CREATE INDEX IF NOT EXISTS "');
 }
 
+/**
+ * Indeks yang pernah ada di skema lalu dibuang. "IF NOT EXISTS" di atas hanya
+ * bisa menambah; database yang dibuat sebelum indeksnya dibuang tetap
+ * menyimpannya, dan indeks unik yang tertinggal akan menolak data yang kini
+ * sah. Karena itu dibuang di sini secara terang-terangan.
+ */
+const INDEKS_DIBUANG = [
+  // Satu akun kini boleh muncul di beberapa baris RAB, dibedakan catatannya.
+  'BudgetLine_budgetId_accountId_key',
+];
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -43,6 +54,10 @@ async function main() {
     await prisma.$executeRawUnsafe(p);
     dijalankan += 1;
     if (dijalankan % 10 === 0) console.log(`[db] ${dijalankan}/${perintah.length}…`);
+  }
+
+  for (const nama of INDEKS_DIBUANG) {
+    await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "${nama}"`);
   }
 
   const tabel = await prisma.$queryRawUnsafe(

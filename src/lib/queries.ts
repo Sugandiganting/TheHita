@@ -7,7 +7,7 @@
 import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import {
-  anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
   ringkasRab, scopeBersamaKah,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
@@ -860,7 +860,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
   // dengan jurnal — jurnal tidak mencatat barangnya, hanya akunnya.
   const perAkun = purchasing
     ? anggaranPerAkun(barang, round)
-    : new Map(budget.lines.map((l) => [l.accountId, { code: l.account.code, name: l.account.name, anggaran: l.amount }]));
+    : anggaranAkunDariBaris(budget.lines, (l) => ({ code: l.account.code, name: l.account.name }), round);
 
   const baris: BarisRab[] = [...perAkun].map(([accountId, a]) => ({
     accountId,

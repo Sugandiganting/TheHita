@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { JENIS_RAB_LABEL, jenisRabSah, periodeBerikutnya, type JenisRab } from '@/lib/rab';
+import { JENIS_RAB_LABEL, cekCatatanAkunGanda, jenisRabSah, periodeBerikutnya, type JenisRab } from '@/lib/rab';
 import { formatRupiahShort } from '@/lib/format';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
@@ -897,6 +897,9 @@ function bacaTanggalRencana(
 }
 
 export async function saveBudgetLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  // Baris dikenali dari id-nya, bukan dari akunnya: satu akun boleh muncul di
+  // beberapa baris. Tanpa id berarti baris baru.
+  const lineId = String(formData.get('id') ?? '');
   const budgetId = String(formData.get('budgetId') ?? '');
   const accountId = String(formData.get('accountId') ?? '');
   const notes = String(formData.get('notes') ?? '').trim();
@@ -924,13 +927,27 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
   const rencana = bacaTanggalRencana(formData, budget.period);
   if ('salah' in rencana) return fail(rencana.salah);
 
-  await prisma.budgetLine.upsert({
-    where: { budgetId_accountId: { budgetId, accountId } },
-    update: { amount, notes: notes || null, planDate: rencana.nilai },
-    create: { budgetId, accountId, amount, notes: notes || null, planDate: rencana.nilai },
+  if (lineId) {
+    const ada = await prisma.budgetLine.findUnique({ where: { id: lineId }, select: { budgetId: true } });
+    if (!ada || ada.budgetId !== budgetId) return fail('Baris anggaran tidak ditemukan.');
+  }
+
+  // Akun yang sama sudah dianggarkan di baris lain: catatannya yang membedakan.
+  const sejenis = await prisma.budgetLine.findMany({
+    where: { budgetId, accountId, ...(lineId ? { id: { not: lineId } } : {}) },
+    select: { notes: true },
   });
+  const ganda = cekCatatanAkunGanda(sejenis.map((l) => l.notes), notes, account.name);
+  if (ganda) return fail(ganda);
+
+  const data = { accountId, amount, notes: notes || null, planDate: rencana.nilai };
+  if (lineId) {
+    await prisma.budgetLine.update({ where: { id: lineId }, data });
+  } else {
+    await prisma.budgetLine.create({ data: { ...data, budgetId } });
+  }
   segarkanRab();
-  return ok('Anggaran disimpan.');
+  return ok(lineId ? 'Anggaran diperbarui.' : 'Anggaran ditambahkan.');
 }
 
 /**

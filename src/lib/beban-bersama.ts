@@ -13,6 +13,7 @@
  *
  *   GuestPro 1 (The Hita Uluwatu + IGYT)
  *     Listrik  : satu meteran, dipakai berdua.
+ *     Air PDAM : satu meteran juga, dipakai berdua.
  *     Sisanya  : milik Uluwatu. IGYT punya 616.10 Gaji IGYT dan 616.12 Service
  *                IGYT sendiri, jadi gaji dan servis di akun bersama bukan
  *                miliknya.
@@ -42,6 +43,7 @@ const ATURAN: Record<PmsSource, AturanPms> = {
     bawaan: ['THU'],
     khusus: {
       '6120.01': ['THU', 'IGYT'], // Biaya Listrik — satu meteran berdua
+      '6120.10': ['THU', 'IGYT'], // Biaya Air (PDAM) — satu meteran berdua
     },
   },
   PMS2: {

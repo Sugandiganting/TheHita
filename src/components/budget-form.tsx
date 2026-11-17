@@ -138,7 +138,7 @@ export function BudgetLineForm({
   budgetId: string;
   accounts: AkunOption[];
   periode: string;
-  values?: { accountId: string; amount: number; notes: string | null; planDate: string | null };
+  values?: { id: string; accountId: string; amount: number; notes: string | null; planDate: string | null };
   disabled?: boolean;
   onTutup?: () => void;
 }) {
@@ -164,8 +164,9 @@ export function BudgetLineForm({
   }
 
   return (
-    <form action={formAction} className="space-y-4" key={values?.accountId ?? (state.ok ? state.message : 'baru')}>
+    <form action={formAction} className="space-y-4" key={values?.id ?? (state.ok ? state.message : 'baru')}>
       <input type="hidden" name="budgetId" value={budgetId} />
+      {values && <input type="hidden" name="id" value={values.id} />}
 
       <div>
         <label className="label" htmlFor="rab-akun">Akun beban</label>
@@ -175,16 +176,9 @@ export function BudgetLineForm({
           options={opsiAkun}
           defaultValue={values?.accountId ?? ''}
           required
-          disabled={values !== undefined}
           placeholder="— Pilih akun —"
           searchPlaceholder="Ketik nomor atau nama akun…"
         />
-        {values && (
-          <p className="mt-1 text-xs text-slate-500">
-            Akunnya tidak bisa diganti di sini, karena baris RAB dikenali dari akunnya. Kalau yang
-            terpilih memang keliru, hapus barisnya lalu tambahkan yang benar.
-          </p>
-        )}
       </div>
 
       <div>
@@ -225,7 +219,17 @@ export function BudgetLineForm({
 
       <div>
         <label className="label" htmlFor="rab-line-notes">Catatan</label>
-        <input id="rab-line-notes" name="notes" className="input" placeholder="Opsional" defaultValue={values?.notes ?? ''} />
+        <input
+          id="rab-line-notes"
+          name="notes"
+          className="input"
+          placeholder="Misalnya nama tagihannya: Neuviz, Guestpro"
+          defaultValue={values?.notes ?? ''}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Satu akun boleh dianggarkan beberapa kali. Bila akunnya sudah ada di RAB ini, catatan
+          wajib diisi supaya barisnya bisa dibedakan.
+        </p>
       </div>
 
       {state.message && (
