@@ -2,14 +2,17 @@
 
 import { DialogTombol } from './dialog';
 import {
-  BudgetForm, BudgetItemLineForm, BudgetLineForm, RealisasiAkunForm, RealisasiBarangForm,
+  BudgetForm, BudgetItemLineForm, BudgetLineForm, GantiJenisRabForm, JenisRabForm,
+  RealisasiAkunForm, RealisasiBarangForm,
   type AkunOption, type BarangOption, type ScopeOption,
 } from './budget-form';
+import type { InfoJenisRab } from '@/lib/rab';
 
 export function RabBaruDialog({
-  scopes, defaultPeriod,
+  scopes, jenis, defaultPeriod,
 }: {
   scopes: ScopeOption[];
+  jenis: InfoJenisRab[];
   defaultPeriod: string;
 }) {
   return (
@@ -18,7 +21,7 @@ export function RabBaruDialog({
       judul="RAB baru"
       keterangan="Pilih jenis, pemilik, dan bulannya. Rinciannya diisi di halaman RAB-nya sendiri, yang langsung terbuka setelah ini."
     >
-      {(tutup) => <BudgetForm scopes={scopes} defaultPeriod={defaultPeriod} onTutup={tutup} />}
+      {(tutup) => <BudgetForm scopes={scopes} jenis={jenis} defaultPeriod={defaultPeriod} onTutup={tutup} />}
     </DialogTombol>
   );
 }
@@ -84,12 +87,14 @@ export function UbahBarangRabDialog({
 }
 
 export function UbahAnggaranDialog({
-  budgetId, accounts, periode, nilai, nama, disabled,
+  budgetId, accounts, periode, nilai, nama, pindahan, disabled,
 }: {
   budgetId: string;
   accounts: AkunOption[];
   periode: string;
   nilai: { id: string; accountId: string; amount: number; notes: string | null; planDate: string | null };
+  /** RAB lain milik pemilik dan bulan yang sama, tujuan pindah barisnya. */
+  pindahan?: { id: string; nama: string }[];
   /** Nama akunnya, untuk judul dialognya. */
   nama: string;
   disabled: boolean;
@@ -105,7 +110,8 @@ export function UbahAnggaranDialog({
     >
       {(tutup) => (
         <BudgetLineForm
-          budgetId={budgetId} accounts={accounts} periode={periode} values={nilai} onTutup={tutup}
+          budgetId={budgetId} accounts={accounts} periode={periode} values={nilai}
+          pindahan={pindahan} onTutup={tutup}
         />
       )}
     </DialogTombol>
@@ -195,6 +201,49 @@ export function RealisasiAkunDialog({
           nilai={nilai} defaultDate={defaultDate} onTutup={tutup}
         />
       )}
+    </DialogTombol>
+  );
+}
+
+export function TambahJenisRabDialog() {
+  return (
+    <DialogTombol
+      label="+ Tambah jenis"
+      judul="Tambah jenis RAB"
+      lebar="sm"
+      keterangan="Misalnya HR untuk gaji dan service, atau Management untuk pembayaran manajemen."
+    >
+      {(tutup) => <JenisRabForm onTutup={tutup} />}
+    </DialogTombol>
+  );
+}
+
+export function UbahJenisRabDialog({ nilai }: { nilai: { code: string; name: string } }) {
+  return (
+    <DialogTombol label="Ubah nama" varian="tautan" lebar="sm" judul={`Ubah nama jenis ${nilai.name}`}>
+      {(tutup) => <JenisRabForm nilai={nilai} onTutup={tutup} />}
+    </DialogTombol>
+  );
+}
+
+export function GantiJenisRabDialog({
+  id, kind, pilihan, disabled,
+}: {
+  id: string;
+  kind: string;
+  pilihan: InfoJenisRab[];
+  disabled: boolean;
+}) {
+  return (
+    <DialogTombol
+      label="Ganti jenis"
+      varian="tautan"
+      lebar="sm"
+      judul="Ganti jenis RAB"
+      disabled={disabled}
+      title={disabled ? 'RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.' : undefined}
+    >
+      {(tutup) => <GantiJenisRabForm id={id} kind={kind} pilihan={pilihan} onTutup={tutup} />}
     </DialogTombol>
   );
 }

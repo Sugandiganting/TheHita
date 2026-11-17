@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, jenisRabSah, nilaiBarisBarang,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, gabungJenisRab, kodeJenisDariNama, namaJenis, nilaiBarisBarang, pemilikSisa,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -166,14 +166,49 @@ test('daftar barang kosong menghasilkan rekap kosong, bukan baris nol', () => {
   assert.equal(anggaranPerAkun([]).size, 0);
 });
 
-test('hanya dua jenis RAB yang dikenal', () => {
-  assert.equal(jenisRabSah('PURCHASING'), true);
-  assert.equal(jenisRabSah('UMUM'), true);
-  // Huruf kecil ditolak: pemanggilnya yang membesarkan huruf lebih dulu, jadi
-  // yang lolos di sini sudah pasti sama bentuknya dengan yang tersimpan.
-  assert.equal(jenisRabSah('purchasing'), false);
-  assert.equal(jenisRabSah('PROYEK'), false);
-  assert.equal(jenisRabSah(''), false);
+/*
+ * Jenis RAB kini bisa ditambah sendiri (HR, Management). Purchasing dan Umum
+ * selalu ada; hanya Purchasing yang disusun per barang.
+ */
+test('jenis bawaan selalu ada dan selalu di depan, walau belum tersimpan', () => {
+  const daftar = gabungJenisRab([{ code: 'HR', name: 'HR' }]);
+  assert.deepEqual(daftar.map((j) => j.code), ['PURCHASING', 'UMUM', 'HR']);
+  assert.equal(daftar[0].perBarang, true);
+  assert.equal(daftar[1].name, 'Umum');
+  assert.equal(daftar[2].perBarang, false);
+  assert.equal(daftar[2].bawaan, false);
+});
+
+test('nama jenis bawaan boleh diganti, kodenya tetap', () => {
+  const daftar = gabungJenisRab([{ code: 'UMUM', name: 'Operasional' }]);
+  assert.equal(daftar.length, 2);
+  assert.equal(namaJenis(daftar, 'UMUM'), 'Operasional');
+});
+
+test('jenis tambahan urut abjad menurut namanya', () => {
+  const daftar = gabungJenisRab([{ code: 'MGMT', name: 'Management' }, { code: 'HR', name: 'HR' }]);
+  assert.deepEqual(daftar.slice(2).map((j) => j.name), ['HR', 'Management']);
+});
+
+test('jenis yang sudah tidak terdaftar ditampilkan dengan kodenya, bukan hilang', () => {
+  assert.equal(namaJenis(gabungJenisRab([]), 'HR'), 'HR');
+});
+
+test('kode jenis dari nama: huruf besar, selain huruf dan angka jadi garis bawah', () => {
+  assert.equal(kodeJenisDariNama('Pembayaran Management'), 'PEMBAYARAN_MANAGEMENT');
+  assert.equal(kodeJenisDariNama('  HR & GA  '), 'HR_GA');
+  assert.equal(kodeJenisDariNama('Café'), 'CAFE');
+  assert.equal(kodeJenisDariNama(' -- '), '');
+});
+
+test('akun tanpa anggaran ditampung tepat satu RAB: Umum lebih dulu', () => {
+  assert.equal(pemilikSisa(['PURCHASING', 'HR', 'UMUM']), 'UMUM');
+});
+
+test('tanpa RAB Umum, sisa ditampung jenis per akun lain sebelum Purchasing', () => {
+  assert.equal(pemilikSisa(['PURCHASING', 'MGMT', 'HR']), 'HR');
+  assert.equal(pemilikSisa(['PURCHASING']), 'PURCHASING');
+  assert.equal(pemilikSisa([]), null);
 });
 
 test('rekap per akun dari RAB Purchasing bisa langsung diringkas seperti RAB umum', () => {

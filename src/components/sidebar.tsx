@@ -114,6 +114,7 @@ const MENU: Entry[] = [
       { href: '/unit', label: 'Unit Usaha', desc: 'Cabang & jenis usaha' },
       { href: '/musim', label: 'Musim', desc: 'Pola naik turun sepanjang tahun' },
       { href: '/target-margin', label: 'Target Margin', desc: 'Arti P/N/O tiap bulan' },
+      { href: '/jenis-rab', label: 'Jenis RAB', desc: 'Purchasing, HR, Management' },
       { href: '/kewajiban', label: 'Kewajiban Terjadwal', desc: 'Pajak, izin, asuransi bertanggal' },
       { href: '/kendaraan', label: 'Kendaraan', desc: 'Armada & jadwal pajaknya' },
       { href: '/pengguna', label: 'Pengguna', desc: 'Siapa saja yang bisa masuk' },

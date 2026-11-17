@@ -62,25 +62,95 @@ export function cabangDalamScope(scope: string): string[] {
 /* ------------------------------------------------------------------ */
 
 /**
- * Dua bentuk RAB, karena yang dianggarkan memang berbeda bentuknya.
+ * Jenis RAB: Purchasing, Umum, dan jenis yang ditambahkan sendiri di Master
+ * Data — HR, Management.
  *
+ * Bentuknya cuma dua, karena yang dianggarkan memang berbeda bentuknya.
  * Purchasing menganggarkan barang: semen berapa sak, dengan harga satuan
- * berapa. Yang lain menganggarkan akun: gaji sebulan, listrik sebulan —
+ * berapa. Selebihnya menganggarkan akun: gaji sebulan, listrik sebulan —
  * tidak ada satuan dan tidak ada harga satuan yang masuk akal di sana.
- * Memaksakan satu formulir untuk keduanya berarti setengah kolomnya selalu
- * kosong, dan yang kosong tidak pernah jelas apakah memang tidak berlaku
- * atau sekadar belum diisi.
+ * Jenis baru selalu berbentuk per akun; yang membedakannya dari Umum hanya
+ * siapa pemiliknya dan kategori rencana kas mana yang memakainya.
+ *
+ * Yang tersimpan di RAB adalah KODE-nya, bukan namanya, supaya nama boleh
+ * diganti tanpa memutus RAB maupun kategori rencana kas yang sudah memakainya.
  */
-export const JENIS_RAB = ['UMUM', 'PURCHASING'] as const;
-export type JenisRab = (typeof JENIS_RAB)[number];
+export const JENIS_PURCHASING = 'PURCHASING';
+export const JENIS_UMUM = 'UMUM';
 
-export const JENIS_RAB_LABEL: Record<JenisRab, string> = {
-  UMUM: 'Selain Purchasing',
-  PURCHASING: 'Purchasing',
+/** Kode jenis RAB. Bebas, karena jenisnya bisa ditambah sendiri. */
+export type JenisRab = string;
+
+export type InfoJenisRab = {
+  code: string;
+  name: string;
+  /** Disusun per barang. Hanya Purchasing. */
+  perBarang: boolean;
+  /** Purchasing dan Umum: selalu ada, tidak bisa dihapus. */
+  bawaan: boolean;
 };
 
-export function jenisRabSah(nilai: string): nilai is JenisRab {
-  return (JENIS_RAB as readonly string[]).includes(nilai);
+const NAMA_BAWAAN: Record<string, string> = {
+  [JENIS_PURCHASING]: 'Purchasing',
+  [JENIS_UMUM]: 'Umum',
+};
+
+export function jenisPerBarang(code: string): boolean {
+  return code === JENIS_PURCHASING;
+}
+
+/**
+ * Daftar jenis lengkap dari baris yang tersimpan: kedua jenis bawaan selalu
+ * ada dan selalu di depan — dengan nama tersimpan bila pernah diganti —
+ * lalu jenis tambahan menurut abjad.
+ */
+export function gabungJenisRab(tersimpan: readonly { code: string; name: string }[]): InfoJenisRab[] {
+  const nama = new Map(tersimpan.map((t) => [t.code, t.name]));
+  const bawaan = Object.keys(NAMA_BAWAAN).map((code) => ({
+    code,
+    name: nama.get(code) ?? NAMA_BAWAAN[code],
+    perBarang: jenisPerBarang(code),
+    bawaan: true,
+  }));
+  const tambahan = tersimpan
+    .filter((t) => !(t.code in NAMA_BAWAAN))
+    .map((t) => ({ code: t.code, name: t.name, perBarang: false, bawaan: false }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  return [...bawaan, ...tambahan];
+}
+
+/** Nama sebuah jenis; kodenya sendiri bila jenisnya sudah tidak terdaftar. */
+export function namaJenis(daftar: readonly InfoJenisRab[], code: string): string {
+  return daftar.find((j) => j.code === code)?.name ?? NAMA_BAWAAN[code] ?? code;
+}
+
+/**
+ * Kode dari nama yang diketik: "Pembayaran Management" → "PEMBAYARAN_MANAGEMENT".
+ * Kosong bila namanya tidak mengandung huruf atau angka sama sekali.
+ */
+export function kodeJenisDariNama(nama: string): string {
+  return nama
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * RAB mana yang menampung akun yang terpakai tanpa pernah dianggarkan, di
+ * antara RAB-RAB satu pemilik pada bulan yang sama.
+ *
+ * Harus tepat satu: tanpa pemilik yang pasti, akun semacam itu terhitung di
+ * tiap RAB dan totalnya membengkak. Umum lebih dulu, karena memang untuk
+ * itulah jenis umum; bila tidak ada, jenis per akun lain menurut kodenya;
+ * Purchasing paling akhir, karena isinya barang dan bukan beban sembarang.
+ */
+export function pemilikSisa(jenis: readonly string[]): string | null {
+  if (jenis.length === 0) return null;
+  if (jenis.includes(JENIS_UMUM)) return JENIS_UMUM;
+  const perAkun = jenis.filter((j) => !jenisPerBarang(j)).sort();
+  return perAkun[0] ?? jenis[0];
 }
 
 /* ------------------------------------------------------------------ */

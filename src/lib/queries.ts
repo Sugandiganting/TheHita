@@ -8,7 +8,7 @@ import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import {
   anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
-  ringkasRab, scopeBersamaKah,
+  gabungJenisRab, jenisPerBarang, pemilikSisa, ringkasRab, scopeBersamaKah,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
 } from './rab';
@@ -625,9 +625,17 @@ export type RabRingkas = {
   jumlahBaris: number;
   totalAnggaran: number;
   totalRealisasi: number;
-  /** Akun yang juga dianggarkan RAB satunya di cabang dan bulan yang sama. */
+  /** Akun yang juga dianggarkan RAB lain di cabang dan bulan yang sama. */
   akunTumpang: string[];
 };
+
+/**
+ * Seluruh jenis RAB: Purchasing dan Umum selalu ada, ditambah yang dibuat
+ * sendiri di Master Data.
+ */
+export async function getJenisRab() {
+  return gabungJenisRab(await prisma.budgetKind.findMany({ select: { code: true, name: true } }));
+}
 
 /** Daftar RAB beserta total anggaran dan realisasinya. */
 export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
@@ -648,20 +656,24 @@ export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
     const purchasing = b.kind === 'PURCHASING';
     const kunciRealisasi = realisasi.get(`${b.scope}|${b.period}`) ?? new Map<string, number>();
     const sendiri = akunDianggarkan(b);
-    const sebelah = budgets.find((x) => x.scope === b.scope && x.period === b.period && x.kind !== b.kind);
+    const sekelompok = budgets.filter((x) => x.scope === b.scope && x.period === b.period);
+    const lainnya = new Set(
+      sekelompok.filter((x) => x.id !== b.id).flatMap((x) => [...akunDianggarkan(x)]),
+    );
+    const ambilSisa = pemilikSisa(sekelompok.map((x) => x.kind)) === b.kind;
 
     return {
       id: b.id,
       scope: b.scope,
       period: b.period as Period,
       status: b.status,
-      kind: b.kind as JenisRab,
+      kind: b.kind,
       bersama: scopeBersamaKah(b.scope),
       jumlahBaris: purchasing ? b.itemLines.length : b.lines.length,
       totalAnggaran: purchasing
         ? b.itemLines.reduce((s, l) => s + nilaiBarisBarang(l, round), 0)
         : b.lines.reduce((s, l) => s + l.amount, 0),
-      ...rekapRealisasi(kunciRealisasi, sendiri, sebelah ? akunDianggarkan(sebelah) : null, b.kind),
+      ...rekapRealisasi(kunciRealisasi, sendiri, lainnya, ambilSisa),
     };
   });
 }
@@ -673,7 +685,7 @@ function akunDianggarkan(budget: {
   itemLines: { item: { accountId: string } }[];
 }): Set<string> {
   return new Set(
-    budget.kind === 'PURCHASING'
+    jenisPerBarang(budget.kind)
       ? budget.itemLines.map((l) => l.item.accountId)
       : budget.lines.map((l) => l.accountId),
   );
@@ -682,34 +694,36 @@ function akunDianggarkan(budget: {
 /**
  * Akun mana saja yang realisasinya dihitung sebuah RAB, dan jumlahnya.
  *
- * Sebuah cabang boleh punya dua RAB sebulan, dan jurnal tidak mencatat RAB
- * mana yang dimaksud sebuah beban. Dua aturan dipakai supaya totalnya tetap
- * bisa dipercaya:
+ * Sebuah cabang boleh punya beberapa RAB sebulan — Purchasing, Umum, HR — dan
+ * jurnal tidak mencatat RAB mana yang dimaksud sebuah beban. Dua aturan
+ * dipakai supaya totalnya tetap bisa dipercaya:
  *
  * 1. Akun yang dianggarkan sebuah RAB selalu menampilkan realisasinya penuh.
  *    Membaginya menurut porsi anggaran akan melahirkan angka yang tidak
  *    pernah terjadi, dan menolkannya di salah satu RAB membuat belanja yang
  *    sungguh terjadi terbaca sebagai nol.
- * 2. Akun yang terpakai tanpa pernah dianggarkan hanya ditampilkan satu kali,
- *    di RAB umum — atau di RAB Purchasing bila RAB umumnya belum ada. Tanpa
- *    satu pemilik yang pasti, akun semacam itu terhitung dua kali.
+ * 2. Akun yang terpakai tanpa pernah dianggarkan di RAB mana pun hanya
+ *    ditampilkan satu kali, di RAB yang dipilih pemilikSisa(). Tanpa satu
+ *    pemilik yang pasti, akun semacam itu terhitung berkali-kali.
  *
- * Akun yang kena aturan pertama di kedua RAB sekaligus dikembalikan sebagai
+ * Akun yang kena aturan pertama di lebih dari satu RAB dikembalikan sebagai
  * `akunTumpang`, supaya halamannya bisa mengatakannya terus terang.
+ *
+ * `lainnya` adalah akun yang dianggarkan RAB-RAB lain milik pemilik dan bulan
+ * yang sama; `ambilSisa` benar bila RAB ini yang menampung akun tanpa anggaran.
  */
 function rekapRealisasi(
   realisasi: Map<string, number>,
   sendiri: Set<string>,
-  sebelah: Set<string> | null,
-  kind: string,
+  lainnya: Set<string>,
+  ambilSisa: boolean,
 ): { totalRealisasi: number; akunTumpang: string[] } {
-  const ambilSisa = kind === 'UMUM' || sebelah === null;
   const akun = [...realisasi.keys()].filter(
-    (id) => sendiri.has(id) || (ambilSisa && !(sebelah?.has(id) ?? false)),
+    (id) => sendiri.has(id) || (ambilSisa && !lainnya.has(id)),
   );
   return {
     totalRealisasi: round(akun.reduce((s, id) => s + (realisasi.get(id) ?? 0), 0)),
-    akunTumpang: sebelah ? [...sendiri].filter((id) => sebelah.has(id)) : [],
+    akunTumpang: [...sendiri].filter((id) => lainnya.has(id)),
   };
 }
 
@@ -757,7 +771,7 @@ export type RabRinci = {
   ringkasan: RingkasanRab;
   /** Rincian per barang; hanya terisi untuk RAB Purchasing. */
   barang: BarisBarangRab[];
-  /** Akun yang juga dianggarkan RAB satunya di cabang dan bulan yang sama. */
+  /** Akun yang juga dianggarkan RAB lain di cabang dan bulan yang sama. */
   akunTumpang: { code: string; name: string }[];
 };
 
@@ -784,15 +798,10 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
   });
   if (!budget) return null;
 
-  const purchasing = budget.kind === 'PURCHASING';
-  const sebelah = await prisma.budget.findUnique({
-    where: {
-      scope_period_kind: {
-        scope: budget.scope,
-        period: budget.period,
-        kind: purchasing ? 'UMUM' : 'PURCHASING',
-      },
-    },
+  const purchasing = jenisPerBarang(budget.kind);
+  // RAB-RAB lain milik pemilik dan bulan yang sama: Purchasing, Umum, HR, …
+  const lainnya = await prisma.budget.findMany({
+    where: { scope: budget.scope, period: budget.period, id: { not: budget.id } },
     include: {
       lines: { select: { accountId: true } },
       itemLines: { select: { item: { select: { accountId: true } } } },
@@ -872,18 +881,12 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
 
   // Akun yang terpakai tetapi tidak pernah dianggarkan tetap ditampilkan —
   // tetapi hanya di satu RAB, lihat rekapRealisasi() di atas.
-  const akunSebelah = sebelah
-    ? new Set(
-        sebelah.kind === 'PURCHASING'
-          ? sebelah.itemLines.map((l) => l.item.accountId)
-          : sebelah.lines.map((l) => l.accountId),
-      )
-    : null;
-  const ambilSisa = !purchasing || akunSebelah === null;
+  const akunLain = new Set(lainnya.flatMap((x) => [...akunDianggarkan(x)]));
+  const ambilSisa = pemilikSisa([budget.kind, ...lainnya.map((x) => x.kind)]) === budget.kind;
   if (ambilSisa) {
     for (const [accountId, r] of realisasi) {
       if (perAkun.has(accountId) || r.nilai === 0) continue;
-      if (akunSebelah?.has(accountId)) continue;
+      if (akunLain.has(accountId)) continue;
       baris.push({ accountId, accountCode: r.code, accountName: r.name, anggaran: 0, realisasi: r.nilai });
     }
   }
@@ -894,14 +897,14 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     scope: budget.scope,
     period: budget.period as Period,
     status: budget.status,
-    kind: budget.kind as JenisRab,
+    kind: budget.kind,
     notes: budget.notes,
     bersama: scopeBersamaKah(budget.scope),
     cabang: cabangDalamScope(budget.scope),
     ringkasan: ringkasRab(baris, round),
     barang,
     akunTumpang: [...perAkun]
-      .filter(([accountId]) => akunSebelah?.has(accountId))
+      .filter(([accountId]) => akunLain.has(accountId))
       .map(([, a]) => ({ code: a.code, name: a.name })),
   };
 }

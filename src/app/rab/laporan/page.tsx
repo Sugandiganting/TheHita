@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { getBudgetDetail, getBudgetList } from '@/lib/queries';
+import { getBudgetDetail, getBudgetList, getJenisRab } from '@/lib/queries';
 import { formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
 import type { SearchParams } from '@/lib/search-params';
-import { JENIS_RAB_LABEL, bandingkanBulanTerdekat } from '@/lib/rab';
+import { bandingkanBulanTerdekat, namaJenis } from '@/lib/rab';
 import { currentPeriod } from '@/lib/period';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -14,7 +14,7 @@ function one(v: string | string[] | undefined): string | undefined {
 
 export default async function LaporanRabPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const semua = await getBudgetList();
+  const [semua, jenis] = await Promise.all([getBudgetList(), getJenisRab()]);
 
   if (semua.length === 0) {
     return (
@@ -48,9 +48,9 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
   /*
    * Realisasi dijumlahkan per akun, bukan per RAB.
    *
-   * Sebuah cabang boleh punya RAB Purchasing dan RAB umum dalam satu bulan,
-   * dan bila keduanya menganggarkan akun yang sama, akun itu menampilkan
-   * realisasinya penuh di kedua RAB — jurnal tidak mencatat RAB mana yang
+   * Sebuah cabang boleh punya beberapa RAB dalam satu bulan — Purchasing,
+   * Umum, HR — dan bila dua di antaranya menganggarkan akun yang sama, akun itu
+   * menampilkan realisasinya penuh di keduanya — jurnal tidak mencatat RAB mana yang
    * dimaksud sebuah beban. Menjumlahkan total tiap RAB karena itu akan
    * menghitung akun tersebut dua kali, dan totalnya menjadi lebih besar
    * daripada beban yang benar-benar terjadi.
@@ -103,7 +103,7 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
       {adaTumpang && (
         <div className="mt-4">
           <Alert tone="warning">
-          Sebagian akun dianggarkan di RAB Purchasing dan RAB selain Purchasing sekaligus. Realisasi
+          Sebagian akun dianggarkan di lebih dari satu RAB milik cabang yang sama. Realisasi
           di kartu masing-masing RAB menampilkannya penuh, sedangkan total di atas menghitungnya
           satu kali — jadi total realisasi lebih kecil daripada jumlah angka tiap kartu, dan itu
             yang benar.
@@ -120,7 +120,7 @@ export default async function LaporanRabPage({ searchParams }: { searchParams: P
                 : `Biaya yang dikendalikan ${r.scope} sendiri.`
             }
           >
-            {r.scope} — {JENIS_RAB_LABEL[r.kind]}
+            {r.scope} — {namaJenis(jenis, r.kind)}
           </SectionTitle>
 
           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">

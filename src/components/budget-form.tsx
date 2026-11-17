@@ -1,14 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useEffect, useMemo, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
-  saveBudget, saveBudgetItemLine, saveBudgetLine,
-  simpanRealisasiAkun, simpanRealisasiBarang,
+  gantiJenisRab, saveBudget, saveBudgetItemLine, saveBudgetLine,
+  simpanJenisRab, simpanRealisasiAkun, simpanRealisasiBarang,
   type ActionState,
 } from '@/app/actions';
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/accounting';
-import { JENIS_RAB, JENIS_RAB_LABEL, nilaiBarisBarang } from '@/lib/rab';
+import { JENIS_UMUM, nilaiBarisBarang, type InfoJenisRab } from '@/lib/rab';
 import { formatPeriod, formatRupiah } from '@/lib/format';
 import { hariDalamBulan } from '@/lib/tren-masuk';
 import { SearchableSelect, type PickerOption } from './searchable-select';
@@ -43,9 +44,10 @@ function SubmitButton({ label, onTutup }: { label: string; onTutup?: () => void 
 
 /** Membuat RAB baru: tinggal pilih pemilik dan bulannya, rinciannya menyusul. */
 export function BudgetForm({
-  scopes, defaultPeriod, onTutup,
+  scopes, jenis, defaultPeriod, onTutup,
 }: {
   scopes: ScopeOption[];
+  jenis: InfoJenisRab[];
   defaultPeriod: string;
   onTutup?: () => void;
 }) {
@@ -55,31 +57,32 @@ export function BudgetForm({
     <form action={formAction} className="space-y-4" key={state.ok ? state.message : 'baru'}>
       <fieldset>
         <legend className="label">Jenis RAB</legend>
-        <div className="space-y-2">
-          {JENIS_RAB.map((j) => (
-            <label key={j} className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 hover:bg-slate-50">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {jenis.map((j) => (
+            <label key={j.code} className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 hover:bg-slate-50">
               <input
                 type="radio"
                 name="kind"
-                value={j}
+                value={j.code}
                 required
-                defaultChecked={j === 'UMUM'}
+                defaultChecked={j.code === JENIS_UMUM}
                 className="mt-1"
               />
               <span className="text-sm">
-                <span className="font-medium">{JENIS_RAB_LABEL[j]}</span>
+                <span className="font-medium">{j.name}</span>
                 <span className="mt-0.5 block text-xs text-slate-500">
-                  {j === 'PURCHASING'
-                    ? 'Diisi per barang: pilih barangnya, jumlah, dan harga satuan. Akun bebannya ikut dari master barang.'
-                    : 'Diisi per akun: gaji, listrik, dan biaya lain yang tidak berupa barang.'}
+                  {j.perBarang
+                    ? 'Diisi per barang: jumlah dan harga satuan. Akun bebannya ikut dari master barang.'
+                    : 'Diisi per akun: gaji, listrik, langganan.'}
                 </span>
               </span>
             </label>
           ))}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Satu cabang boleh punya keduanya dalam satu bulan. Jenisnya tidak bisa diganti
-          setelah RAB dibuat, karena isinya tersimpan dengan bentuk yang berbeda.
+          Satu cabang boleh punya satu RAB tiap jenis dalam sebulan. Jenis baru seperti HR atau
+          Management ditambahkan di{' '}
+          <Link href="/jenis-rab" className="font-medium text-brand-700 hover:underline">Master Data › Jenis RAB</Link>.
         </p>
       </fieldset>
 
@@ -132,6 +135,7 @@ export function BudgetLineForm({
   accounts,
   periode,
   values,
+  pindahan,
   disabled,
   onTutup,
 }: {
@@ -139,6 +143,11 @@ export function BudgetLineForm({
   accounts: AkunOption[];
   periode: string;
   values?: { id: string; accountId: string; amount: number; notes: string | null; planDate: string | null };
+  /**
+   * RAB lain milik pemilik dan bulan yang sama, tempat baris ini bisa
+   * dipindahkan — misalnya baris gaji dari RAB Umum ke RAB HR. Hanya saat mengubah.
+   */
+  pindahan?: { id: string; nama: string }[];
   disabled?: boolean;
   onTutup?: () => void;
 }) {
@@ -231,6 +240,22 @@ export function BudgetLineForm({
           wajib diisi supaya barisnya bisa dibedakan.
         </p>
       </div>
+
+      {values && pindahan && pindahan.length > 0 && (
+        <div>
+          <label className="label" htmlFor="rab-line-pindah">Simpan di RAB</label>
+          <select id="rab-line-pindah" name="pindahKe" className="input" defaultValue={budgetId}>
+            <option value={budgetId}>RAB ini</option>
+            {pindahan.map((p) => (
+              <option key={p.id} value={p.id}>Pindahkan ke RAB {p.nama}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Untuk memindahkan baris ke RAB lain milik pemilik dan bulan yang sama — misalnya gaji
+            ke RAB HR. Realisasinya ikut pindah.
+          </p>
+        </div>
+      )}
 
       {state.message && (
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
@@ -656,6 +681,73 @@ export function RealisasiAkunForm({
       )}
 
       <SubmitButton label="Simpan realisasi" onTutup={onTutup} />
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Jenis RAB                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Menambah jenis RAB, atau mengganti nama yang sudah ada. */
+export function JenisRabForm({
+  nilai, onTutup,
+}: {
+  nilai?: { code: string; name: string };
+  onTutup?: () => void;
+}) {
+  const [state, formAction] = useActionState(simpanJenisRab, initial);
+  return (
+    <form action={formAction} className="space-y-4" key={nilai ? nilai.code : (state.ok ? state.message : 'baru')}>
+      {nilai && <input type="hidden" name="code" value={nilai.code} />}
+      <div>
+        <label className="label" htmlFor="jenis-rab-nama">Nama</label>
+        <input id="jenis-rab-nama" name="name" className="input" placeholder="HR, Management"
+          defaultValue={nilai?.name} required />
+        <p className="mt-1 text-xs text-slate-500">
+          {nilai
+            ? `Kodenya tetap ${nilai.code}, jadi RAB dan kategori rencana kas yang sudah memakainya tidak terputus.`
+            : 'Jenis baru selalu diisi per akun, seperti RAB Umum.'}
+        </p>
+      </div>
+      {state.message && (
+        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+      )}
+      <SubmitButton label={nilai ? 'Simpan nama' : 'Tambah jenis'} onTutup={onTutup} />
+    </form>
+  );
+}
+
+/** Mengganti jenis sebuah RAB per akun, misalnya Umum menjadi HR. */
+export function GantiJenisRabForm({
+  id, kind, pilihan, onTutup,
+}: {
+  id: string;
+  kind: string;
+  /** Jenis per akun yang bisa dipilih. */
+  pilihan: InfoJenisRab[];
+  onTutup?: () => void;
+}) {
+  const [state, formAction] = useActionState(gantiJenisRab, initial);
+  return (
+    <form action={formAction} className="space-y-4">
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <label className="label" htmlFor="ganti-jenis">Jenis RAB</label>
+        <select id="ganti-jenis" name="kind" className="input" defaultValue={kind}>
+          {pilihan.map((j) => (
+            <option key={j.code} value={j.code}>{j.name}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          Isinya tidak berubah, hanya jenisnya. Bila pemilik ini sudah punya RAB jenis tujuan
+          di bulan yang sama, pindahkan barisnya satu per satu lewat tombol Ubah.
+        </p>
+      </div>
+      {state.message && (
+        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+      )}
+      <SubmitButton label="Ganti jenis" onTutup={onTutup} />
     </form>
   );
 }

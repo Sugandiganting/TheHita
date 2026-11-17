@@ -322,6 +322,13 @@ beroperasi. Jadwal inilah yang disuntikkan ke proyeksi arus kas.
 Rencana Anggaran Biaya bulanan, dipisah menjadi dua menu: **Input RAB** untuk menyusun
 anggaran, **Laporan RAB** untuk melihat anggaran, realisasi, dan sisanya.
 
+Tiap RAB punya **jenis**: Purchasing (disusun per barang), Umum, dan jenis yang
+ditambahkan sendiri di **Master Data › Jenis RAB** seperti HR atau Management (per akun).
+Satu cabang boleh punya satu RAB tiap jenis dalam sebulan. Kategori di Rencana Kas bisa
+ditautkan ke sebuah jenis, sehingga misalnya jatah gaji diambil dari seluruh RAB HR bulan
+itu. RAB per akun yang masih draf bisa diganti jenisnya, dan barisnya bisa dipindah ke RAB
+lain milik cabang dan bulan yang sama.
+
 Satu RAB dimiliki satu **pemilik anggaran**, yang bisa berupa satu cabang (`THL`) atau satu
 kelompok cabang (`THL+SKR`) untuk biaya yang ditanggung bersama. Bentuknya sama persis
 dengan penanda pada baris jurnal, sehingga anggaran dan realisasi selalu diukur dengan

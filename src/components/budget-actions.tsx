@@ -3,7 +3,7 @@
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
-  deleteBudget, deleteBudgetItemLine, deleteBudgetLine, duplicateBudget, setBudgetStatus,
+  deleteBudget, deleteBudgetItemLine, deleteBudgetLine, duplicateBudget, hapusJenisRab, setBudgetStatus,
   type ActionState,
 } from '@/app/actions';
 
@@ -174,4 +174,38 @@ export function BudgetLineDelete({ id, disabled }: { id: string; disabled: boole
 /** Hapus satu baris anggaran per barang. */
 export function BudgetItemLineDelete({ id, disabled }: { id: string; disabled: boolean }) {
   return <HapusBaris id={id} disabled={disabled} server={deleteBudgetItemLine} />;
+}
+
+/** Hapus jenis RAB tambahan. Terkunci selama masih dipakai RAB atau kategori rencana kas. */
+export function HapusJenisRab({ code, nama, dipakai }: { code: string; nama: string; dipakai: number }) {
+  const [state, action] = useActionState(hapusJenisRab, initial);
+  const [konfirmasi, setKonfirmasi] = useState(false);
+
+  if (dipakai > 0) {
+    return (
+      <span className="text-[11px] text-slate-400" title="Pindahkan atau hapus RAB jenis ini dulu, dan lepas tautannya dari kategori rencana kas.">
+        sudah dipakai
+      </span>
+    );
+  }
+  if (!konfirmasi) {
+    return (
+      <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setKonfirmasi(true)}>
+        Hapus
+      </button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <form action={action} className="contents">
+        <input type="hidden" name="code" value={code} />
+        <span className="text-[11px] text-slate-500">Hapus jenis {nama}?</span>
+        <Tombol label="Ya" pendingLabel="…" tone="bahaya" />
+      </form>
+      <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => setKonfirmasi(false)}>
+        Batal
+      </button>
+      {state.message && !state.ok && <span className="text-xs text-red-600">{state.message}</span>}
+    </span>
+  );
 }

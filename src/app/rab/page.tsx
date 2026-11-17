@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { getBudgetList } from '@/lib/queries';
+import { getBudgetList, getJenisRab } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
 import { formatPeriod, formatRupiah } from '@/lib/format';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { JENIS_RAB_LABEL, urutkanRabTerdekat } from '@/lib/rab';
+import { jenisPerBarang, namaJenis, urutkanRabTerdekat } from '@/lib/rab';
 import { type ScopeOption } from '@/components/budget-form';
 import { RabBaruDialog } from '@/components/budget-dialog';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
@@ -52,7 +52,7 @@ async function daftarScope(): Promise<ScopeOption[]> {
 }
 
 export default async function RabPage() {
-  const [semua, scopes] = await Promise.all([getBudgetList(), daftarScope()]);
+  const [semua, scopes, jenis] = await Promise.all([getBudgetList(), daftarScope(), getJenisRab()]);
   // Bulan berjalan di atas, lalu bulan-bulan depan, baru yang sudah lewat.
   const kini = currentPeriod();
   const daftar = urutkanRabTerdekat(semua, kini);
@@ -61,8 +61,8 @@ export default async function RabPage() {
     <>
       <PageHeader
         title="Input RAB"
-        description="Rencana Anggaran Biaya per bulan. Satu RAB dimiliki satu cabang, atau satu kelompok cabang untuk biaya yang ditanggung bersama. RAB Purchasing disusun per barang, yang lain per akun."
-        action={<RabBaruDialog scopes={scopes} defaultPeriod={currentPeriod()} />}
+        description="Rencana Anggaran Biaya per bulan. Satu RAB dimiliki satu cabang, atau satu kelompok cabang untuk biaya yang ditanggung bersama. RAB Purchasing disusun per barang; Umum, HR, dan jenis lain per akun."
+        action={<RabBaruDialog scopes={scopes} jenis={jenis} defaultPeriod={currentPeriod()} />}
       />
 
       <Card className="card-pad min-w-0">
@@ -100,13 +100,13 @@ export default async function RabPage() {
                       {r.bersama && <span className="ml-2 text-xs text-slate-500">ditanggung bersama</span>}
                       {r.akunTumpang.length > 0 && (
                         <span className="mt-0.5 block text-xs text-amber-700">
-                          {r.akunTumpang.length} akun juga dianggarkan di RAB satunya
+                          {r.akunTumpang.length} akun juga dianggarkan di RAB lain
                         </span>
                       )}
                     </td>
                     <td className="td">
-                      <Badge tone={r.kind === 'PURCHASING' ? 'brand' : 'slate'}>
-                        {JENIS_RAB_LABEL[r.kind]}
+                      <Badge tone={jenisPerBarang(r.kind) ? 'brand' : 'slate'}>
+                        {namaJenis(jenis, r.kind)}
                       </Badge>
                     </td>
                     <td className="td">

@@ -150,6 +150,13 @@ CREATE TABLE "Budget" (
 );
 
 -- CreateTable
+CREATE TABLE "BudgetKind" (
+    "code" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateTable
 CREATE TABLE "BudgetLine" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "budgetId" TEXT NOT NULL,
@@ -181,6 +188,57 @@ CREATE TABLE "BudgetItemLine" (
     "realNotes" TEXT,
     CONSTRAINT "BudgetItemLine_budgetId_fkey" FOREIGN KEY ("budgetId") REFERENCES "Budget" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "BudgetItemLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ItemUnit" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "ItemCategory" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "ItemSubCategory" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "categoryId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "ItemSubCategory_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Item" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "categoryId" TEXT NOT NULL,
+    "subCategoryId" TEXT NOT NULL,
+    "unitId" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "notes" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Item_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Item_subCategoryId_fkey" FOREIGN KEY ("subCategoryId") REFERENCES "ItemSubCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Item_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "ItemUnit" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Item_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -255,57 +313,6 @@ CREATE TABLE "SpendEntry" (
 );
 
 -- CreateTable
-CREATE TABLE "ItemUnit" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "code" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
-);
-
--- CreateTable
-CREATE TABLE "ItemCategory" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "code" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
-);
-
--- CreateTable
-CREATE TABLE "ItemSubCategory" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "categoryId" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "ItemSubCategory_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-);
-
--- CreateTable
-CREATE TABLE "Item" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "code" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "categoryId" TEXT NOT NULL,
-    "subCategoryId" TEXT NOT NULL,
-    "unitId" TEXT NOT NULL,
-    "accountId" TEXT NOT NULL,
-    "notes" TEXT,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Item_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ItemCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Item_subCategoryId_fkey" FOREIGN KEY ("subCategoryId") REFERENCES "ItemSubCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Item_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "ItemUnit" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Item_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
-);
-
--- CreateTable
 CREATE TABLE "Season" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "code" TEXT NOT NULL,
@@ -318,7 +325,7 @@ CREATE TABLE "Season" (
 
 -- CreateTable
 CREATE TABLE "MonthMarginTarget" (
-    "month" INTEGER NOT NULL PRIMARY KEY,
+    "month" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "pesimis" REAL NOT NULL,
     "normal" REAL NOT NULL,
     "optimis" REAL NOT NULL,
@@ -458,6 +465,9 @@ CREATE INDEX "Budget_period_idx" ON "Budget"("period");
 CREATE UNIQUE INDEX "Budget_scope_period_kind_key" ON "Budget"("scope", "period", "kind");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "BudgetKind_name_key" ON "BudgetKind"("name");
+
+-- CreateIndex
 CREATE INDEX "BudgetLine_budgetId_idx" ON "BudgetLine"("budgetId");
 
 -- CreateIndex
@@ -471,27 +481,6 @@ CREATE INDEX "BudgetItemLine_itemId_idx" ON "BudgetItemLine"("itemId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "BudgetItemLine_budgetId_itemId_key" ON "BudgetItemLine"("budgetId", "itemId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "CashPlan_period_key" ON "CashPlan"("period");
-
--- CreateIndex
-CREATE INDEX "CashCommitment_planId_idx" ON "CashCommitment"("planId");
-
--- CreateIndex
-CREATE INDEX "CashCheckpoint_planId_idx" ON "CashCheckpoint"("planId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "CashCheckpoint_planId_date_key" ON "CashCheckpoint"("planId", "date");
-
--- CreateIndex
-CREATE INDEX "SpendCategory_planId_idx" ON "SpendCategory"("planId");
-
--- CreateIndex
-CREATE INDEX "SpendEntry_planId_idx" ON "SpendEntry"("planId");
-
--- CreateIndex
-CREATE INDEX "SpendEntry_categoryId_idx" ON "SpendEntry"("categoryId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ItemUnit_code_key" ON "ItemUnit"("code");
@@ -519,6 +508,27 @@ CREATE UNIQUE INDEX "Item_categoryId_subCategoryId_code_key" ON "Item"("category
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Item_categoryId_subCategoryId_name_key" ON "Item"("categoryId", "subCategoryId", "name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CashPlan_period_key" ON "CashPlan"("period");
+
+-- CreateIndex
+CREATE INDEX "CashCommitment_planId_idx" ON "CashCommitment"("planId");
+
+-- CreateIndex
+CREATE INDEX "CashCheckpoint_planId_idx" ON "CashCheckpoint"("planId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CashCheckpoint_planId_date_key" ON "CashCheckpoint"("planId", "date");
+
+-- CreateIndex
+CREATE INDEX "SpendCategory_planId_idx" ON "SpendCategory"("planId");
+
+-- CreateIndex
+CREATE INDEX "SpendEntry_planId_idx" ON "SpendEntry"("planId");
+
+-- CreateIndex
+CREATE INDEX "SpendEntry_categoryId_idx" ON "SpendEntry"("categoryId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Season_code_key" ON "Season"("code");

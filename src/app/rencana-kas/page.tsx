@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
+import { getJenisRab, getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
@@ -14,7 +14,7 @@ import { BulananChart } from '@/components/bulanan-chart';
 import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import { NonOperasiForm } from '@/components/non-operasi-form';
-import { JENIS_RAB, JENIS_RAB_LABEL, type JenisRab } from '@/lib/rab';
+import { namaJenis } from '@/lib/rab';
 import type { SearchParams } from '@/lib/search-params';
 import {
   AssumptionForm, CategoryBudget, CategoryDelete, CategoryForm, CategoryRab,
@@ -89,7 +89,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   await pastikanBulanBerjalan(currentPeriod());
   const daftar = await getRencanaKasPeriods();
   const dipilih = one(params.periode) ?? daftar[0] ?? currentPeriod();
-  const data = await getRencanaKas(dipilih);
+  const [data, jenisRab] = await Promise.all([getRencanaKas(dipilih), getJenisRab()]);
 
   const pemilih = (
     <Card className="card-pad">
@@ -971,7 +971,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                   <CategoryRab
                                     id={sumber.id}
                                     rabKind={sumber.rabKind}
-                                    jenis={JENIS_RAB.map((j) => ({ nilai: j, label: JENIS_RAB_LABEL[j] }))}
+                                    jenis={jenisRab.map((j) => ({ nilai: j.code, label: j.name }))}
                                   />
                                 )}
                               </td>
@@ -988,7 +988,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                     : formatRupiah(k.jatah)}
                                 {sumber?.rab && (
                                   <span className="mt-0.5 block text-[11px] font-normal text-brand-700">
-                                    dari RAB {JENIS_RAB_LABEL[sumber.rabKind as JenisRab]}
+                                    dari RAB {namaJenis(jenisRab, sumber.rabKind!)}
                                     {sumber.rab.anggaran === 0 && ' — bulan ini belum ada'}
                                   </span>
                                 )}

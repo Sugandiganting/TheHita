@@ -277,10 +277,11 @@ model Budget {
   period String
   /// DRAFT | ACTIVE — hanya yang ACTIVE ikut dihitung di laporan dan peramalan.
   status String  @default("DRAFT")
-  /// UMUM | PURCHASING — menentukan bentuk isian RAB-nya. RAB Purchasing
-  /// disusun per barang (BudgetItemLine) karena yang dianggarkan Purchasing
-  /// adalah jumlah kali harga satuan; RAB umum disusun per akun (BudgetLine)
-  /// karena gaji dan listrik tidak punya satuan maupun harga satuan.
+  /// Kode jenis RAB: PURCHASING, UMUM, atau jenis yang ditambahkan sendiri di
+  /// Master Data (BudgetKind) — HR, MANAGEMENT. Hanya PURCHASING yang disusun
+  /// per barang (BudgetItemLine), karena yang dianggarkan Purchasing adalah
+  /// jumlah kali harga satuan; selebihnya per akun (BudgetLine), karena gaji
+  /// dan listrik tidak punya satuan maupun harga satuan.
   kind   String  @default("UMUM")
   notes  String?
 
@@ -290,11 +291,23 @@ model Budget {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Satu cabang boleh punya dua RAB sebulan: satu Purchasing, satu umum.
-  // Lebih dari itu tidak, karena anggaran yang terpecah di beberapa dokumen
-  // sejenis tidak bisa dijumlahkan tanpa menebak mana yang berlaku.
+  // Satu cabang boleh punya satu RAB per jenis sebulan: satu Purchasing, satu
+  // HR, satu Umum. Dua dokumen sejenis tidak, karena anggaran yang terpecah
+  // tidak bisa dijumlahkan tanpa menebak mana yang berlaku.
   @@unique([scope, period, kind])
   @@index([period])
+}
+
+/// Jenis RAB yang ditambahkan sendiri: HR, Management, dan seterusnya.
+///
+/// Purchasing dan Umum selalu ada tanpa perlu tersimpan di sini; barisnya baru
+/// muncul bila namanya diubah. Kodenya yang tersimpan di Budget.kind dan
+/// SpendCategory.rabKind, jadi nama boleh diganti kapan saja tanpa memutus
+/// RAB maupun kategori rencana kas yang sudah memakainya.
+model BudgetKind {
+  code      String   @id
+  name      String   @unique
+  createdAt DateTime @default(now())
 }
 
 model BudgetLine {

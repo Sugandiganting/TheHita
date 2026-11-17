@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
-import { getBudgetDetail } from '@/lib/queries';
+import { getBudgetDetail, getJenisRab } from '@/lib/queries';
 import { formatDate, formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
-import { JENIS_RAB_LABEL, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
+import { jenisPerBarang, namaJenis, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
-  RealisasiAkunDialog, RealisasiBarangDialog,
+  GantiJenisRabDialog, RealisasiAkunDialog, RealisasiBarangDialog,
   TambahAnggaranDialog, TambahBarangRabDialog, UbahAnggaranDialog, UbahBarangRabDialog,
 } from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RabDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [rab, accounts, lines, barang] = await Promise.all([
+  const [rab, accounts, lines, barang, jenis] = await Promise.all([
     getBudgetDetail(id),
     prisma.account.findMany({
       where: { isHeader: false, active: true, type: { in: ['EXPENSE', 'COGS'] } },
@@ -43,9 +43,22 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         account: { select: { code: true, name: true } },
       },
     }),
+    getJenisRab(),
   ]);
 
   if (!rab) notFound();
+
+  // RAB lain milik pemilik dan bulan yang sama yang bisa menerima pindahan
+  // baris: per akun dan masih draf. Baris gaji di RAB Umum, misalnya, bisa
+  // dipindah ke RAB HR tanpa diketik ulang.
+  const pindahan = jenisPerBarang(rab.kind)
+    ? []
+    : (await prisma.budget.findMany({
+        where: { scope: rab.scope, period: rab.period, id: { not: rab.id }, status: 'DRAFT' },
+        select: { id: true, kind: true },
+      }))
+        .filter((b) => !jenisPerBarang(b.kind))
+        .map((b) => ({ id: b.id, nama: namaJenis(jenis, b.kind) }));
 
   const disahkan = rab.status === 'ACTIVE';
   // Tanggal bawaan realisasi: hari ini bila RAB-nya bulan berjalan, selain itu
@@ -55,7 +68,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   const tanggalBawaanRealisasi = hariIni.startsWith(rab.period) ? hariIni : `${rab.period}-01`;
   const hematBaris = (b: BarisBarangRab) => penghematanBaris(b);
   const keIsoTanggal = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
-  const purchasing = rab.kind === 'PURCHASING';
+  const purchasing = jenisPerBarang(rab.kind);
   // Pada kedua jenis RAB, realisasi dilaporkan per baris di tabel rincian —
   // per barang untuk Purchasing, per tagihan untuk yang lain. Tabel per akun di
   // bawahnya hanya rangkuman menurut jurnal, karena jurnal tidak tahu tagihan
@@ -80,7 +93,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <PageHeader
-        title={`RAB ${JENIS_RAB_LABEL[rab.kind]} ${rab.scope} — ${formatPeriod(rab.period)}`}
+        title={`RAB ${namaJenis(jenis, rab.kind)} ${rab.scope} — ${formatPeriod(rab.period)}`}
         description={
           rab.bersama
             ? `Biaya yang ditanggung ${rab.cabang.join(' dan ')} bersama-sama. Tidak masuk RAB cabang mana pun.`
@@ -124,8 +137,8 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
           {rab.akunTumpang.length > 0 && (
             <Alert tone="warning">
               Akun {rab.akunTumpang.map((a) => `${a.code} ${a.name}`).join(', ')} juga dianggarkan di
-              RAB {JENIS_RAB_LABEL[purchasing ? 'UMUM' : 'PURCHASING']} cabang dan bulan yang sama.
-              Realisasinya ditampilkan penuh di kedua RAB, karena jurnal tidak mencatat RAB mana yang
+              RAB lain milik {rab.scope} pada bulan yang sama.
+              Realisasinya ditampilkan penuh di tiap RAB itu, karena jurnal tidak mencatat RAB mana yang
               dimaksud sebuah beban — jadi sisa di masing-masing RAB lebih kecil dari yang sebenarnya.
               Bandingkan totalnya di Laporan RAB, yang menghitung tiap akun satu kali.
             </Alert>
@@ -150,6 +163,18 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
           status={rab.status}
           lineCount={purchasing ? rab.barang.length : lines.length}
         />
+        {!purchasing && (
+          <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            Jenis: <span className="font-medium text-slate-700">{namaJenis(jenis, rab.kind)}</span>
+            <span className="mx-2">·</span>
+            <GantiJenisRabDialog
+              id={rab.id}
+              kind={rab.kind}
+              pilihan={jenis.filter((j) => !j.perBarang)}
+              disabled={disahkan}
+            />
+          </p>
+        )}
       </Card>
 
       <div className="mt-6 space-y-6">
@@ -403,6 +428,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                                   notes: l.notes,
                                   planDate: keIsoTanggal(l.planDate),
                                 }}
+                                pindahan={pindahan}
                                 disabled={disahkan}
                               />
                               <BudgetLineDelete id={l.id} disabled={disahkan} />
