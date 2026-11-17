@@ -1143,7 +1143,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   </p>
 
                   <div className="mt-4 border-t border-slate-100 pt-4">
-                    <CategoryForm planId={data.id} />
+                    <CategoryForm planId={data.id} jenis={jenisRab.map((j) => ({ nilai: j.code, label: j.name }))} />
                   </div>
                 </Card>
             </>

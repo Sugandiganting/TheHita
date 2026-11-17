@@ -282,8 +282,19 @@ export function CommitmentRow({ id, paid }: { id: string; paid: boolean }) {
   );
 }
 
-export function CategoryForm({ planId }: { planId: string }) {
+/**
+ * Menambah kategori. Sumber jatahnya bisa langsung dipilih dari jenis RAB di
+ * Master Data — kategori "Gaji" yang diambil dari RAB HR tidak perlu diketik
+ * jatahnya sama sekali, dan ikut berubah tiap kali RAB HR diubah.
+ */
+export function CategoryForm({
+  planId, jenis,
+}: {
+  planId: string;
+  jenis: { nilai: string; label: string }[];
+}) {
   const [state, action] = useActionState(saveCategory, initial);
+  const [sumber, setSumber] = useState('');
   return (
     <form action={action} className="flex flex-wrap items-end gap-3" key={state.ok ? state.message : 'baru'}>
       <input type="hidden" name="planId" value={planId} />
@@ -292,9 +303,21 @@ export function CategoryForm({ planId }: { planId: string }) {
         <input id="rk-glabel" name="label" className="input" placeholder="Maintenance" required />
       </div>
       <div className="w-56">
-        <label className="label" htmlFor="rk-gbudget">Jatah bulan ini</label>
-        <MoneyInput id="rk-gbudget" name="budget" placeholder="50.000.000" required />
+        <label className="label" htmlFor="rk-gsumber">Sumber jatah</label>
+        <select id="rk-gsumber" name="rabKind" className="input" value={sumber}
+          onChange={(e) => setSumber(e.target.value)}>
+          <option value="">Diketik sendiri</option>
+          {jenis.map((j) => (
+            <option key={j.nilai} value={j.nilai}>Dari RAB {j.label}</option>
+          ))}
+        </select>
       </div>
+      {sumber === '' && (
+        <div className="w-56">
+          <label className="label" htmlFor="rk-gbudget">Jatah bulan ini</label>
+          <MoneyInput id="rk-gbudget" name="budget" placeholder="50.000.000" required />
+        </div>
+      )}
       <button type="submit" className="btn-primary">Tambah</button>
       <Pesan state={state} />
     </form>

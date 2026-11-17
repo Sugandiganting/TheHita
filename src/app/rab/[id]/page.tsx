@@ -160,6 +160,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
       <Card className="card-pad mt-6">
         <BudgetActions
           id={rab.id}
+          period={rab.period}
           status={rab.status}
           lineCount={purchasing ? rab.barang.length : lines.length}
         />

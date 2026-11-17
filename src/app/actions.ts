@@ -9,10 +9,10 @@ import { COA_TEMPLATE } from '@/lib/coa-template';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import {
-  JENIS_PURCHASING, JENIS_UMUM, cekCatatanAkunGanda, gabungJenisRab, jenisPerBarang, kodeJenisDariNama,
-  namaJenis, periodeBerikutnya,
+  JENIS_PURCHASING, JENIS_UMUM, MAKS_BULAN_SALIN, cekCatatanAkunGanda, deretBulanSesudah, gabungJenisRab,
+  jenisPerBarang, kodeJenisDariNama, namaJenis, periodeBerikutnya,
 } from '@/lib/rab';
-import { formatRupiahShort } from '@/lib/format';
+import { formatPeriod, formatRupiahShort } from '@/lib/format';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { SKENARIO_URUT } from '@/lib/target-margin';
@@ -1248,10 +1248,14 @@ export async function deleteBudgetLine(_prev: ActionState, formData: FormData): 
 }
 
 /**
- * Menyalin RAB ke bulan berikutnya.
+ * Menyalin RAB ke bulan-bulan berikutnya, sampai bulan yang dipilih.
  *
  * Nominalnya disalin apa adanya, bukan diambil dari realisasi bulan lalu —
  * yang menyusun anggaran tetap orangnya. Hasil salinan selalu berstatus draf.
+ *
+ * Bulan yang sudah punya RAB sejenis untuk pemilik yang sama dilewati, bukan
+ * ditimpa: isinya bisa jadi sudah disesuaikan, dan menimpanya diam-diam akan
+ * membuang penyesuaian itu. Bulan-bulan yang dilewati disebut di pesannya.
  */
 export async function duplicateBudget(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
@@ -1261,44 +1265,69 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
     return fail('RAB kosong, tidak ada yang bisa disalin.');
   }
 
-  const period = periodeBerikutnya(budget.period);
-  const sudahAda = await prisma.budget.findUnique({
-    where: { scope_period_kind: { scope: budget.scope, period, kind: budget.kind } },
-    select: { id: true },
-  });
-  if (sudahAda) {
-    return fail(`RAB ${namaJenis(await daftarJenisRab(), budget.kind)} untuk ${budget.scope} bulan ${period} sudah ada.`);
+  // Tanpa pilihan berarti bulan berikutnya saja, seperti dulu.
+  const sampai = String(formData.get('sampai') ?? '').trim() || periodeBerikutnya(budget.period);
+  if (!/^\d{4}-\d{2}$/.test(sampai)) return fail('Bulan tujuan tidak terbaca.');
+  const tujuan = deretBulanSesudah(budget.period, sampai);
+  if (tujuan.length === 0) return fail(`Pilih bulan sesudah ${formatPeriod(budget.period)}.`);
+  if (tujuan.length > MAKS_BULAN_SALIN) {
+    return fail(`Paling jauh ${MAKS_BULAN_SALIN} bulan sekaligus. Periksa lagi tahunnya.`);
   }
 
-  const salinan = await prisma.budget.create({
-    data: {
-      scope: budget.scope,
-      period,
-      kind: budget.kind,
-      status: 'DRAFT',
-      notes: budget.notes,
-      // Perkiraan tanggal belanja sengaja tidak ikut disalin: tanggalnya milik
-      // bulan asalnya, dan memindahkannya ke bulan baru berarti menebak hari
-      // yang sama akan cocok lagi — padahal tanggal 31 tidak ada di tiap bulan.
-      lines: { create: budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes })) },
-      // Jumlah dan harga satuan disalin apa adanya. Harga tahun depan memang
-      // belum tentu sama, tetapi menaikkannya sendiri berarti menebak — dan
-      // tebakan yang muncul tanpa diminta sulit dibedakan dari angka yang
-      // sudah disepakati.
-      itemLines: {
-        create: budget.itemLines.map((l) => ({
-          itemId: l.itemId,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          notes: l.notes,
-        })),
+  const sudahAda = new Set(
+    (await prisma.budget.findMany({
+      where: { scope: budget.scope, kind: budget.kind, period: { in: tujuan } },
+      select: { period: true },
+    })).map((b) => b.period),
+  );
+  const dibuat: { id: string; period: string }[] = [];
+  for (const period of tujuan) {
+    if (sudahAda.has(period)) continue;
+    const salinan = await prisma.budget.create({
+      data: {
+        scope: budget.scope,
+        period,
+        kind: budget.kind,
+        status: 'DRAFT',
+        notes: budget.notes,
+        // Perkiraan tanggal belanja sengaja tidak ikut disalin: tanggalnya milik
+        // bulan asalnya, dan memindahkannya ke bulan baru berarti menebak hari
+        // yang sama akan cocok lagi — padahal tanggal 31 tidak ada di tiap bulan.
+        lines: { create: budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes })) },
+        // Jumlah dan harga satuan disalin apa adanya. Harga tahun depan memang
+        // belum tentu sama, tetapi menaikkannya sendiri berarti menebak — dan
+        // tebakan yang muncul tanpa diminta sulit dibedakan dari angka yang
+        // sudah disepakati.
+        itemLines: {
+          create: budget.itemLines.map((l) => ({
+            itemId: l.itemId,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            notes: l.notes,
+          })),
+        },
       },
-    },
-  });
+      select: { id: true },
+    });
+    dibuat.push({ id: salinan.id, period });
+  }
   segarkanRab();
-  // Salinan dibuat untuk disesuaikan, bukan sekadar ada. Buka langsung supaya
-  // judul halamannya sendiri yang memberi tahu bulan mana yang sedang dibuka.
-  redirect(`/rab/${salinan.id}`);
+  segarkanRencanaKas();
+
+  const lewat = tujuan.filter((p) => sudahAda.has(p));
+  const nama = namaJenis(await daftarJenisRab(), budget.kind);
+  if (dibuat.length === 0) {
+    return fail(`Tidak ada yang disalin: RAB ${nama} ${budget.scope} sudah ada di `
+      + `${lewat.map(formatPeriod).join(', ')}. Yang sudah ada tidak ditimpa.`);
+  }
+  // Satu salinan dibuat untuk disesuaikan, jadi langsung dibuka. Beberapa
+  // sekaligus cukup disebut; daftar RAB yang menampilkannya.
+  if (dibuat.length === 1 && lewat.length === 0) redirect(`/rab/${dibuat[0].id}`);
+  return ok(`Disalin ke ${dibuat.length} bulan: ${dibuat.map((d) => formatPeriod(d.period)).join(', ')}.`
+    + (lewat.length > 0
+      ? ` Dilewati karena sudah ada RAB ${nama} ${budget.scope}: ${lewat.map(formatPeriod).join(', ')}.`
+      : '')
+    + ' Semuanya draf.');
 }
 
 /* ------------------------------------------------------------------ */
@@ -1457,18 +1486,25 @@ export async function deleteCommitment(_prev: ActionState, formData: FormData): 
 export async function saveCategory(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const planId = String(formData.get('planId') ?? '');
   const label = String(formData.get('label') ?? '').trim();
-  const budget = angkaAtauNull(formData, 'budget');
+  // Sumber jatah: jenis RAB dari Master Data, atau kosong untuk diketik sendiri.
+  const rabKind = String(formData.get('rabKind') ?? '').trim() || null;
+  // Jatah kategori yang ikut RAB tidak diketik: RAB-lah keputusannya.
+  const budget = rabKind ? null : angkaAtauNull(formData, 'budget');
 
   if (!label) return fail('Nama kategori wajib diisi.');
-  if (budget === null) return fail('Jatah bulan ini wajib diisi.');
-  if (budget < 0) return fail('Jatah tidak boleh negatif.');
+  if (rabKind) {
+    if (!(await daftarJenisRab()).some((j) => j.code === rabKind)) return fail('Jenis RAB tidak dikenal.');
+  } else {
+    if (budget === null) return fail('Jatah bulan ini wajib diisi, atau pilih RAB sebagai sumbernya.');
+    if (budget < 0) return fail('Jatah tidak boleh negatif.');
+  }
 
   const plan = await prisma.cashPlan.findUnique({ where: { id: planId }, select: { id: true } });
   if (!plan) return fail('Rencana kas tidak ditemukan.');
   const jumlah = await prisma.spendCategory.count({ where: { planId } });
-  await prisma.spendCategory.create({ data: { planId, label, budget, sort: jumlah } });
+  await prisma.spendCategory.create({ data: { planId, label, budget, rabKind, sort: jumlah } });
   segarkanRencanaKas();
-  return ok('Kategori ditambahkan.');
+  return ok(rabKind ? 'Kategori ditambahkan, jatahnya mengikuti RAB.' : 'Kategori ditambahkan.');
 }
 
 /**

@@ -345,8 +345,9 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   benar-benar terjadi.
 - **RAB yang sudah disahkan terkunci.** Untuk mengubahnya, kembalikan dulu ke draf —
   anggaran tidak berubah diam-diam setelah disepakati.
-- **Salin ke bulan berikutnya** menyalin nominalnya apa adanya dan selalu menghasilkan
-  draf. Yang menyusun anggaran tetap orangnya, bukan sistem.
+- **Salin ke bulan lain** menyalin nominalnya apa adanya ke tiap bulan sampai bulan yang
+  dipilih, dan selalu menghasilkan draf. Bulan yang sudah punya RAB sejenis dilewati,
+  tidak ditimpa. Yang menyusun anggaran tetap orangnya, bukan sistem.
 - **Satu akun boleh dianggarkan beberapa kali** pada RAB selain Purchasing, misalnya
   Neuviz, Guestpro, dan STAAH yang sama-sama Biaya Software dan Langganan. Catatannya
   yang membedakan, jadi catatan wajib diisi begitu akunnya sudah ada di RAB itu.

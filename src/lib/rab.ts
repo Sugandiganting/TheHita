@@ -515,3 +515,22 @@ export function anggaranAkunDariBaris<T extends { accountId: string; amount: num
   }
   return hasil;
 }
+
+/** Batas salin RAB sekaligus. Lebih dari dua tahun hampir pasti salah ketik tahun. */
+export const MAKS_BULAN_SALIN = 24;
+
+/**
+ * Bulan-bulan sesudah `dari` sampai `sampai`, keduanya "YYYY-MM":
+ * deretBulanSesudah('2026-11', '2027-02') → ['2026-12', '2027-01', '2027-02'].
+ * Kosong bila `sampai` tidak sesudah `dari`.
+ */
+export function deretBulanSesudah(dari: string, sampai: string): string[] {
+  const hasil: string[] = [];
+  let p = dari;
+  while (hasil.length <= MAKS_BULAN_SALIN) {
+    p = periodeBerikutnya(p);
+    if (p > sampai) break;
+    hasil.push(p);
+  }
+  return hasil;
+}

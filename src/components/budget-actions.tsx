@@ -2,6 +2,9 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { DialogTombol } from './dialog';
+import { formatPeriod } from '@/lib/format';
+import { MAKS_BULAN_SALIN, deretBulanSesudah, periodeBerikutnya } from '@/lib/rab';
 import {
   deleteBudget, deleteBudgetItemLine, deleteBudgetLine, duplicateBudget, hapusJenisRab, setBudgetStatus,
   type ActionState,
@@ -44,14 +47,15 @@ const ARTI_STATUS = {
 
 /** Sahkan / kembalikan ke draf, salin ke bulan berikutnya, hapus. */
 export function BudgetActions({
-  id, status, lineCount,
+  id, period, status, lineCount,
 }: {
   id: string;
+  /** Bulan RAB ini, "YYYY-MM": salinannya dimulai dari bulan sesudahnya. */
+  period: string;
   status: string;
   lineCount: number;
 }) {
   const [statusState, statusAction] = useActionState(setBudgetStatus, initial);
-  const [salinState, salinAction] = useActionState(duplicateBudget, initial);
   const [hapusState, hapusAction] = useActionState(deleteBudget, initial);
   const [konfirmasi, setKonfirmasi] = useState(false);
   const draf = status === 'DRAFT';
@@ -68,10 +72,15 @@ export function BudgetActions({
           />
         </form>
 
-        <form action={salinAction} className="contents">
-          <input type="hidden" name="id" value={id} />
-          <Tombol label="Salin ke bulan berikutnya" pendingLabel="Menyalin…" />
-        </form>
+        <DialogTombol
+          label="Salin ke bulan lain…"
+          varian="tautan"
+          lebar="sm"
+          judul="Salin RAB"
+          keterangan="Isinya disalin apa adanya ke tiap bulan, sebagai draf. Perkiraan tanggal belanja dan realisasi tidak ikut."
+        >
+          {(tutup) => <SalinRabForm id={id} period={period} lineCount={lineCount} onTutup={tutup} />}
+        </DialogTombol>
 
         {draf && !konfirmasi && (
           <button
@@ -102,7 +111,6 @@ export function BudgetActions({
       <p className="text-xs text-slate-500">{draf ? ARTI_STATUS.DRAFT : ARTI_STATUS.ACTIVE}</p>
 
       <Pesan state={statusState} />
-      <Pesan state={salinState} />
       <Pesan state={hapusState} />
     </div>
   );
@@ -207,5 +215,72 @@ export function HapusJenisRab({ code, nama, dipakai }: { code: string; nama: str
       </button>
       {state.message && !state.ok && <span className="text-xs text-red-600">{state.message}</span>}
     </span>
+  );
+}
+
+/** Tombol kirim berukuran biasa, untuk formulir di dalam dialog. */
+function KirimSalin({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" className="btn-primary" disabled={pending}>
+      {pending ? 'Menyalin…' : label}
+    </button>
+  );
+}
+
+/**
+ * Salin RAB sampai bulan tertentu — bukan hanya ke bulan berikutnya.
+ *
+ * Banyaknya bulan disebut sebelum tombolnya ditekan, supaya salah pilih tahun
+ * (Desember 2027 alih-alih 2026) ketahuan sebelum dua belas RAB tercipta.
+ */
+function SalinRabForm({
+  id, period, lineCount, onTutup,
+}: {
+  id: string;
+  period: string;
+  lineCount: number;
+  onTutup: () => void;
+}) {
+  const [state, action] = useActionState(duplicateBudget, initial);
+  const pertama = periodeBerikutnya(period);
+  const [sampai, setSampai] = useState(pertama);
+  const bulan = deretBulanSesudah(period, sampai);
+  const kebanyakan = bulan.length > MAKS_BULAN_SALIN;
+
+  return (
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <label className="label" htmlFor="salin-sampai">Salin sampai bulan</label>
+        <input
+          id="salin-sampai"
+          type="month"
+          name="sampai"
+          className="input"
+          min={pertama}
+          value={sampai}
+          onChange={(e) => setSampai(e.target.value)}
+          required
+        />
+        <p className={`mt-1 text-xs ${kebanyakan || bulan.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
+          {bulan.length === 0
+            ? `Pilih bulan sesudah ${formatPeriod(period)}.`
+            : kebanyakan
+              ? `Paling jauh ${MAKS_BULAN_SALIN} bulan sekaligus. Periksa lagi tahunnya.`
+              : bulan.length === 1
+                ? `Satu RAB baru untuk ${formatPeriod(bulan[0])}, berisi ${lineCount} baris.`
+                : `${bulan.length} RAB baru, ${formatPeriod(bulan[0])} sampai ${formatPeriod(bulan[bulan.length - 1])}, `
+                  + `masing-masing ${lineCount} baris. Bulan yang sudah punya RAB sejenis dilewati, tidak ditimpa.`}
+        </p>
+      </div>
+      {state.message && (
+        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <KirimSalin label={bulan.length > 1 ? `Salin ke ${bulan.length} bulan` : 'Salin'} />
+        <button type="button" className="btn-secondary" onClick={onTutup}>Tutup</button>
+      </div>
+    </form>
   );
 }

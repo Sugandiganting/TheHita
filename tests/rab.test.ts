@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, gabungJenisRab, kodeJenisDariNama, namaJenis, nilaiBarisBarang, pemilikSisa,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, gabungJenisRab, kodeJenisDariNama, namaJenis, nilaiBarisBarang, pemilikSisa,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -405,4 +405,15 @@ test('anggaran per akun menjumlahkan baris dengan akun yang sama', () => {
   assert.equal(hasil.size, 2);
   assert.equal(hasil.get('sw')!.anggaran, 2_888_500);
   assert.equal(hasil.get('air')!.anggaran, 128_780);
+});
+
+/* Salin RAB sampai bulan tertentu, bukan hanya ke bulan berikutnya. */
+test('deret bulan sesudah: melewati pergantian tahun', () => {
+  assert.deepEqual(deretBulanSesudah('2026-11', '2027-02'), ['2026-12', '2027-01', '2027-02']);
+});
+
+test('deret bulan sesudah: satu bulan, atau kosong bila tujuannya tidak sesudah asal', () => {
+  assert.deepEqual(deretBulanSesudah('2026-11', '2026-12'), ['2026-12']);
+  assert.deepEqual(deretBulanSesudah('2026-11', '2026-11'), []);
+  assert.deepEqual(deretBulanSesudah('2026-11', '2026-08'), []);
 });
