@@ -746,3 +746,65 @@ export function usulkanProyeksi(riwayat: number[]): Record<Skenario, number> | n
     OPTIMIS: Math.max(...pakai),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Gaji dari RAB                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Induk akun gaji: 6130 Biaya Karyawan — gaji, service, THR, bonus dan gaji
+ * management. Dikenali dari COA, bukan dari jenis RAB-nya, supaya gaji tetap
+ * terbaca di RAB jenis apa pun ia dianggarkan. Kelompok 6181 Biaya HR sengaja
+ * tidak ikut: rekrutmen dan konsumsi bukan gaji, tidak dibayar sekaligus di
+ * tanggal yang sama, dan tidak perlu disisihkan sebagai cadangan.
+ */
+export const INDUK_AKUN_GAJI = '6130';
+
+export function akunGajiKah(akun: { code: string; subtype: string | null }): boolean {
+  return akun.subtype === 'PAYROLL' && akun.code.startsWith(`${INDUK_AKUN_GAJI}.`);
+}
+
+export type BarisGajiRab = {
+  amount: number;
+  planDate: Date | null;
+  realAmount: number | null;
+  realDate: Date | null;
+};
+
+/**
+ * Gaji bulan berjalan menurut RAB, dipisah menurut posisi kas terakhir.
+ *
+ * Gaji dibayar sekaligus pada tanggalnya, bukan mengalir tiap hari. Laju
+ * belanja harian yang diukur dari awal bulan karena itu tidak boleh memuatnya:
+ * gaji tanggal 1 yang ikut terbagi delapan belas hari akan terbaca seolah
+ * dibayar lagi setiap hari sampai akhir bulan.
+ *
+ * - sudahKeluar: realisasi yang dilaporkan, atau perkiraan tanggalnya sudah
+ *   lewat. Sudah tercermin di saldo; dikeluarkan dari laju harian.
+ * - akanKeluar: perkiraan tanggalnya sesudah posisi kas. Belum tercermin di
+ *   saldo; dikurangkan dari sisa bulan seperti komitmen yang belum dibayar.
+ * - tanpaTanggal: belum ada tanggal maupun realisasi. Tidak diketahui sudah
+ *   dibayar atau belum, jadi dibiarkan seperti dulu — terbaca lewat laju.
+ */
+export function gajiRabBulanIni(
+  baris: readonly BarisGajiRab[],
+  posisi: Date,
+): { sudahKeluar: number; akanKeluar: number; tanpaTanggal: number } {
+  const batas = Date.UTC(posisi.getUTCFullYear(), posisi.getUTCMonth(), posisi.getUTCDate());
+  const hari = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  let sudahKeluar = 0;
+  let akanKeluar = 0;
+  let tanpaTanggal = 0;
+  for (const b of baris) {
+    if (b.realAmount !== null) {
+      if (b.realDate && hari(b.realDate) > batas) akanKeluar += b.realAmount;
+      else sudahKeluar += b.realAmount;
+    } else if (b.planDate) {
+      if (hari(b.planDate) > batas) akanKeluar += b.amount;
+      else sudahKeluar += b.amount;
+    } else {
+      tanpaTanggal += b.amount;
+    }
+  }
+  return { sudahKeluar, akanKeluar, tanpaTanggal };
+}

@@ -625,9 +625,13 @@ export function AssumptionForm({
   asumsi: {
     monthlyOutflow: number | null; salaryNeed: number | null;
     usulanOutflow: number | null; usulanGaji: number | null;
+    sumberUsulanGaji?: { jenis: 'RAB'; period: string } | { jenis: 'KOMITMEN' } | null;
   };
 }) {
   const [state, action] = useActionState(saveAssumptions, initial);
+  const asalGaji = asumsi.sumberUsulanGaji?.jenis === 'RAB'
+    ? ` dari RAB gaji ${formatPeriod(asumsi.sumberUsulanGaji.period)} (akun 6130, seluruh cabang)`
+    : asumsi.sumberUsulanGaji?.jenis === 'KOMITMEN' ? ' dari komitmen bernama gaji' : '';
   const baris = [
     {
       name: 'monthlyOutflow', label: 'Pengeluaran rutin per bulan',
@@ -637,7 +641,9 @@ export function AssumptionForm({
     {
       name: 'salaryNeed', label: 'Kebutuhan gaji per bulan',
       nilai: asumsi.salaryNeed, usul: asumsi.usulanGaji,
-      jelas: 'Dipakai menandai bulan yang saldonya tidak lagi menutup gaji.',
+      jelas: 'Gaji bulan depan yang disisihkan dari plafon, dan batas aman rencana belanja. '
+        + 'Biarkan kosong untuk mengikuti RAB gaji.',
+      asal: asalGaji,
     },
   ];
 
@@ -655,7 +661,7 @@ export function AssumptionForm({
           />
           <p className="mt-1 text-xs text-slate-500">
             {b.jelas}
-            {b.nilai === null && b.usul !== null && ` Kosong — memakai ${formatRupiah(b.usul)}.`}
+            {b.nilai === null && b.usul !== null && ` Kosong — memakai ${formatRupiah(b.usul)}${'asal' in b ? b.asal : ''}.`}
           </p>
         </div>
       ))}

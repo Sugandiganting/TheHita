@@ -329,6 +329,14 @@ ditautkan ke sebuah jenis, sehingga misalnya jatah gaji diambil dari seluruh RAB
 itu. RAB per akun yang masih draf bisa diganti jenisnya, dan barisnya bisa dipindah ke RAB
 lain milik cabang dan bulan yang sama.
 
+**Gaji dibaca dari RAB lewat akunnya.** Baris RAB berakun kelompok `6130 Biaya Karyawan`
+(gaji, service, THR, bonus dan gaji management), di RAB jenis apa pun, dipakai Rencana
+Kas dengan dua cara: total RAB gaji bulan depan menjadi *kebutuhan gaji* (cadangan di plafon
+dan batas aman rencana belanja), dan gaji bulan berjalan yang perkiraan tanggalnya sudah
+lewat dianggap sudah dibayar sekaligus — tidak ikut terbagi sebagai laju belanja harian.
+Gaji yang tanggalnya belum lewat dihitung sebagai pengeluaran yang masih akan keluar.
+Angka yang diketik di *Asumsi bulanan* tetap menang.
+
 Satu RAB dimiliki satu **pemilik anggaran**, yang bisa berupa satu cabang (`THL`) atau satu
 kelompok cabang (`THL+SKR`) untuk biaya yang ditanggung bersama. Bentuknya sama persis
 dengan penanda pada baris jurnal, sehingga anggaran dan realisasi selalu diukur dengan

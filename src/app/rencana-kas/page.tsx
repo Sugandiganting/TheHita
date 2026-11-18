@@ -567,6 +567,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                     {laju
                                       ? `terukur ${formatRupiahShort(laju.perHari)}/hari`
                                       : 'dari asumsi bulanan'}
+                                    {/* Gaji yang sudah dibayar tidak ikut laju: ia keluar
+                                        sekaligus, bukan tiap hari. Disebut supaya laju yang
+                                        turun tidak terbaca seperti belanja yang berkurang. */}
+                                    {laju && data.asumsi.gajiRab && data.asumsi.gajiRab.sudahKeluar > 0 && (
+                                      <> · di luar gaji {formatRupiahShort(data.asumsi.gajiRab.sudahKeluar)} yang sudah dibayar</>
+                                    )}
                                   </span>
                                 )}
                               </td>

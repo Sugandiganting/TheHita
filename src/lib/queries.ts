@@ -19,8 +19,8 @@ import { rekapPenampung, type RekapPenampung } from './penampung';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
-  HORIZON_BULAN, SKENARIO, hitungRencana, hitungRunway, lajuOperasionalBerjalan,
-  lipatBelanja, usulkanProyeksi,
+  HORIZON_BULAN, SKENARIO, akunGajiKah, gajiRabBulanIni, hitungRencana, hitungRunway,
+  lajuOperasionalBerjalan, lipatBelanja, usulkanProyeksi,
   type LajuOperasional, type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
 import {
@@ -1018,6 +1018,13 @@ export type RencanaKasDetail = {
     salaryNeed: number | null;
     usulanOutflow: number | null;
     usulanGaji: number | null;
+    /** Asal usulan gaji: RAB bulan depan, RAB bulan ini, atau komitmen bernama gaji. */
+    sumberUsulanGaji: { jenis: 'RAB'; period: Period } | { jenis: 'KOMITMEN' } | null;
+    /**
+     * Gaji bulan berjalan menurut RAB (akun 6130), dipisah menurut posisi kas
+     * terakhir. null bila belum ada posisi kas atau RAB gajinya.
+     */
+    gajiRab: { sudahKeluar: number; akanKeluar: number; tanpaTanggal: number } | null;
     /**
      * Laju belanja operasional harian yang terukur dari bulan berjalan, dipakai
      * meramalkan sisa bulan ini. null bila belum layak diukur — bulan masih
@@ -1911,11 +1918,44 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     hariBulanIni: terakhir ? terakhir.date.getUTCDate() : null,
   });
 
+  // Gaji menurut RAB, bulan ini dan bulan depan, dikenali dari akunnya
+  // (kelompok 6130) di RAB jenis apa pun. Draf ikut: RAB gaji bulan depan
+  // hampir selalu masih draf saat cadangannya perlu disisihkan.
+  const barisGaji = (await prisma.budgetLine.findMany({
+    where: {
+      budget: { period: { in: [period, bulanDepan] } },
+      account: { subtype: 'PAYROLL', code: { startsWith: '6130.' } },
+    },
+    select: {
+      amount: true, planDate: true, realAmount: true, realDate: true,
+      budget: { select: { period: true } },
+      account: { select: { code: true, subtype: true } },
+    },
+  })).filter((l) => akunGajiKah(l.account));
+  const totalGaji = (p: Period) => round(
+    barisGaji.filter((l) => l.budget.period === p).reduce((t, l) => t + l.amount, 0),
+  );
+  const gajiRab = terakhir && barisGaji.some((l) => l.budget.period === period)
+    ? gajiRabBulanIni(barisGaji.filter((l) => l.budget.period === period), terakhir.date)
+    : null;
+
   // Kebutuhan gaji dipakai dua kali — menyisihkan cadangan di plafon belanja
   // dan menilai saldo akhir di ramalan — jadi dihitung sebelum keduanya.
-  const usulanGaji = plan.commitments
+  // Yang dijaga adalah gaji BULAN DEPAN, karena saldo akhir bulan inilah yang
+  // harus menutupinya; tanpa RAB bulan depan, RAB bulan ini sebagai gantinya.
+  // Komitmen bernama gaji tinggal sebagai pilihan terakhir untuk bulan-bulan
+  // yang belum punya RAB gaji sama sekali.
+  const gajiKomitmen = plan.commitments
     .filter((k) => k.recurring && /gaji/i.test(k.label))
-    .reduce((s, k) => s + k.amount, 0) || null;
+    .reduce((s, k) => s + k.amount, 0);
+  const sumberUsulanGaji: { jenis: 'RAB'; period: Period } | { jenis: 'KOMITMEN' } | null =
+    totalGaji(bulanDepan) > 0 ? { jenis: 'RAB', period: bulanDepan }
+      : totalGaji(period) > 0 ? { jenis: 'RAB', period }
+        : gajiKomitmen > 0 ? { jenis: 'KOMITMEN' }
+          : null;
+  const usulanGaji = sumberUsulanGaji === null ? null
+    : sumberUsulanGaji.jenis === 'RAB' ? totalGaji(sumberUsulanGaji.period)
+      : gajiKomitmen;
   const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
 
   const rencana = terakhir
@@ -1931,9 +1971,16 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         // jadi yang menutupinya adalah saldo akhir bulan ini.
         kebutuhanGaji: gaji,
         rencanaRab,
-        komitmen: plan.commitments.map((k) => ({
-          label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
-        })),
+        komitmen: [
+          ...plan.commitments.map((k) => ({
+            label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
+          })),
+          // Gaji RAB yang tanggalnya sesudah posisi kas belum tercermin di
+          // saldo, jadi diperlakukan seperti komitmen yang belum dibayar.
+          ...(gajiRab && gajiRab.akanKeluar > 0
+            ? [{ label: 'Gaji menurut RAB', amount: gajiRab.akanKeluar, dueDay: null, paid: false }]
+            : []),
+        ],
         // Total terpakai diturunkan dari rinciannya, jadi keduanya tidak bisa
         // berbeda — dan kategori yang terhapus tidak meninggalkan selisih.
         kategori: kategori.map((k) => ({
@@ -1970,7 +2017,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // bukan mengalir tiap hari.
   const komitmenTerbayar = plan.commitments
     .filter((k) => k.paid)
-    .reduce((t, k) => t + k.amount, 0);
+    .reduce((t, k) => t + k.amount, 0)
+    // Gaji RAB yang sudah jatuh tempo juga dibayar sekaligus, bukan mengalir.
+    + (gajiRab?.sudahKeluar ?? 0);
   const laju = terakhir
     ? lajuOperasionalBerjalan({
         saldoAwal: saldoAkhirBulanLalu,
@@ -2162,6 +2211,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       salaryNeed: plan.salaryNeed,
       usulanOutflow,
       usulanGaji,
+      sumberUsulanGaji,
+      gajiRab,
       lajuBerjalan: laju,
     },
     runway,
