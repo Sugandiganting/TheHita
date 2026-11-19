@@ -14,7 +14,9 @@ import {
   type NasibSalin,
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
-import { bacaJumlah, totalItemProyek } from '@/lib/proyek';
+import {
+  AKSI_PROYEK, LABEL_STATUS_PROYEK, bacaJumlah, statusEfektif, totalItemProyek, type AksiProyek,
+} from '@/lib/proyek';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { SKENARIO_URUT } from '@/lib/target-margin';
@@ -438,7 +440,6 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
   const id = String(formData.get('id') ?? '');
   const name = String(formData.get('name') ?? '').trim();
   const unitId = String(formData.get('unitId') ?? '');
-  const status = String(formData.get('status') ?? 'PLANNED');
   const startDate = String(formData.get('startDate') ?? '');
   const endDate = String(formData.get('endDate') ?? '');
   const description = String(formData.get('description') ?? '').trim();
@@ -459,10 +460,12 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
     return fail('Isi tenor pinjaman (bulan) agar cicilan bisa dihitung.');
   }
 
+  // Status tidak ikut diubah di sini: ia hanya berpindah lewat alur
+  // persetujuan (ubahStatusProyek), supaya setiap perpindahannya tercatat.
+  // Proyek baru selalu mulai sebagai Draft.
   const payload = {
     name,
     unitId,
-    status,
     startDate: parseDate(startDate),
     endDate: endDate ? parseDate(endDate) : null,
     description: description || null,
@@ -511,6 +514,53 @@ async function bacaItemProyek(formData: FormData): Promise<
       accountId,
     },
   };
+}
+
+/**
+ * Memindahkan status proyek satu langkah di alur persetujuan: Submit
+ * Proposal, Approve Plan, Approve Funding, Reject, Mark Completed, Cancel
+ * Project, atau Return to Draft. Langkah yang tidak tersedia untuk status
+ * proyek saat ini ditolak. Setiap perpindahan dicatat di riwayat beserta
+ * pengguna yang menekannya dan catatannya — wajib untuk Reject dan Cancel.
+ */
+export async function ubahStatusProyek(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const aksi = String(formData.get('aksi') ?? '') as AksiProyek;
+  const catatan = String(formData.get('catatan') ?? '').trim();
+
+  const aturan = AKSI_PROYEK[aksi];
+  if (!aturan) return fail('Langkah tidak dikenal.');
+  const proyek = await prisma.project.findUnique({
+    where: { id }, select: { name: true, status: true, startDate: true },
+  });
+  if (!proyek) return fail('Proyek tidak ditemukan.');
+
+  const sekarang = statusEfektif(proyek.status, proyek.startDate, new Date());
+  if (!aturan.dari.includes(sekarang)) {
+    return fail(`"${aturan.label}" tidak bisa dilakukan saat status proyek ${LABEL_STATUS_PROYEK[sekarang]}.`);
+  }
+  if (aturan.butuhCatatan && !catatan) return fail(`Isi alasannya dulu untuk "${aturan.label}".`);
+
+  const sesi = await sesiSekarang();
+  await prisma.$transaction([
+    prisma.project.update({ where: { id }, data: { status: aturan.ke } }),
+    prisma.projectStatusLog.create({
+      data: {
+        projectId: id,
+        fromStatus: sekarang,
+        toStatus: aturan.ke,
+        note: catatan || null,
+        userId: sesi?.id ?? null,
+        userName: sesi?.name ?? 'Tidak diketahui',
+      },
+    }),
+  ]);
+
+  revalidatePath('/proyek');
+  revalidatePath(`/proyek/${id}`);
+  revalidatePath('/peramalan');
+  revalidatePath('/');
+  return ok(`${proyek.name}: ${LABEL_STATUS_PROYEK[sekarang]} → ${LABEL_STATUS_PROYEK[aturan.ke]}.`);
 }
 
 export async function addCostItem(_prev: ActionState, formData: FormData): Promise<ActionState> {

@@ -28,14 +28,6 @@ export const CASHFLOW_LABEL: Record<string, string> = {
   FINANCING: 'Pendanaan',
 };
 
-export const PROJECT_STATUS_LABEL: Record<string, string> = {
-  DRAFT: 'Draft',
-  PLANNED: 'Direncanakan',
-  ONGOING: 'Berjalan',
-  DONE: 'Selesai',
-  CANCELLED: 'Dibatalkan',
-};
-
 /** Akun bersaldo normal debit: aset, HPP, beban. */
 export function isDebitNormal(type: string): boolean {
   return type === 'ASSET' || type === 'COGS' || type === 'EXPENSE';

@@ -528,7 +528,7 @@ async function seedProject() {
     data: {
       name: 'Penambahan 8 Kamar Baru - The Hita Uluwatu',
       unitId: unit.id,
-      status: 'PLANNED',
+      status: 'APPROVED',
       startDate: monthOffset(1),
       endDate: monthOffset(8),
       description:

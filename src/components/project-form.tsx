@@ -85,16 +85,6 @@ export function ProjectForm({
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="p-status">Status</label>
-          <select id="p-status" name="status" className="input" defaultValue={values.status ?? 'PLANNED'}>
-            <option value="DRAFT">Draft</option>
-            <option value="PLANNED">Direncanakan</option>
-            <option value="ONGOING">Berjalan</option>
-            <option value="DONE">Selesai</option>
-            <option value="CANCELLED">Dibatalkan</option>
-          </select>
-        </div>
-        <div>
           <label className="label" htmlFor="p-start">Tanggal mulai</label>
           <input id="p-start" name="startDate" type="date" className="input" defaultValue={values.startDate} required />
         </div>

@@ -171,8 +171,10 @@ model Project {
   id          String    @id @default(cuid())
   name        String
   unitId      String
-  /// DRAFT | PLANNED | ONGOING | DONE | CANCELLED
-  status      String    @default("PLANNED")
+  /// Alur persetujuan: DRAFT → PROPOSED → FUNDING_REVIEW → APPROVED → ONGOING → DONE,
+  /// atau REJECTED / CANCELLED. "PLANNED" dari sebelum alur ini dibaca APPROVED.
+  /// Lihat src/lib/proyek.ts.
+  status      String    @default("DRAFT")
   startDate   DateTime
   endDate     DateTime?
   description String?
@@ -193,6 +195,7 @@ model Project {
 
   unit    BusinessUnit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
   items   ProjectCostItem[]
+  riwayatStatus ProjectStatusLog[]
   entries JournalEntry[]
 
   createdAt DateTime @default(now())
@@ -221,6 +224,25 @@ model ProjectCostItem {
 
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([projectId])
+}
+
+/// Satu perpindahan status proyek: siapa, kapan, dari mana ke mana, dan
+/// catatannya. Jejak persetujuan sebelum hak akses per pengguna dibuat.
+model ProjectStatusLog {
+  id         String   @id @default(cuid())
+  projectId  String
+  fromStatus String
+  toStatus   String
+  note       String?
+  /// Pengguna yang menekan tombolnya; nama disimpan juga supaya tetap terbaca
+  /// walau akunnya kelak dihapus.
+  userId     String?
+  userName   String
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
 }

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { STATUS_MEMOTONG_KAS } from '@/lib/proyek';
 import { Suspense } from 'react';
 import { prisma } from '@/lib/db';
 import { getCashBalance, getHistoryWindow, getMonthlyActuals, getProfitLoss, getUnitPerformance } from '@/lib/queries';
@@ -223,7 +224,7 @@ async function ForecastTeaser({ unitIds }: { unitIds: string[] | null }) {
   const [history, projects, openingCash] = await Promise.all([
     getMonthlyActuals(window.from, window.to, unitIds),
     prisma.project.findMany({
-      where: { status: { in: ['PLANNED', 'ONGOING'] }, ...(unitIds ? { unitId: { in: unitIds } } : {}) },
+      where: { status: { in: [...STATUS_MEMOTONG_KAS] }, ...(unitIds ? { unitId: { in: unitIds } } : {}) },
       include: { items: true },
     }),
     getCashBalance(addMonths(start, -1), unitIds),

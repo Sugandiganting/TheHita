@@ -314,6 +314,14 @@ pemeriksaan keseimbangan debit-kredit. Semua bisa difilter per cabang dan per pe
 Inti dari sistem ini — lihat bagian berikutnya.
 
 ### Proyek
+Setiap proyek melewati alur persetujuan **Draft → Proposed → Funding Review → Approved**,
+lalu **In Progress** sendiri saat tanggal mulainya tiba, dan **Completed**. Proyek bisa
+**Rejected** (saat pengajuan atau peninjauan dana) atau **Cancelled** (setelah disetujui);
+keduanya wajib disertai catatan. Setiap perpindahan dicatat oleh siapa dan kapan. Hanya
+proyek **Approved** dan **In Progress** yang ikut memotong kas di Peramalan; proyek lama
+berstatus *Direncanakan* dibaca sebagai Approved. Pembatasan siapa yang boleh menyetujui
+menyusul bersama hak akses pengguna.
+
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
 pinjaman bank, atau setoran modal), dan perkiraan tambahan pendapatan setelah proyek

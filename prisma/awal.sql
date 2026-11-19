@@ -77,7 +77,7 @@ CREATE TABLE "Project" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
     "unitId" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'PLANNED',
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
     "startDate" DATETIME NOT NULL,
     "endDate" DATETIME,
     "description" TEXT,
@@ -107,6 +107,19 @@ CREATE TABLE "ProjectCostItem" (
     "paid" BOOLEAN NOT NULL DEFAULT false,
     CONSTRAINT "ProjectCostItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "ProjectCostItem_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProjectStatusLog" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "fromStatus" TEXT NOT NULL,
+    "toStatus" TEXT NOT NULL,
+    "note" TEXT,
+    "userId" TEXT,
+    "userName" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProjectStatusLog_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -453,6 +466,9 @@ CREATE INDEX "Project_unitId_idx" ON "Project"("unitId");
 
 -- CreateIndex
 CREATE INDEX "ProjectCostItem_projectId_idx" ON "ProjectCostItem"("projectId");
+
+-- CreateIndex
+CREATE INDEX "ProjectStatusLog_projectId_idx" ON "ProjectStatusLog"("projectId");
 
 -- CreateIndex
 CREATE INDEX "MonthlyStat_unitId_idx" ON "MonthlyStat"("unitId");

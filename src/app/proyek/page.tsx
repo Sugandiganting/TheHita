@@ -1,16 +1,19 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { PROJECT_STATUS_LABEL } from '@/lib/accounting';
+import { LABEL_STATUS_PROYEK, statusEfektif, type StatusProyek } from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_TONE: Record<string, string> = {
+const STATUS_TONE: Record<StatusProyek, string> = {
   DRAFT: 'slate',
-  PLANNED: 'blue',
+  PROPOSED: 'blue',
+  FUNDING_REVIEW: 'amber',
+  APPROVED: 'brand',
   ONGOING: 'amber',
   DONE: 'green',
+  REJECTED: 'red',
   CANCELLED: 'red',
 };
 
@@ -55,7 +58,9 @@ export default async function ProyekPage() {
                     </Link>
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <Badge tone="brand">{p.unit.code}</Badge>
-                      <Badge tone={STATUS_TONE[p.status]}>{PROJECT_STATUS_LABEL[p.status] ?? p.status}</Badge>
+                      <Badge tone={STATUS_TONE[statusEfektif(p.status, p.startDate, new Date())]}>
+                        {LABEL_STATUS_PROYEK[statusEfektif(p.status, p.startDate, new Date())]}
+                      </Badge>
                       <span>Mulai {formatDate(p.startDate)}</span>
                     </p>
                   </div>

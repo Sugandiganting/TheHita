@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { STATUS_MEMOTONG_KAS } from '@/lib/proyek';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { buildForecast, toProjectPlan, type ForecastMethod } from '@/lib/forecast';
@@ -31,7 +32,7 @@ export default async function PeramalanPage({ searchParams }: { searchParams: Pr
   const [units, allProjects] = await Promise.all([
     prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     prisma.project.findMany({
-      where: { status: { in: ['PLANNED', 'ONGOING'] } },
+      where: { status: { in: [...STATUS_MEMOTONG_KAS] } },
       include: { items: true, unit: { select: { code: true } } },
       orderBy: { startDate: 'asc' },
     }),

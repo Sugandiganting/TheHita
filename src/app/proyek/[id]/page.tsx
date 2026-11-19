@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
-import { PROJECT_STATUS_LABEL } from '@/lib/accounting';
+import { LABEL_STATUS_PROYEK, statusEfektif } from '@/lib/proyek';
+import { ProjectApproval } from '@/components/project-approval';
 import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem, deleteProject, toggleCostItemPaid } from '@/app/actions';
 import { ProjectForm } from '@/components/project-form';
@@ -22,6 +23,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
       include: {
         unit: { select: { code: true, name: true } },
         items: { orderBy: { plannedDate: 'asc' }, include: { account: { select: { code: true, name: true } } } },
+        riwayatStatus: { orderBy: { createdAt: 'desc' } },
       },
     }),
     prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
@@ -33,6 +35,10 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
   ]);
 
   if (!project) notFound();
+  const status = statusEfektif(project.status, project.startDate, new Date());
+  const waktu = (d: Date) => new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
+  }).format(d);
 
   const total = project.items.reduce((s, i) => s + i.amount, 0);
   const paid = project.items.filter((i) => i.paid).reduce((s, i) => s + i.amount, 0);
@@ -86,6 +92,21 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           </Alert>
         </div>
       )}
+
+      <Card className="card-pad mb-6">
+        <SectionTitle hint="Proposed → Funding Review → Approved. Setiap perpindahan dicatat oleh siapa dan kapan; pembatasan siapa yang boleh menyetujui menyusul bersama hak akses pengguna.">
+          Approval
+        </SectionTitle>
+        <ProjectApproval
+          id={project.id}
+          status={status}
+          tanggalMulai={formatDate(project.startDate)}
+          riwayat={project.riwayatStatus.map((r) => ({
+            id: r.id, fromStatus: r.fromStatus, toStatus: r.toStatus, note: r.note,
+            userName: r.userName, waktu: waktu(r.createdAt),
+          }))}
+        />
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="min-w-0 space-y-6 lg:col-span-3">
@@ -210,7 +231,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           <Card className="card-pad mt-6">
             <SectionTitle>Ringkasan</SectionTitle>
             <dl className="space-y-2 text-sm">
-              <Row label="Status" value={PROJECT_STATUS_LABEL[project.status] ?? project.status} />
+              <Row label="Status" value={LABEL_STATUS_PROYEK[status]} />
               <Row label="Target selesai" value={project.endDate ? formatDate(project.endDate) : '—'} />
               <Row
                 label="Tambahan pendapatan"
