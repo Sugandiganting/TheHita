@@ -208,6 +208,12 @@ model ProjectCostItem {
   projectId   String
   name        String
   accountId   String?
+  /// Banyaknya. Item yang dibuat sebelum kolom ini ada bernilai 1.
+  quantity    Float    @default(1)
+  /// Harga satuan. null pada item lama: harganya dianggap sama dengan nominalnya.
+  unitPrice   Float?
+  /// Total = jumlah × harga satuan. Disimpan, karena inilah yang dipakai
+  /// peramalan dan rencana kas sebagai uang yang akan keluar.
   amount      Float
   plannedDate DateTime
   /// Sudah dibayar? Item yang sudah dibayar tidak dihitung lagi sebagai rencana keluar.

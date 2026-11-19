@@ -100,6 +100,8 @@ CREATE TABLE "ProjectCostItem" (
     "projectId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "accountId" TEXT,
+    "quantity" REAL NOT NULL DEFAULT 1,
+    "unitPrice" REAL,
     "amount" REAL NOT NULL,
     "plannedDate" DATETIME NOT NULL,
     "paid" BOOLEAN NOT NULL DEFAULT false,

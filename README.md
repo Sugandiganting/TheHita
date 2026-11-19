@@ -314,7 +314,8 @@ pemeriksaan keseimbangan debit-kredit. Semua bisa difilter per cabang dan per pe
 Inti dari sistem ini — lihat bagian berikutnya.
 
 ### Proyek
-Rencana belanja modal beserta jadwal pembayaran per item, sumber dana (kas sendiri,
+Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
+akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
 pinjaman bank, atau setoran modal), dan perkiraan tambahan pendapatan setelah proyek
 beroperasi. Jadwal inilah yang disuntikkan ke proyeksi arus kas.
 

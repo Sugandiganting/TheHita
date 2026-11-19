@@ -6,7 +6,8 @@ import { PROJECT_STATUS_LABEL } from '@/lib/accounting';
 import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem, deleteProject, toggleCostItemPaid } from '@/app/actions';
 import { ProjectForm } from '@/components/project-form';
-import { CostItemAccount, CostItemForm } from '@/components/cost-item-form';
+import { CostItemAccount, CostItemForm, UbahItemProyekDialog } from '@/components/cost-item-form';
+import { hargaSatuanItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -99,15 +100,17 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px]">
+                <table className="w-full min-w-[820px]">
                   <thead className="border-b border-slate-200">
                     <tr>
                       <th className="th">Item</th>
                       <th className="th">Akun</th>
                       <th className="th">Jadwal bayar</th>
-                      <th className="th num">Nominal</th>
+                      <th className="th num">Qty</th>
+                      <th className="th num">Harga satuan</th>
+                      <th className="th num">Total</th>
                       <th className="th">Status</th>
-                      <th className="th" />
+                      <th className="th num">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -120,7 +123,9 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                             : <CostItemAccount id={item.id} accounts={capexAccounts} />}
                         </td>
                         <td className="td whitespace-nowrap">{formatDate(item.plannedDate)}</td>
-                        <td className="td num">{formatRupiah(item.amount)}</td>
+                        <td className="td num">{item.quantity.toLocaleString('id-ID')}</td>
+                        <td className="td num whitespace-nowrap">{formatRupiah(hargaSatuanItem(item))}</td>
+                        <td className="td num whitespace-nowrap font-medium">{formatRupiah(item.amount)}</td>
                         <td className="td">
                           <form action={toggleCostItemPaid}>
                             <input type="hidden" name="id" value={item.id} />
@@ -132,22 +137,35 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                           </form>
                         </td>
                         <td className="td">
-                          <form action={deleteCostItem}>
-                            <input type="hidden" name="id" value={item.id} />
-                            <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                              Hapus
-                            </button>
-                          </form>
+                          <span className="flex items-center justify-end gap-3">
+                            <UbahItemProyekDialog
+                              accounts={capexAccounts}
+                              nilai={{
+                                id: item.id,
+                                name: item.name,
+                                quantity: item.quantity,
+                                unitPrice: hargaSatuanItem(item),
+                                plannedDate: toDateInput(item.plannedDate),
+                                accountId: item.accountId,
+                              }}
+                            />
+                            <form action={deleteCostItem}>
+                              <input type="hidden" name="id" value={item.id} />
+                              <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
+                                Hapus
+                              </button>
+                            </form>
+                          </span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="border-t-2 border-slate-200 font-semibold">
                     <tr>
-                      <td className="td" colSpan={3}>
+                      <td className="td" colSpan={5}>
                         Total
                       </td>
-                      <td className="td num">{formatRupiah(total)}</td>
+                      <td className="td num whitespace-nowrap">{formatRupiah(total)}</td>
                       <td className="td" colSpan={2} />
                     </tr>
                   </tfoot>

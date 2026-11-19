@@ -14,6 +14,7 @@ import {
   type NasibSalin,
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
+import { bacaJumlah, totalItemProyek } from '@/lib/proyek';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
 import { SKENARIO_URUT } from '@/lib/target-margin';
@@ -485,33 +486,63 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
   return ok(`Proyek "${name}" tersimpan.`);
 }
 
-export async function addCostItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const projectId = String(formData.get('projectId') ?? '');
+/** Isian item biaya proyek yang sudah dibaca dan diperiksa. */
+async function bacaItemProyek(formData: FormData): Promise<
+  { salah: string } | { data: { name: string; quantity: number; unitPrice: number; amount: number; plannedDate: Date; accountId: string } }
+> {
   const name = String(formData.get('name') ?? '').trim();
-  const amount = parseAmount(formData.get('amount'));
+  const quantity = bacaJumlah(String(formData.get('quantity') ?? ''));
+  const unitPrice = parseAmount(formData.get('unitPrice'));
   const plannedDate = String(formData.get('plannedDate') ?? '');
   const accountId = String(formData.get('accountId') ?? '');
 
-  if (!projectId) return fail('Proyek tidak ditemukan.');
-  if (!name) return fail('Nama item biaya wajib diisi.');
-  if (amount <= 0) return fail('Nominal harus lebih besar dari nol.');
-  if (!plannedDate) return fail('Jadwal pembayaran wajib diisi.');
+  if (!name) return { salah: 'Nama item biaya wajib diisi.' };
+  if (quantity <= 0) return { salah: 'Jumlah harus lebih besar dari nol.' };
+  if (unitPrice <= 0) return { salah: 'Harga satuan harus lebih besar dari nol.' };
+  if (!plannedDate) return { salah: 'Jadwal pembayaran wajib diisi.' };
   const salahAkun = await periksaAkunProyek(accountId);
-  if (salahAkun) return fail(salahAkun);
+  if (salahAkun) return { salah: salahAkun };
 
-  await prisma.projectCostItem.create({
+  return {
     data: {
-      projectId,
-      name,
-      amount,
+      name, quantity, unitPrice,
+      amount: totalItemProyek(quantity, unitPrice),
       plannedDate: parseDate(plannedDate),
       accountId,
     },
-  });
+  };
+}
+
+export async function addCostItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const projectId = String(formData.get('projectId') ?? '');
+  if (!projectId) return fail('Proyek tidak ditemukan.');
+  const isian = await bacaItemProyek(formData);
+  if ('salah' in isian) return fail(isian.salah);
+
+  await prisma.projectCostItem.create({ data: { projectId, ...isian.data } });
 
   revalidatePath(`/proyek/${projectId}`);
   revalidatePath('/peramalan');
-  return ok(`Item "${name}" ditambahkan.`);
+  return ok(`Item "${isian.data.name}" ditambahkan, total ${formatRupiahShort(isian.data.amount)}.`);
+}
+
+/**
+ * Mengubah item biaya proyek — nama, jumlah, harga, jadwal, atau akunnya.
+ * Boleh selama proyek berjalan, juga untuk item yang sudah lunas: harga yang
+ * akhirnya dibayar memang sering berbeda dari rencana.
+ */
+export async function updateCostItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const ada = await prisma.projectCostItem.findUnique({ where: { id }, select: { projectId: true } });
+  if (!ada) return fail('Item biaya tidak ditemukan.');
+  const isian = await bacaItemProyek(formData);
+  if ('salah' in isian) return fail(isian.salah);
+
+  await prisma.projectCostItem.update({ where: { id }, data: isian.data });
+
+  revalidatePath(`/proyek/${ada.projectId}`);
+  revalidatePath('/peramalan');
+  return ok(`Item "${isian.data.name}" diperbarui, total ${formatRupiahShort(isian.data.amount)}.`);
 }
 
 /**
