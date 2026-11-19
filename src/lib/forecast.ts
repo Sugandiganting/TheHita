@@ -15,6 +15,7 @@
  */
 
 import { addMonths, daysInPeriod, diffMonths, monthOf, periodRange, type Period } from './period';
+import { HARI_GAJI_AWAL } from './rencana-kas';
 
 export type ForecastMethod = 'AVERAGE' | 'WEIGHTED' | 'TREND';
 
@@ -482,8 +483,13 @@ export type PurchasePlan = {
   schedule: PurchaseInstalment[];
   /** Seluruh jadwal aman: saldo tidak pernah menembus batas aman. */
   affordable: boolean;
-  /** Titik terendah saldo kas setelah pembelian diperhitungkan. */
-  lowest: { period: Period; dayOffset: number | null; amount: number } | null;
+  /**
+   * Titik terendah saldo kas setelah pembelian diperhitungkan — atau, bila
+   * batas aman hanya diperiksa di akhir bulan, titik yang paling jauh dari
+   * batasnya. `batas` adalah batas yang berlaku di titik itu: batas aman, atau
+   * nol pada hari pembayaran.
+   */
+  lowest: { period: Period; dayOffset: number | null; amount: number; batas?: number } | null;
   /** Kekurangan terhadap batas aman di titik terburuk. Nol bila aman. */
   shortfall: number;
 };
@@ -546,6 +552,17 @@ export type PurchaseContext = {
    * Kosong berarti sebulan penuh.
    */
   hariBarisPertama?: number;
+  /**
+   * Batas aman hanya diperiksa di akhir bulan, bukan pada hari pembayaran.
+   *
+   * Batas aman adalah gaji awal bulan depan, dan yang harus menutupinya adalah
+   * saldo AKHIR bulan ini — saat sisa uang masuk bulan ini sudah terkumpul.
+   * Dengan aturan ini, pada hari pembayaran cukup kas tidak minus; saldo boleh
+   * sementara di bawah gaji bulan depan, asalkan uang masuk yang diramalkan
+   * benar-benar datang sebelum akhir bulan. Lebih longgar, jadi hanya dipakai
+   * skenario Optimis — yang memang bertaruh pada uang masuk terbaik.
+   */
+  batasAmanAkhirBulan?: boolean;
 };
 
 /** Batas wajar percobaan saat mencari jumlah cicilan terkecil. */
@@ -665,6 +682,22 @@ export function planPurchase(
   let dibayar = 0;
   let terendah: PurchasePlan['lowest'] = null;
 
+  // Batas yang berlaku pada hari pembayaran. Biasanya batas aman. Bila batas
+  // aman hanya diperiksa di akhir bulan, cukup tidak minus — kecuali di
+  // tanggal 1-7 bulan berikutnya, saat gaji awal bulan sedang dibayar dari
+  // saldo yang sama: di sana batas aman tetap berlaku.
+  const akhirBulanSaja = result.batasAmanAkhirBulan === true;
+  const lantaiPada = (dayOffset: number): number => {
+    if (!akhirBulanSaja) return buffer;
+    let awal = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      const panjang = hariBaris(rows, i, hariPertama);
+      if (dayOffset < awal + panjang) return i >= 1 && dayOffset - awal < HARI_GAJI_AWAL ? buffer : 0;
+      awal += panjang;
+    }
+    return 0;
+  };
+
   for (let i = 0; i < jumlah; i++) {
     const dayOffset = dayOffsetFor(rows, i + 1, cadence, mulai, hariPertama);
     dibayar += cicilan[i];
@@ -676,9 +709,46 @@ export function planPurchase(
       period,
       amount: cicilan[i],
       balanceAfter: saldo,
-      safe: saldo >= buffer - EPS,
+      safe: saldo >= lantaiPada(dayOffset) - EPS,
     });
     if (!terendah || saldo < terendah.amount) terendah = { period, dayOffset, amount: saldo };
+  }
+
+  if (akhirBulanSaja) {
+    // Setiap akhir bulan sejak cicilan pertama: saldo akhir dikurangi seluruh
+    // cicilan yang sudah dibayar sampai hari itu harus menutup batas aman —
+    // termasuk akhir bulan di antara dua cicilan, dan cicilan yang jatuh tepat
+    // di hari terakhir bulan. Yang dicari titik dengan kekurangan terbesar,
+    // karena dua titik ini diukur terhadap batas yang berbeda.
+    let kritis: NonNullable<PurchasePlan['lowest']> | null = null;
+    let kurang = -Infinity;
+    for (const c of schedule) {
+      const lantai = lantaiPada(c.dayOffset);
+      const k = lantai - c.balanceAfter;
+      if (k > kurang) { kurang = k; kritis = { period: c.period, dayOffset: c.dayOffset, amount: c.balanceAfter, batas: lantai }; }
+    }
+    const hariPertamaBayar = schedule[0]?.dayOffset ?? 0;
+    let hari = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      hari += hariBaris(rows, i, hariPertama);
+      if (hari < hariPertamaBayar) continue;
+      // Pembayaran di hari `hari` sudah milik bulan berikutnya (lihat periodAtDay).
+      const sudahDibayar = schedule.filter((c) => c.dayOffset < hari).reduce((t, c) => t + c.amount, 0);
+      if (sudahDibayar === 0) continue;
+      const saldo = rows[i].cashBalance - sudahDibayar;
+      const k = buffer - saldo;
+      if (k > kurang) { kurang = k; kritis = { period: rows[i].period, dayOffset: null, amount: saldo, batas: buffer }; }
+    }
+    const aman = kurang <= EPS;
+    return {
+      amount,
+      instalments: jumlah,
+      cadence,
+      schedule,
+      affordable: aman,
+      lowest: kritis,
+      shortfall: aman ? 0 : Math.max(0, kurang),
+    };
   }
 
   // Sesudah cicilan terakhir, seluruh harga sudah keluar dari kas. Periksa

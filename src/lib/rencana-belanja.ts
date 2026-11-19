@@ -115,6 +115,11 @@ export function konteksPembelian(
    * cicilan minggu ketiga dari tanggal 13 akan dikira masih di bulan yang sama.
    */
   hariTersisa?: number,
+  /**
+   * Batas aman hanya diperiksa di akhir bulan (lihat PurchaseContext). Hanya
+   * untuk skenario Optimis.
+   */
+  batasAmanAkhirBulan = false,
 ): PurchaseContext {
   let sebelumnya = saldoKas;
   const rows = runway.bulan.map((b) => {
@@ -124,11 +129,18 @@ export function konteksPembelian(
   });
 
   const terendah = Math.min(saldoKas, ...rows.map((r) => r.cashBalance));
+  // Dibayar sekaligus hari ini. Biasanya: saldo terendah dikurangi batas aman.
+  // Bila batas aman hanya diperiksa di akhir bulan: hari ini cukup tidak
+  // minus, dan tiap akhir bulan sesudahnya tetap harus menutup batas aman.
+  const maxAffordableNow = batasAmanAkhirBulan
+    ? Math.max(0, Math.min(saldoKas, ...rows.map((r) => r.cashBalance - kebutuhanGaji)))
+    : Math.max(0, terendah - kebutuhanGaji);
   return {
     rows,
     openingCash: saldoKas,
     minCashBuffer: kebutuhanGaji,
-    maxAffordableNow: Math.max(0, terendah - kebutuhanGaji),
+    maxAffordableNow,
     hariBarisPertama: hariTersisa,
+    batasAmanAkhirBulan,
   };
 }

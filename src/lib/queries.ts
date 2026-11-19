@@ -2286,7 +2286,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       ? (Object.fromEntries(
           SKENARIO.map((sk) => [
             sk,
-            konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji, rencana!.hari),
+            // Optimis menilai batas aman di akhir bulan saja; dua skenario
+            // lainnya tetap di setiap hari pembayaran.
+            konteksPembelian(runway[sk], terakhir!.cashOnHand, gaji, rencana!.hari, sk === 'OPTIMIS'),
           ]),
         ) as Record<Skenario, PurchaseContext>)
       : null,

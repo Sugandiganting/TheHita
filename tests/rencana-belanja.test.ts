@@ -197,3 +197,71 @@ test('tanpa keterangan sisa hari, bulan pertama tetap dihitung sebulan penuh', (
     ['2026-10', '2026-10', '2026-10', '2026-10', '2026-10', '2026-11'],
   );
 });
+
+/* ------------------------------------------------------------------ */
+/* Optimis: batas aman hanya di akhir bulan                            */
+/* ------------------------------------------------------------------ */
+
+// Pola November pemilik, dibulatkan: saldo hari ini 131, akhir Nov 185
+// (Optimis), akhir Des 440, batas aman (gaji awal Desember) 56. Satuan juta.
+const kontekNov = (akhirBulanSaja: boolean) => konteksPembelian(
+  {
+    bulan: [
+      { period: '2026-11', saldoAwal: 131, masuk: 0, keluar: 0, saldoAkhir: 185, cukupGaji: true, kurangGaji: 0 },
+      { period: '2026-12', saldoAwal: 185, masuk: 0, keluar: 0, saldoAkhir: 440, cukupGaji: true, kurangGaji: 0 },
+    ],
+  } as unknown as Parameters<typeof konteksPembelian>[0],
+  131, 56, 12, akhirBulanSaja,
+);
+
+test('aturan biasa: kemampuan hari ini dibatasi saldo hari ini dikurangi batas aman', () => {
+  assert.equal(kontekNov(false).maxAffordableNow, 131 - 56);
+});
+
+test('Optimis: hari ini cukup tidak minus, akhir bulan tetap harus menutup batas aman', () => {
+  // min(saldo hari ini 131, akhir Nov 185 − 56 = 129, akhir Des 440 − 56) = 129
+  assert.equal(kontekNov(true).maxAffordableNow, 129);
+});
+
+test('Optimis: pembelian yang membuat saldo hari itu di bawah batas aman tetap aman bila akhir bulannya tertutup', () => {
+  // 131 − 100 = 31 ≥ 0 di hari bayar; akhir Nov 185 − 100 = 85 ≥ 56.
+  assert.equal(planPurchase(kontekNov(true), 100, 1, 'WEEKLY', 0).affordable, true);
+  assert.equal(planPurchase(kontekNov(false), 100, 1, 'WEEKLY', 0).affordable, false);
+});
+
+test('Optimis: kas minus di hari bayar tetap ditolak', () => {
+  const tinggi = konteksPembelian(
+    {
+      bulan: [
+        { period: '2026-11', saldoAwal: 131, masuk: 0, keluar: 0, saldoAkhir: 300, cukupGaji: true, kurangGaji: 0 },
+        { period: '2026-12', saldoAwal: 300, masuk: 0, keluar: 0, saldoAkhir: 500, cukupGaji: true, kurangGaji: 0 },
+      ],
+    } as unknown as Parameters<typeof konteksPembelian>[0],
+    131, 56, 12, true,
+  );
+  const p = planPurchase(tinggi, 140, 1, 'WEEKLY', 0);
+  assert.equal(p.affordable, false);
+  assert.equal(p.lowest?.batas, 0); // 131 − 140 = −9
+  assert.equal(p.shortfall, 9);
+});
+
+test('Optimis: akhir bulan yang tidak menutup batas aman ditolak dengan kekurangannya', () => {
+  const p = planPurchase(kontekNov(true), 130, 1, 'WEEKLY', 0);
+  // Hari bayar 131 − 130 = 1 ≥ 0, tetapi akhir Nov 185 − 130 = 55 < 56.
+  assert.equal(p.affordable, false);
+  assert.equal(p.lowest?.batas, 56);
+  assert.equal(p.lowest?.period, '2026-11');
+  assert.equal(p.shortfall, 1);
+});
+
+test('Optimis: pembayaran tanggal 1-7 bulan berikutnya bersaing dengan gaji, jadi batas aman tetap berlaku', () => {
+  // Hari 12 = 1 Desember: saldo 185, dibayar 140 → 45 < 56.
+  const p = planPurchase(kontekNov(true), 140, 1, 'WEEKLY', 12);
+  assert.equal(p.affordable, false);
+  assert.equal(p.lowest?.batas, 56);
+});
+
+test('Optimis: pembayaran sesudah tanggal 7 cukup tidak minus', () => {
+  // Hari 22 = 11 Desember: 185 + 255 × 10/31 − 140 ≥ 0; akhir Des 440 − 140 ≥ 56.
+  assert.equal(planPurchase(kontekNov(true), 140, 1, 'WEEKLY', 22).affordable, true);
+});

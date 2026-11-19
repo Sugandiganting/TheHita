@@ -436,6 +436,14 @@ Dua hal yang membuat jawabannya bisa dipercaya:
   membuat kas menembus batas aman, dipecah berapa kali pun tidak menolong, dan sistem
   mengatakannya apa adanya daripada mengusulkan cicilan yang sia-sia.
 
+Skenario **Optimis** di panel Rencana belanja memakai aturan yang lebih longgar: batas
+aman (gaji awal bulan depan) hanya diperiksa di akhir bulan, sedangkan pada hari
+pembayaran cukup kas tidak minus — kecuali pembayaran tanggal 1–7, saat gaji awal bulan
+dibayar dari saldo yang sama. Pesimis dan Normal tetap memeriksa batas aman di setiap
+hari pembayaran. Saat Optimis dipilih, panel menyebut posisi uang masuk bulan ini yang
+sebenarnya (paling dekat ke skenario mana), supaya hasil yang longgar tidak terbaca
+sebagai keputusan.
+
 Satu anggapan yang perlu diingat: di dalam satu bulan, arus kas dianggap mengalir rata
 tiap hari. Kenyataannya hotel menerima uang hampir tiap hari, tetapi gaji dan tagihan
 besar menumpuk di tanggal tertentu. Untuk pembelian yang mepet dengan batas aman, jangan

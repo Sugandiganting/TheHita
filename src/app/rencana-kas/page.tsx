@@ -1230,6 +1230,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 konteks={data.konteksBeli}
                 defaultDate={tanggalBawaan}
                 tanggalPosisi={toDateInput(terakhir!.date)}
+                posisiMasuk={data.tren ? {
+                  posisi: data.tren.posisi,
+                  terdekat: data.tren.terdekat,
+                  persenNormal: data.tren.capaian.NORMAL.persen,
+                  porsiHari: data.tren.porsiHari,
+                } : null}
+                sisaMasukOptimis={rencana?.skenario.OPTIMIS.sisaMasuk ?? null}
               />
             ) : (
               <Alert tone="info">

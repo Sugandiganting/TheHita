@@ -30,7 +30,7 @@ const CADENCE_LABEL: Record<PurchaseCadence, string> = {
 const ARTI_SKENARIO: Record<Skenario, string> = {
   PESIMIS: 'Paling hati-hati. Pembelian disebut aman hanya bila tetap aman saat uang masuk seret.',
   NORMAL: 'Memakai perkiraan uang masuk yang wajar — sejalan dengan anggaran mingguan.',
-  OPTIMIS: 'Paling longgar. Hanya aman bila uang masuk benar-benar sebaik perkiraan terbaik.',
+  OPTIMIS: 'Paling longgar. Batas aman hanya diperiksa di akhir bulan, dan hanya aman bila uang masuk benar-benar sebaik perkiraan terbaik.',
 };
 
 const HARI = 86_400_000;
@@ -107,11 +107,25 @@ function JadwalCicilan({
   );
 }
 
+/** Posisi uang masuk bulan berjalan terhadap ketiga proyeksinya. */
+export type PosisiUangMasuk = {
+  posisi: 'DI_BAWAH' | 'DI_DALAM' | 'DI_ATAS';
+  terdekat: Skenario;
+  /** Uang masuk s.d. kini dibagi target Normal, 0–1. */
+  persenNormal: number;
+  /** Bagian bulan yang sudah berjalan, 0–1. */
+  porsiHari: number;
+};
+
 export function PurchaseCalculator({
-  konteks, defaultDate, tanggalPosisi,
+  konteks, defaultDate, tanggalPosisi, posisiMasuk, sisaMasukOptimis,
 }: {
   /** Satu konteks penilaian untuk tiap skenario; yang dipakai dipilih di layar. */
   konteks: Record<Skenario, PurchaseContext>;
+  /** Untuk catatan saat skenario Optimis dipilih; null bila belum ada posisi kas. */
+  posisiMasuk?: PosisiUangMasuk | null;
+  /** Sisa uang masuk bulan ini menurut Optimis — yang dipertaruhkan aturan longgarnya. */
+  sisaMasukOptimis?: number | null;
   /** Tanggal cicilan pertama; biasanya hari ini. */
   defaultDate: string;
   /** Tanggal posisi kas terakhir — titik nol seluruh hitungan hari. */
@@ -197,6 +211,42 @@ export function PurchaseCalculator({
         <p className="mt-1 text-xs text-slate-500">{ARTI_SKENARIO[skenario]}</p>
       </div>
 
+      {/*
+        * Optimis memakai aturan yang lebih longgar: pada hari pembayaran cukup
+        * kas tidak minus, batas aman baru diperiksa di akhir bulan. Itu hanya
+        * jujur bila uang masuknya memang berjalan sebaik Optimis — jadi posisi
+        * uang masuk yang sebenarnya disebut tepat di sini, sebelum harga
+        * diketik.
+        */}
+      {skenario === 'OPTIMIS' && (() => {
+        const p = posisiMasuk;
+        const sejalan = p && (p.posisi === 'DI_ATAS' || (p.posisi === 'DI_DALAM' && p.terdekat === 'OPTIMIS'));
+        const letak = !p ? null
+          : p.posisi === 'DI_ATAS' ? 'di atas skenario Optimis'
+            : p.posisi === 'DI_BAWAH' ? 'di bawah skenario Pesimis'
+              : `paling dekat ke skenario ${NAMA_SKENARIO[p.terdekat]}`;
+        return (
+          <div className={`rounded-lg border p-4 text-sm ${
+            sejalan ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}>
+            {p && (
+              <p className="font-semibold">
+                Saat ini uang masuk bulan ini {letak}: {Math.round(p.persenNormal * 100)}% dari target
+                Normal pada {Math.round(p.porsiHari * 100)}% bulan berjalan.
+              </p>
+            )}
+            <p className={p ? 'mt-1' : ''}>
+              Penilaian Optimis lebih longgar: batas aman (gaji awal bulan depan) hanya diperiksa di
+              akhir bulan, sedangkan pada hari pembayaran cukup kas tidak minus. Artinya pembelian
+              boleh membuat saldo sementara di bawah gaji bulan depan, dengan anggapan sisa uang masuk
+              Optimis{sisaMasukOptimis ? <> <strong>{formatRupiah(sisaMasukOptimis)}</strong></> : ''} benar-benar
+              datang sebelum akhir bulan.
+              {!sejalan && ' Selama uang masuknya belum sejalan dengan Optimis, jadikan hasil di bawah sebagai batas atas, bukan keputusan.'}
+            </p>
+          </div>
+        );
+      })()}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="beli-harga">Harga barang</label>
@@ -275,7 +325,8 @@ export function PurchaseCalculator({
       {!rencana && context.maxAffordableNow > 0 && (
         <p className="text-sm text-slate-500">
           Sekali dibayar sekaligus sekarang, kemampuan belanja maksimum{' '}
-          <strong>{formatRupiah(context.maxAffordableNow)}</strong> tanpa menembus batas aman.
+          <strong>{formatRupiah(context.maxAffordableNow)}</strong> tanpa menembus batas aman
+          {context.batasAmanAkhirBulan ? ' di akhir bulan' : ''}.
         </p>
       )}
 
@@ -303,9 +354,19 @@ export function PurchaseCalculator({
 
             {!rencana.affordable && (
               <p className="mt-1 text-sm text-amber-900">
-                Pada titik terendah, kas kurang <strong>{formatRupiah(rencana.shortfall)}</strong> dari
-                batas aman
-                {rencana.lowest ? ` (${formatPeriod(rencana.lowest.period)})` : ''}.
+                {rencana.lowest?.batas === 0 ? (
+                  <>
+                    Pada hari pembayaran kas minus <strong>{formatRupiah(rencana.shortfall)}</strong>
+                    {` (${formatPeriod(rencana.lowest.period)})`}.
+                  </>
+                ) : (
+                  <>
+                    Pada titik terendah, kas kurang <strong>{formatRupiah(rencana.shortfall)}</strong> dari
+                    batas aman
+                    {rencana.lowest ? ` (${formatPeriod(rencana.lowest.period)}` : ''}
+                    {rencana.lowest && context.batasAmanAkhirBulan ? ', akhir bulan)' : rencana.lowest ? ')' : ''}.
+                  </>
+                )}
               </p>
             )}
 
