@@ -1648,7 +1648,11 @@ export async function updateCategoryRab(_prev: ActionState, formData: FormData):
   if (rabKind === null) {
     await prisma.spendCategory.update({ where: { id }, data: { rabKind: null } });
     segarkanRencanaKas();
-    return ok(`Tautan RAB ${ada.label} dilepas. Jatahnya kembali diketik sendiri.`);
+    // Jatah yang diketik tidak pernah dihapus saat ditautkan, jadi angka
+    // sebelumnya langsung kembali.
+    return ok(ada.budget !== null
+      ? `Tautan RAB ${ada.label} dilepas. Jatahnya kembali ke angka yang diketik sebelumnya, ${formatRupiahShort(ada.budget)}.`
+      : `Tautan RAB ${ada.label} dilepas. Jatahnya kembali dibagi menurut porsinya.`);
   }
   const jenis = await daftarJenisRab();
   if (!jenis.some((j) => j.code === rabKind)) return fail('Jenis RAB tidak dikenal.');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useRef, useState } from 'react';
+import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   createCashPlan, deleteCashPlan, deleteCategory, deleteCheckpoint, deleteCommitment,
@@ -370,16 +370,20 @@ export function CategoryAccount({
   akun: { id: string; label: string }[];
 }) {
   const [state, action] = useActionState(updateCategoryAccount, initial);
-  const form = useRef<HTMLFormElement>(null);
+  const pilih = usePilihanTersimpan(cashAccountId ?? '', (nilai) => {
+    const data = new FormData();
+    data.set('id', id);
+    data.set('cashAccountId', nilai);
+    action(data);
+  });
 
   return (
-    <form action={action} ref={form} className="mt-0.5">
-      <input type="hidden" name="id" value={id} />
+    <div className="mt-0.5">
       <select
         name="cashAccountId"
-        defaultValue={cashAccountId ?? ''}
+        value={pilih.nilai}
         aria-label="Kas departemen"
-        onChange={() => form.current?.requestSubmit()}
+        onChange={(e) => pilih.ubah(e.target.value)}
         className="w-full max-w-[13rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
       >
         <option value="">— diketik manual —</option>
@@ -390,8 +394,32 @@ export function CategoryAccount({
       {!state.ok && state.message && (
         <span className="mt-0.5 block text-[11px] text-red-600">{state.message}</span>
       )}
-    </form>
+    </div>
   );
+}
+
+/**
+ * Pilihan yang langsung disimpan begitu diubah.
+ *
+ * Disimpan lewat aksinya langsung, bukan lewat pengiriman formulir. Formulir
+ * yang terkirim dikosongkan React sesudahnya, dan pilihan di dalamnya kembali
+ * ke nilai awalnya — padahal yang tersimpan sudah berubah. Layar lalu
+ * menampilkan pilihan yang bukan keadaannya, dan memilih pilihan yang sudah
+ * tampil tidak memicu apa pun, sehingga pilihan itu tidak bisa dikembalikan.
+ *
+ * Nilainya mengikuti yang tersimpan setiap kali halaman memuat data baru.
+ */
+function usePilihanTersimpan(tersimpan: string, simpan: (nilai: string) => void) {
+  const [nilai, setNilai] = useState(tersimpan);
+  const [, mulai] = useTransition();
+  useEffect(() => { setNilai(tersimpan); }, [tersimpan]);
+  return {
+    nilai,
+    ubah: (baru: string) => {
+      setNilai(baru);
+      mulai(() => simpan(baru));
+    },
+  };
 }
 
 /**
@@ -409,16 +437,20 @@ export function CategoryRab({
   jenis: { nilai: string; label: string }[];
 }) {
   const [state, action] = useActionState(updateCategoryRab, initial);
-  const form = useRef<HTMLFormElement>(null);
+  const pilih = usePilihanTersimpan(rabKind ?? '', (nilai) => {
+    const data = new FormData();
+    data.set('id', id);
+    data.set('rabKind', nilai);
+    action(data);
+  });
 
   return (
-    <form action={action} ref={form} className="mt-0.5">
-      <input type="hidden" name="id" value={id} />
+    <div className="mt-0.5">
       <select
         name="rabKind"
-        defaultValue={rabKind ?? ''}
+        value={pilih.nilai}
         aria-label="Sumber jatah"
-        onChange={() => form.current?.requestSubmit()}
+        onChange={(e) => pilih.ubah(e.target.value)}
         className="w-full max-w-[13rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-500 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
       >
         <option value="">jatah — diketik sendiri</option>
@@ -431,7 +463,7 @@ export function CategoryRab({
           {state.message}
         </span>
       )}
-    </form>
+    </div>
   );
 }
 
