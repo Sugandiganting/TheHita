@@ -569,3 +569,41 @@ export function geserTanggalKeBulan(tanggal: Date | null, period: string): Date 
   const hariTerakhir = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate();
   return new Date(Date.UTC(tahun, bulan - 1, Math.min(tanggal.getUTCDate(), hariTerakhir)));
 }
+
+/**
+ * Rekap anggaran per jenis RAB per bulan, untuk tabel ringkasan di Input RAB.
+ *
+ * Baris mengikuti urutan `urutanJenis` (Purchasing, Umum, lalu jenis tambahan);
+ * jenis yang tidak punya RAB sama sekali dilewati. Bulan diurutkan dari yang
+ * terlama, karena tabel dibaca dari kiri ke kanan seperti kalender.
+ */
+export function rekapJenisPerBulan(
+  daftar: readonly { kind: string; period: string; totalAnggaran: number }[],
+  urutanJenis: readonly string[],
+): {
+  bulan: string[];
+  baris: { kind: string; perBulan: Map<string, { anggaran: number; jumlah: number }>; total: number }[];
+  totalBulan: Map<string, number>;
+  total: number;
+} {
+  const bulan = [...new Set(daftar.map((r) => r.period))].sort();
+  const jenisAda = new Set(daftar.map((r) => r.kind));
+  const urut = [
+    ...urutanJenis.filter((k) => jenisAda.has(k)),
+    ...[...jenisAda].filter((k) => !urutanJenis.includes(k)).sort(),
+  ];
+  const bulat = (n: number) => Math.round(n * 100) / 100;
+  const baris = urut.map((kind) => {
+    const perBulan = new Map<string, { anggaran: number; jumlah: number }>();
+    for (const r of daftar) {
+      if (r.kind !== kind) continue;
+      const cur = perBulan.get(r.period) ?? { anggaran: 0, jumlah: 0 };
+      perBulan.set(r.period, { anggaran: bulat(cur.anggaran + r.totalAnggaran), jumlah: cur.jumlah + 1 });
+    }
+    return { kind, perBulan, total: bulat([...perBulan.values()].reduce((t, v) => t + v.anggaran, 0)) };
+  });
+  const totalBulan = new Map(bulan.map((p) => [
+    p, bulat(daftar.filter((r) => r.period === p).reduce((t, r) => t + r.totalAnggaran, 0)),
+  ]));
+  return { bulan, baris, totalBulan, total: bulat(baris.reduce((t, b) => t + b.total, 0)) };
+}

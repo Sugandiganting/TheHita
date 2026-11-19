@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, geserTanggalKeBulan, gabungJenisRab, kodeJenisDariNama, namaJenis, nasibBulanSalin, nilaiBarisBarang, pemilikSisa,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, geserTanggalKeBulan, gabungJenisRab, kodeJenisDariNama, namaJenis, nasibBulanSalin, nilaiBarisBarang, pemilikSisa, rekapJenisPerBulan,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -450,4 +450,26 @@ test('tanggal yang tidak ada di bulan tujuan jatuh ke hari terakhirnya, termasuk
 
 test('baris tanpa tanggal tetap tanpa tanggal', () => {
   assert.equal(geserTanggalKeBulan(null, '2026-12'), null);
+});
+
+/* Rekap anggaran per jenis per bulan di Input RAB. */
+test('rekap jenis per bulan menjumlahkan semua pemilik, berurut jenis lalu kalender', () => {
+  const r = rekapJenisPerBulan([
+    { kind: 'UMUM', period: '2026-12', totalAnggaran: 100 },
+    { kind: 'UMUM', period: '2026-11', totalAnggaran: 30 },
+    { kind: 'UMUM', period: '2026-11', totalAnggaran: 20 },
+    { kind: 'PURCHASING', period: '2026-11', totalAnggaran: 5 },
+    { kind: 'MANAGEMENT', period: '2026-12', totalAnggaran: 7 },
+  ], ['PURCHASING', 'UMUM', 'HR', 'MANAGEMENT']);
+  assert.deepEqual(r.bulan, ['2026-11', '2026-12']);
+  assert.deepEqual(r.baris.map((b) => b.kind), ['PURCHASING', 'UMUM', 'MANAGEMENT']);
+  assert.deepEqual(r.baris[1].perBulan.get('2026-11'), { anggaran: 50, jumlah: 2 });
+  assert.equal(r.baris[1].total, 150);
+  assert.equal(r.totalBulan.get('2026-11'), 55);
+  assert.equal(r.total, 162);
+});
+
+test('jenis yang tidak terdaftar tetap muncul, di belakang', () => {
+  const r = rekapJenisPerBulan([{ kind: 'LAMA', period: '2026-11', totalAnggaran: 1 }], ['PURCHASING']);
+  assert.deepEqual(r.baris.map((b) => b.kind), ['LAMA']);
 });

@@ -2,11 +2,12 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { getBudgetList, getJenisRab } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
-import { formatPeriod, formatRupiah } from '@/lib/format';
+import { formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort } from '@/lib/format';
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { jenisPerBarang, namaJenis, urutkanRabTerdekat } from '@/lib/rab';
+import { jenisPerBarang, namaJenis, rekapJenisPerBulan, urutkanRabTerdekat } from '@/lib/rab';
+import type { SearchParams } from '@/lib/search-params';
 import { type ScopeOption } from '@/components/budget-form';
 import { RabBaruDialog } from '@/components/budget-dialog';
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from '@/components/ui';
@@ -51,11 +52,19 @@ async function daftarScope(): Promise<ScopeOption[]> {
   return opsi;
 }
 
-export default async function RabPage() {
+export default async function RabPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
   const [semua, scopes, jenis] = await Promise.all([getBudgetList(), daftarScope(), getJenisRab()]);
   // Bulan berjalan di atas, lalu bulan-bulan depan, baru yang sudah lewat.
   const kini = currentPeriod();
-  const daftar = urutkanRabTerdekat(semua, kini);
+  const rekap = rekapJenisPerBulan(semua, jenis.map((j) => j.code));
+  // Saringan bulan dari tabel rekap; bulan yang tidak punya RAB diabaikan.
+  const mintaBulan = Array.isArray(params.bulan) ? params.bulan[0] : params.bulan;
+  const bulanDipilih = mintaBulan && rekap.bulan.includes(mintaBulan) ? mintaBulan : null;
+  const daftar = urutkanRabTerdekat(
+    bulanDipilih ? semua.filter((r) => r.period === bulanDipilih) : semua,
+    kini,
+  );
 
   return (
     <>
@@ -65,10 +74,86 @@ export default async function RabPage() {
         action={<RabBaruDialog scopes={scopes} jenis={jenis} defaultPeriod={currentPeriod()} />}
       />
 
+      {rekap.bulan.length > 0 && (
+        <Card className="card-pad mb-6 min-w-0">
+          <SectionTitle hint="Total anggaran seluruh pemilik, per jenis RAB dan per bulan — draf maupun yang sudah disahkan. Klik nama bulan untuk menampilkan RAB bulan itu saja di daftar di bawah.">
+            Rekap per jenis
+          </SectionTitle>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="border-b border-slate-200">
+                <tr>
+                  <th className="th">Jenis</th>
+                  {rekap.bulan.map((p) => (
+                    <th key={p} className={`th num whitespace-nowrap ${p === kini ? 'bg-brand-50/60' : ''}`}>
+                      <Link
+                        href={bulanDipilih === p ? '/rab' : `/rab?bulan=${p}`}
+                        className={`hover:underline ${bulanDipilih === p ? 'text-brand-700 underline' : ''}`}
+                        title={bulanDipilih === p ? 'Tampilkan semua bulan' : `Tampilkan RAB ${formatPeriod(p)} saja`}
+                      >
+                        {formatPeriodShort(p)}
+                      </Link>
+                      {p === kini && <span className="block text-[10px] font-normal normal-case text-brand-700">bulan ini</span>}
+                    </th>
+                  ))}
+                  <th className="th num">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rekap.baris.map((b) => (
+                  <tr key={b.kind}>
+                    <td className="td whitespace-nowrap">
+                      <Badge tone={jenisPerBarang(b.kind) ? 'brand' : 'slate'}>{namaJenis(jenis, b.kind)}</Badge>
+                    </td>
+                    {rekap.bulan.map((p) => {
+                      const sel = b.perBulan.get(p);
+                      return (
+                        <td
+                          key={p}
+                          className={`td num whitespace-nowrap ${p === kini ? 'bg-brand-50/60' : ''}`}
+                          title={sel ? `${formatRupiah(sel.anggaran)} dari ${sel.jumlah} RAB` : undefined}
+                        >
+                          {sel ? (
+                            <>
+                              {formatRupiahShort(sel.anggaran)}
+                              <span className="block text-[11px] text-slate-400">{sel.jumlah} RAB</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="td num whitespace-nowrap font-medium">{formatRupiahShort(b.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 font-semibold">
+                <tr>
+                  <td className="td">Total</td>
+                  {rekap.bulan.map((p) => (
+                    <td key={p} className={`td num whitespace-nowrap ${p === kini ? 'bg-brand-50/60' : ''}`} title={formatRupiah(rekap.totalBulan.get(p) ?? 0)}>
+                      {formatRupiahShort(rekap.totalBulan.get(p) ?? 0)}
+                    </td>
+                  ))}
+                  <td className="td num whitespace-nowrap">{formatRupiahShort(rekap.total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <Card className="card-pad min-w-0">
         <SectionTitle hint="Rincian anggaran diisi di dalam RAB — klik nama pemiliknya untuk membuka.">
           Daftar RAB
         </SectionTitle>
+        {bulanDipilih && (
+          <p className="mb-3 text-sm text-slate-600">
+            Menampilkan RAB <strong>{formatPeriod(bulanDipilih)}</strong> saja, {daftar.length} RAB.{' '}
+            <Link href="/rab" className="font-medium text-brand-700 hover:underline">Tampilkan semua bulan</Link>
+          </p>
+        )}
 
         {daftar.length === 0 ? (
           <EmptyState
