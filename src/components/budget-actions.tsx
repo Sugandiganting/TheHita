@@ -77,7 +77,7 @@ export function BudgetActions({
           varian="tautan"
           lebar="sm"
           judul="Salin RAB"
-          keterangan="Isinya disalin apa adanya ke tiap bulan, sebagai draf. Perkiraan tanggal belanja dan realisasi tidak ikut."
+          keterangan="Isinya disalin apa adanya ke tiap bulan, sebagai draf. Perkiraan tanggal belanja ikut ke tanggal yang sama (tanggal 31 jatuh ke hari terakhir bulan bila tidak ada). Realisasi tidak ikut."
         >
           {(tutup) => <SalinRabForm id={id} period={period} lineCount={lineCount} onTutup={tutup} />}
         </DialogTombol>
@@ -287,7 +287,7 @@ function SalinRabForm({
           <span className="font-medium">Timpa RAB yang sudah ada di bulan-bulan itu</span>
           <span className="mt-0.5 block text-xs text-slate-500">
             {timpa
-              ? 'Seluruh baris RAB sejenis di bulan-bulan itu diganti dengan isi RAB ini, termasuk perkiraan tanggal belanjanya. '
+              ? 'Seluruh baris RAB sejenis di bulan-bulan itu diganti dengan isi RAB ini, termasuk perkiraan tanggal belanjanya yang digeser ke bulan masing-masing. '
                 + 'RAB yang sudah disahkan atau sudah ada realisasinya tetap tidak disentuh.'
               : 'Tanpa centang, bulan yang sudah punya RAB sejenis dilewati — cocok untuk mengisi bulan yang masih kosong saja.'}
           </span>

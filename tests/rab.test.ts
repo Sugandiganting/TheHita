@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, gabungJenisRab, kodeJenisDariNama, namaJenis, nasibBulanSalin, nilaiBarisBarang, pemilikSisa,
+  anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cekCatatanAkunGanda, cabangDalamScope, deretBulanSesudah, geserTanggalKeBulan, gabungJenisRab, kodeJenisDariNama, namaJenis, nasibBulanSalin, nilaiBarisBarang, pemilikSisa,
   penghematanBaris, periodeBerikutnya, rekapRab, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   statusRealisasi, urutkanRabTerdekat,
   type BarisBarangRab, type BarisRab, type BarisRealisasi, type RealisasiBaris,
@@ -432,4 +432,22 @@ test('salin dengan timpa: hanya draf tanpa realisasi yang ditimpa', () => {
   assert.equal(nasibBulanSalin({ status: 'DRAFT', adaRealisasi: false }, true), 'timpa');
   assert.equal(nasibBulanSalin({ status: 'ACTIVE', adaRealisasi: false }, true), 'lewat-disahkan');
   assert.equal(nasibBulanSalin({ status: 'DRAFT', adaRealisasi: true }, true), 'lewat-realisasi');
+});
+
+/* Salin RAB ikut menyalin perkiraan tanggal belanja ke bulan tujuan. */
+test('tanggal belanja pindah ke tanggal yang sama di bulan tujuan', () => {
+  const t = (s: string) => new Date(`${s}T00:00:00.000Z`);
+  assert.equal(geserTanggalKeBulan(t('2026-11-01'), '2026-12')!.toISOString().slice(0, 10), '2026-12-01');
+  assert.equal(geserTanggalKeBulan(t('2026-11-15'), '2027-03')!.toISOString().slice(0, 10), '2027-03-15');
+});
+
+test('tanggal yang tidak ada di bulan tujuan jatuh ke hari terakhirnya, termasuk tahun kabisat', () => {
+  const t = (s: string) => new Date(`${s}T00:00:00.000Z`);
+  assert.equal(geserTanggalKeBulan(t('2027-01-31'), '2027-02')!.toISOString().slice(0, 10), '2027-02-28');
+  assert.equal(geserTanggalKeBulan(t('2027-01-31'), '2028-02')!.toISOString().slice(0, 10), '2028-02-29');
+  assert.equal(geserTanggalKeBulan(t('2026-10-31'), '2026-11')!.toISOString().slice(0, 10), '2026-11-30');
+});
+
+test('baris tanpa tanggal tetap tanpa tanggal', () => {
+  assert.equal(geserTanggalKeBulan(null, '2026-12'), null);
 });

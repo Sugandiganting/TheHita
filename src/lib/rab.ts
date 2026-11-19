@@ -555,3 +555,17 @@ export function nasibBulanSalin(
   if (tujuan.adaRealisasi) return 'lewat-realisasi';
   return 'timpa';
 }
+
+/**
+ * Perkiraan tanggal belanja yang dipindah ke bulan lain saat RAB disalin:
+ * tanggal yang sama di bulan tujuan, atau hari terakhir bulan itu bila
+ * tanggalnya tidak ada — tagihan tanggal 31 Januari jatuh 28 Februari, bukan
+ * melompat ke awal Maret. Null tetap null: yang belum bertanggal tidak diberi
+ * tanggal tebakan.
+ */
+export function geserTanggalKeBulan(tanggal: Date | null, period: string): Date | null {
+  if (!tanggal) return null;
+  const [tahun, bulan] = period.split('-').map(Number);
+  const hariTerakhir = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate();
+  return new Date(Date.UTC(tahun, bulan - 1, Math.min(tanggal.getUTCDate(), hariTerakhir)));
+}

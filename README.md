@@ -360,7 +360,8 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
 - **RAB yang sudah disahkan terkunci.** Untuk mengubahnya, kembalikan dulu ke draf —
   anggaran tidak berubah diam-diam setelah disepakati.
 - **Salin ke bulan lain** menyalin nominalnya apa adanya ke tiap bulan sampai bulan yang
-  dipilih, dan selalu menghasilkan draf. Bulan yang sudah punya RAB sejenis dilewati,
+  dipilih, dan selalu menghasilkan draf. Perkiraan tanggal belanja ikut ke tanggal yang
+  sama di bulan tujuan (tanggal yang tidak ada jatuh ke hari terakhir bulan itu). Bulan yang sudah punya RAB sejenis dilewati,
   kecuali dicentang **Timpa**: isinya lalu diganti dengan RAB yang disalin, untuk
   meneruskan perubahan anggaran ke bulan-bulan sesudahnya. RAB yang sudah disahkan atau
   sudah ada realisasinya tidak pernah ditimpa. Yang menyusun anggaran tetap orangnya,

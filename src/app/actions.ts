@@ -10,7 +10,8 @@ import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import {
   JENIS_PURCHASING, JENIS_UMUM, MAKS_BULAN_SALIN, cekCatatanAkunGanda, deretBulanSesudah, gabungJenisRab,
-  jenisPerBarang, kodeJenisDariNama, namaJenis, nasibBulanSalin, periodeBerikutnya, type NasibSalin,
+  geserTanggalKeBulan, jenisPerBarang, kodeJenisDariNama, namaJenis, nasibBulanSalin, periodeBerikutnya,
+  type NasibSalin,
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
 import { toPeriod } from '@/lib/period';
@@ -1294,15 +1295,20 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
     })).map((b) => [b.period, b]),
   );
 
-  // Perkiraan tanggal belanja sengaja tidak ikut disalin: tanggalnya milik
-  // bulan asalnya, dan memindahkannya ke bulan baru berarti menebak hari yang
-  // sama akan cocok lagi — padahal tanggal 31 tidak ada di tiap bulan.
-  const isiAkun = budget.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, notes: l.notes }));
+  // Perkiraan tanggal belanja ikut disalin ke tanggal yang sama di bulan
+  // tujuan — gaji tanggal 1 tetap tanggal 1, tagihan tanggal 15 tetap 15.
+  // Tanggal yang tidak ada di bulan tujuan (31 ke Februari) jatuh ke hari
+  // terakhir bulan itu. Realisasi tidak ikut: itu kenyataan bulan asalnya.
+  const isiAkun = (period: string) => budget.lines.map((l) => ({
+    accountId: l.accountId, amount: l.amount, notes: l.notes,
+    planDate: geserTanggalKeBulan(l.planDate, period),
+  }));
   // Jumlah dan harga satuan disalin apa adanya. Harga tahun depan memang belum
   // tentu sama, tetapi menaikkannya sendiri berarti menebak — dan tebakan yang
   // muncul tanpa diminta sulit dibedakan dari angka yang sudah disepakati.
-  const isiBarang = budget.itemLines.map((l) => ({
+  const isiBarang = (period: string) => budget.itemLines.map((l) => ({
     itemId: l.itemId, quantity: l.quantity, unitPrice: l.unitPrice, notes: l.notes,
+    planDate: geserTanggalKeBulan(l.planDate, period),
   }));
 
   const hasil = new Map<NasibSalin, string[]>();
@@ -1319,8 +1325,8 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
       const salinan = await prisma.budget.create({
         data: {
           scope: budget.scope, period, kind: budget.kind, status: 'DRAFT', notes: budget.notes,
-          lines: { create: isiAkun },
-          itemLines: { create: isiBarang },
+          lines: { create: isiAkun(period) },
+          itemLines: { create: isiBarang(period) },
         },
         select: { id: true },
       });
@@ -1335,8 +1341,8 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
           where: { id: ada.id },
           data: {
             notes: budget.notes,
-            lines: { create: isiAkun },
-            itemLines: { create: isiBarang },
+            lines: { create: isiAkun(period) },
+            itemLines: { create: isiBarang(period) },
           },
         }),
       ]);
