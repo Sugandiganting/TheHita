@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getBudgetDetail, getJenisRab } from '@/lib/queries';
 import { formatDate, formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
-import { jenisPerBarang, namaJenis, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
+import { jenisPerBarang, kodePerBarang, namaJenis, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
   GantiJenisRabDialog, RealisasiAkunDialog, RealisasiBarangDialog,
@@ -51,13 +51,14 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   // RAB lain milik pemilik dan bulan yang sama yang bisa menerima pindahan
   // baris: per akun dan masih draf. Baris gaji di RAB Umum, misalnya, bisa
   // dipindah ke RAB HR tanpa diketik ulang.
-  const pindahan = jenisPerBarang(rab.kind)
+  const perBarang = kodePerBarang(jenis);
+  const pindahan = jenisPerBarang(rab.kind, perBarang)
     ? []
     : (await prisma.budget.findMany({
         where: { scope: rab.scope, period: rab.period, id: { not: rab.id }, status: 'DRAFT' },
         select: { id: true, kind: true },
       }))
-        .filter((b) => !jenisPerBarang(b.kind))
+        .filter((b) => !jenisPerBarang(b.kind, perBarang))
         .map((b) => ({ id: b.id, nama: namaJenis(jenis, b.kind) }));
 
   const disahkan = rab.status === 'ACTIVE';
@@ -68,7 +69,10 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   const tanggalBawaanRealisasi = hariIni.startsWith(rab.period) ? hariIni : `${rab.period}-01`;
   const hematBaris = (b: BarisBarangRab) => penghematanBaris(b);
   const keIsoTanggal = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
-  const purchasing = jenisPerBarang(rab.kind);
+  const purchasing = jenisPerBarang(rab.kind, perBarang);
+  // Ganti jenis hanya ke jenis yang bentuknya sama: per barang ke per barang,
+  // per akun ke per akun.
+  const pilihanJenis = jenis.filter((j) => j.perBarang === purchasing);
   // Pada kedua jenis RAB, realisasi dilaporkan per baris di tabel rincian —
   // per barang untuk Purchasing, per tagihan untuk yang lain. Tabel per akun di
   // bawahnya hanya rangkuman menurut jurnal, karena jurnal tidak tahu tagihan
@@ -164,14 +168,14 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
           status={rab.status}
           lineCount={purchasing ? rab.barang.length : lines.length}
         />
-        {!purchasing && (
+        {pilihanJenis.length > 1 && (
           <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
             Jenis: <span className="font-medium text-slate-700">{namaJenis(jenis, rab.kind)}</span>
             <span className="mx-2">·</span>
             <GantiJenisRabDialog
               id={rab.id}
               kind={rab.kind}
-              pilihan={jenis.filter((j) => !j.perBarang)}
+              pilihan={pilihanJenis}
               disabled={disahkan}
             />
           </p>

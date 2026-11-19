@@ -69,8 +69,8 @@ export function cabangDalamScope(scope: string): string[] {
  * Purchasing menganggarkan barang: semen berapa sak, dengan harga satuan
  * berapa. Selebihnya menganggarkan akun: gaji sebulan, listrik sebulan —
  * tidak ada satuan dan tidak ada harga satuan yang masuk akal di sana.
- * Jenis baru selalu berbentuk per akun; yang membedakannya dari Umum hanya
- * siapa pemiliknya dan kategori rencana kas mana yang memakainya.
+ * Jenis baru boleh berbentuk per barang atau per akun, dipilih saat dibuat dan
+ * tidak berubah sesudahnya.
  *
  * Yang tersimpan di RAB adalah KODE-nya, bukan namanya, supaya nama boleh
  * diganti tanpa memutus RAB maupun kategori rencana kas yang sudah memakainya.
@@ -84,7 +84,7 @@ export type JenisRab = string;
 export type InfoJenisRab = {
   code: string;
   name: string;
-  /** Disusun per barang. Hanya Purchasing. */
+  /** Disusun per barang (Purchasing, atau jenis tambahan yang dipilih begitu). */
   perBarang: boolean;
   /** Purchasing dan Umum: selalu ada, tidak bisa dihapus. */
   bawaan: boolean;
@@ -95,8 +95,18 @@ const NAMA_BAWAAN: Record<string, string> = {
   [JENIS_UMUM]: 'Umum',
 };
 
-export function jenisPerBarang(code: string): boolean {
-  return code === JENIS_PURCHASING;
+/**
+ * Apakah RAB jenis ini disusun per barang. `perBarang` adalah himpunan kode
+ * jenis per barang dari master (lihat kodePerBarang); tanpa itu hanya
+ * Purchasing yang dianggap per barang.
+ */
+export function jenisPerBarang(code: string, perBarang?: ReadonlySet<string>): boolean {
+  return perBarang ? perBarang.has(code) : code === JENIS_PURCHASING;
+}
+
+/** Kode jenis yang disusun per barang, dari daftar jenis lengkap. */
+export function kodePerBarang(daftar: readonly InfoJenisRab[]): Set<string> {
+  return new Set(daftar.filter((j) => j.perBarang).map((j) => j.code));
 }
 
 /**
@@ -104,7 +114,9 @@ export function jenisPerBarang(code: string): boolean {
  * ada dan selalu di depan — dengan nama tersimpan bila pernah diganti —
  * lalu jenis tambahan menurut abjad.
  */
-export function gabungJenisRab(tersimpan: readonly { code: string; name: string }[]): InfoJenisRab[] {
+export function gabungJenisRab(
+  tersimpan: readonly { code: string; name: string; perBarang?: boolean }[],
+): InfoJenisRab[] {
   const nama = new Map(tersimpan.map((t) => [t.code, t.name]));
   const bawaan = Object.keys(NAMA_BAWAAN).map((code) => ({
     code,
@@ -114,7 +126,7 @@ export function gabungJenisRab(tersimpan: readonly { code: string; name: string 
   }));
   const tambahan = tersimpan
     .filter((t) => !(t.code in NAMA_BAWAAN))
-    .map((t) => ({ code: t.code, name: t.name, perBarang: false, bawaan: false }))
+    .map((t) => ({ code: t.code, name: t.name, perBarang: t.perBarang === true, bawaan: false }))
     .sort((a, b) => a.name.localeCompare(b.name, 'id'));
   return [...bawaan, ...tambahan];
 }
@@ -146,10 +158,10 @@ export function kodeJenisDariNama(nama: string): string {
  * itulah jenis umum; bila tidak ada, jenis per akun lain menurut kodenya;
  * Purchasing paling akhir, karena isinya barang dan bukan beban sembarang.
  */
-export function pemilikSisa(jenis: readonly string[]): string | null {
+export function pemilikSisa(jenis: readonly string[], perBarang?: ReadonlySet<string>): string | null {
   if (jenis.length === 0) return null;
   if (jenis.includes(JENIS_UMUM)) return JENIS_UMUM;
-  const perAkun = jenis.filter((j) => !jenisPerBarang(j)).sort();
+  const perAkun = jenis.filter((j) => !jenisPerBarang(j, perBarang)).sort();
   return perAkun[0] ?? jenis[0];
 }
 

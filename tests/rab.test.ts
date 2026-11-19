@@ -473,3 +473,11 @@ test('jenis yang tidak terdaftar tetap muncul, di belakang', () => {
   const r = rekapJenisPerBulan([{ kind: 'LAMA', period: '2026-11', totalAnggaran: 1 }], ['PURCHASING']);
   assert.deepEqual(r.baris.map((b) => b.kind), ['LAMA']);
 });
+
+test('jenis tambahan bisa per barang, dibaca dari master', () => {
+  const daftar = gabungJenisRab([{ code: 'ATK', name: 'ATK', perBarang: true }, { code: 'HR', name: 'HR' }]);
+  const pb = new Set(daftar.filter((j) => j.perBarang).map((j) => j.code));
+  assert.deepEqual([...pb].sort(), ['ATK', 'PURCHASING']);
+  // Tanpa himpunan, hanya Purchasing yang dianggap per barang (perilaku lama).
+  assert.equal(pemilikSisa(['ATK', 'HR'], pb), 'HR');
+});

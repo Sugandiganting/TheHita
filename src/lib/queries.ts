@@ -8,7 +8,7 @@ import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import {
   anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
-  gabungJenisRab, jenisPerBarang, pemilikSisa, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
+  gabungJenisRab, jenisPerBarang, kodePerBarang, pemilikSisa, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
 } from './rab';
@@ -634,7 +634,12 @@ export type RabRingkas = {
  * sendiri di Master Data.
  */
 export async function getJenisRab() {
-  return gabungJenisRab(await prisma.budgetKind.findMany({ select: { code: true, name: true } }));
+  return gabungJenisRab(await prisma.budgetKind.findMany({ select: { code: true, name: true, perBarang: true } }));
+}
+
+/** Kode jenis RAB yang disusun per barang. */
+async function perBarangSekarang(): Promise<Set<string>> {
+  return kodePerBarang(await getJenisRab());
 }
 
 /** Daftar RAB beserta total anggaran dan realisasinya. */
@@ -652,15 +657,15 @@ export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
   const periods = [...new Set(budgets.map((b) => b.period))].sort();
   const realisasi = await realisasiPerScope(periods[0] as Period, periods[periods.length - 1] as Period);
 
+  const perBarang = await perBarangSekarang();
   return budgets.map((b) => {
-    const purchasing = b.kind === 'PURCHASING';
     const kunciRealisasi = realisasi.get(`${b.scope}|${b.period}`) ?? new Map<string, number>();
     const sendiri = akunDianggarkan(b);
     const sekelompok = budgets.filter((x) => x.scope === b.scope && x.period === b.period);
     const lainnya = new Set(
       sekelompok.filter((x) => x.id !== b.id).flatMap((x) => [...akunDianggarkan(x)]),
     );
-    const ambilSisa = pemilikSisa(sekelompok.map((x) => x.kind)) === b.kind;
+    const ambilSisa = pemilikSisa(sekelompok.map((x) => x.kind), perBarang) === b.kind;
 
     return {
       id: b.id,
@@ -669,10 +674,11 @@ export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
       status: b.status,
       kind: b.kind,
       bersama: scopeBersamaKah(b.scope),
-      jumlahBaris: purchasing ? b.itemLines.length : b.lines.length,
-      totalAnggaran: purchasing
-        ? b.itemLines.reduce((s, l) => s + nilaiBarisBarang(l, round), 0)
-        : b.lines.reduce((s, l) => s + l.amount, 0),
+      // Sebuah RAB berisi baris barang atau baris akun, tidak keduanya; jadi
+      // keduanya dijumlahkan tanpa perlu tahu jenisnya disusun bagaimana.
+      jumlahBaris: b.itemLines.length + b.lines.length,
+      totalAnggaran: b.itemLines.reduce((s, l) => s + nilaiBarisBarang(l, round), 0)
+        + b.lines.reduce((s, l) => s + l.amount, 0),
       ...rekapRealisasi(kunciRealisasi, sendiri, lainnya, ambilSisa),
     };
   });
@@ -680,15 +686,13 @@ export async function getBudgetList(period?: Period): Promise<RabRingkas[]> {
 
 /** Akun-akun yang dianggarkan sebuah RAB, dari baris akun maupun baris barang. */
 function akunDianggarkan(budget: {
-  kind: string;
   lines: { accountId: string }[];
   itemLines: { item: { accountId: string } }[];
 }): Set<string> {
-  return new Set(
-    jenisPerBarang(budget.kind)
-      ? budget.itemLines.map((l) => l.item.accountId)
-      : budget.lines.map((l) => l.accountId),
-  );
+  return new Set([
+    ...budget.itemLines.map((l) => l.item.accountId),
+    ...budget.lines.map((l) => l.accountId),
+  ]);
 }
 
 /**
@@ -798,7 +802,8 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
   });
   if (!budget) return null;
 
-  const purchasing = jenisPerBarang(budget.kind);
+  const perBarang = await perBarangSekarang();
+  const purchasing = jenisPerBarang(budget.kind, perBarang);
   // RAB-RAB lain milik pemilik dan bulan yang sama: Purchasing, Umum, HR, …
   const lainnya = await prisma.budget.findMany({
     where: { scope: budget.scope, period: budget.period, id: { not: budget.id } },
@@ -882,7 +887,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
   // Akun yang terpakai tetapi tidak pernah dianggarkan tetap ditampilkan —
   // tetapi hanya di satu RAB, lihat rekapRealisasi() di atas.
   const akunLain = new Set(lainnya.flatMap((x) => [...akunDianggarkan(x)]));
-  const ambilSisa = pemilikSisa([budget.kind, ...lainnya.map((x) => x.kind)]) === budget.kind;
+  const ambilSisa = pemilikSisa([budget.kind, ...lainnya.map((x) => x.kind)], perBarang) === budget.kind;
   if (ambilSisa) {
     for (const [accountId, r] of realisasi) {
       if (perAkun.has(accountId) || r.nilai === 0) continue;
@@ -1774,8 +1779,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // berstatus BELUM, karena realisasi baru bisa diinput setelah RAB disahkan.
   const barisPerJenis = new Map<string, { anggaran: number; realisasi: RealisasiBaris }[]>();
   for (const b of rabBulanIni) {
-    const baris = b.kind === 'PURCHASING'
-      ? b.itemLines.map((l) => ({
+    // Baris barang dan baris akun digabung: sebuah RAB hanya berisi salah satunya.
+    const baris = [
+      ...b.itemLines.map((l) => ({
           anggaran: nilaiBarisBarang(l, round),
           realisasi: {
             quantity: l.realQuantity,
@@ -1788,8 +1794,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
               ? null
               : round(l.realQuantity * l.realUnitPrice),
           } satisfies RealisasiBaris,
-        }))
-      : b.lines.map((l) => ({
+        })),
+      ...b.lines.map((l) => ({
           anggaran: l.amount,
           realisasi: {
             quantity: null,
@@ -1799,7 +1805,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             catatan: l.realNotes,
             nilai: l.realAmount,
           } satisfies RealisasiBaris,
-        }));
+        })),
+    ];
     const kumpulan = barisPerJenis.get(b.kind) ?? [];
     kumpulan.push(...baris);
     barisPerJenis.set(b.kind, kumpulan);
@@ -1826,21 +1833,23 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // menuntut sisanya.
   const rencanaRab: { tanggal: Date | null; nilai: number }[] = [];
   for (const b of rabBulanIni) {
-    const baris = b.kind === 'PURCHASING'
-      ? b.itemLines.map((l) => ({
+    // Baris barang dan baris akun digabung: sebuah RAB hanya berisi salah satunya.
+    const baris = [
+      ...b.itemLines.map((l) => ({
           planDate: l.planDate,
           anggaran: nilaiBarisBarang(l, round),
           nilai: l.realQuantity === null || l.realUnitPrice === null
             ? null
             : round(l.realQuantity * l.realUnitPrice),
           selesai: l.realDone,
-        }))
-      : b.lines.map((l) => ({
+        })),
+      ...b.lines.map((l) => ({
           planDate: l.planDate,
           anggaran: l.amount,
           nilai: l.realAmount,
           selesai: l.realDone,
-        }));
+        })),
+    ];
     for (const l of baris) {
       const sisa = l.selesai ? 0 : Math.max(0, round(l.anggaran - (l.nilai ?? 0)));
       if (sisa > 0) rencanaRab.push({ tanggal: l.planDate, nilai: sisa });

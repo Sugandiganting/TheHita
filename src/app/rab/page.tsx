@@ -6,7 +6,7 @@ import { formatPeriod, formatPeriodShort, formatRupiah, formatRupiahShort } from
 import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { COA_TEMPLATE } from '@/lib/coa-template';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
-import { jenisPerBarang, namaJenis, rekapJenisPerBulan, urutkanRabTerdekat } from '@/lib/rab';
+import { jenisPerBarang, kodePerBarang, namaJenis, rekapJenisPerBulan, urutkanRabTerdekat } from '@/lib/rab';
 import type { SearchParams } from '@/lib/search-params';
 import { type ScopeOption } from '@/components/budget-form';
 import { RabBaruDialog } from '@/components/budget-dialog';
@@ -58,6 +58,7 @@ export default async function RabPage({ searchParams }: { searchParams: Promise<
   // Bulan berjalan di atas, lalu bulan-bulan depan, baru yang sudah lewat.
   const kini = currentPeriod();
   const rekap = rekapJenisPerBulan(semua, jenis.map((j) => j.code));
+  const perBarang = kodePerBarang(jenis);
   // Saringan bulan dari tabel rekap; bulan yang tidak punya RAB diabaikan.
   const mintaBulan = Array.isArray(params.bulan) ? params.bulan[0] : params.bulan;
   const bulanDipilih = mintaBulan && rekap.bulan.includes(mintaBulan) ? mintaBulan : null;
@@ -103,7 +104,7 @@ export default async function RabPage({ searchParams }: { searchParams: Promise<
                 {rekap.baris.map((b) => (
                   <tr key={b.kind}>
                     <td className="td whitespace-nowrap">
-                      <Badge tone={jenisPerBarang(b.kind) ? 'brand' : 'slate'}>{namaJenis(jenis, b.kind)}</Badge>
+                      <Badge tone={jenisPerBarang(b.kind, perBarang) ? 'brand' : 'slate'}>{namaJenis(jenis, b.kind)}</Badge>
                     </td>
                     {rekap.bulan.map((p) => {
                       const sel = b.perBulan.get(p);
@@ -190,7 +191,7 @@ export default async function RabPage({ searchParams }: { searchParams: Promise<
                       )}
                     </td>
                     <td className="td">
-                      <Badge tone={jenisPerBarang(r.kind) ? 'brand' : 'slate'}>
+                      <Badge tone={jenisPerBarang(r.kind, perBarang) ? 'brand' : 'slate'}>
                         {namaJenis(jenis, r.kind)}
                       </Badge>
                     </td>

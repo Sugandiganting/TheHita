@@ -54,7 +54,7 @@ export default async function JenisRabPage() {
                 <th className="th">Nama</th>
                 <th className="th">Kode</th>
                 <th className="th">Diisi</th>
-                <th className="th">Rencana Kas {formatPeriod(kini)}</th>
+                <th className="th">Dipakai kategori Rencana Kas Mingguan · {formatPeriod(kini)}</th>
                 <th className="th num">Dipakai</th>
                 <th className="th">Aksi</th>
               </tr>
@@ -75,8 +75,8 @@ export default async function JenisRabPage() {
                     </td>
                     <td className="td text-sm">
                       {kategoriKini.has(j.code)
-                        ? <span className="text-brand-700">jatah {kategoriKini.get(j.code)!.join(', ')}</span>
-                        : <span className="text-xs text-slate-400">belum ditautkan</span>}
+                        ? <span className="text-brand-700">kategori {kategoriKini.get(j.code)!.join(', ')}</span>
+                        : <span className="text-xs text-slate-400">tidak dipakai kategori mana pun</span>}
                     </td>
                     <td className="td num text-slate-500">{nRab} RAB</td>
                     <td className="td">

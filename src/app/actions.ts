@@ -10,7 +10,7 @@ import { PMS_SOURCES, type PmsSource } from '@/lib/coa-legacy';
 import { namaPenanggung, penanggungBeban } from '@/lib/beban-bersama';
 import {
   JENIS_PURCHASING, JENIS_UMUM, MAKS_BULAN_SALIN, cekCatatanAkunGanda, deretBulanSesudah, gabungJenisRab,
-  geserTanggalKeBulan, jenisPerBarang, kodeJenisDariNama, namaJenis, nasibBulanSalin, periodeBerikutnya,
+  geserTanggalKeBulan, jenisPerBarang, kodeJenisDariNama, kodePerBarang, namaJenis, nasibBulanSalin, periodeBerikutnya,
   type NasibSalin,
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
@@ -917,7 +917,12 @@ function segarkanRab() {
 
 /** Seluruh jenis RAB: bawaan ditambah yang dibuat di Master Data. */
 async function daftarJenisRab() {
-  return gabungJenisRab(await prisma.budgetKind.findMany({ select: { code: true, name: true } }));
+  return gabungJenisRab(await prisma.budgetKind.findMany({ select: { code: true, name: true, perBarang: true } }));
+}
+
+/** Kode jenis RAB yang disusun per barang, menurut master. */
+async function perBarangSekarang() {
+  return kodePerBarang(await daftarJenisRab());
 }
 
 /** Scope yang boleh dipakai: kode cabang aktif, atau kelompok penanggung yang ada. */
@@ -1049,8 +1054,8 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
     prisma.account.findUnique({ where: { id: accountId }, select: { type: true, isHeader: true, name: true } }),
   ]);
   if (!budget) return fail('RAB tidak ditemukan.');
-  if (jenisPerBarang(budget.kind)) {
-    return fail('RAB Purchasing diisi per barang, bukan per akun. Pakai formulir barangnya.');
+  if (jenisPerBarang(budget.kind, await perBarangSekarang())) {
+    return fail('RAB ini diisi per barang, bukan per akun. Pakai formulir barangnya.');
   }
   if (budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');
   if (!account) return fail('Akun tidak ditemukan.');
@@ -1082,7 +1087,9 @@ export async function saveBudgetLine(_prev: ActionState, formData: FormData): Pr
     if (!asal || !tujuan || tujuan.scope !== asal.scope || tujuan.period !== asal.period) {
       return fail('RAB tujuan tidak ditemukan di antara RAB pemilik dan bulan yang sama.');
     }
-    if (jenisPerBarang(tujuan.kind)) return fail('Baris akun tidak bisa dipindah ke RAB Purchasing, yang berisi barang.');
+    if (jenisPerBarang(tujuan.kind, await perBarangSekarang())) {
+      return fail('Baris akun tidak bisa dipindah ke RAB yang diisi per barang.');
+    }
     if (tujuan.status === 'ACTIVE') return fail('RAB tujuan sudah disahkan. Kembalikan ke draf dulu.');
     tujuanId = pindahKe;
     namaTujuan = namaJenis(await daftarJenisRab(), tujuan.kind);
@@ -1127,8 +1134,9 @@ export async function gantiJenisRab(_prev: ActionState, formData: FormData): Pro
 
   const jenis = await daftarJenisRab();
   if (!jenis.some((j) => j.code === kind)) return fail('Jenis RAB tidak dikenal.');
-  if (jenisPerBarang(kind) || jenisPerBarang(budget.kind)) {
-    return fail('RAB Purchasing berisi barang, yang lain berisi akun — jenisnya tidak bisa saling diganti.');
+  const perBarang = kodePerBarang(jenis);
+  if (jenisPerBarang(kind, perBarang) !== jenisPerBarang(budget.kind, perBarang)) {
+    return fail('Jenis per barang dan per akun tidak bisa saling diganti: isi RAB-nya tersimpan dalam bentuk yang berbeda.');
   }
 
   const kembar = await prisma.budget.findUnique({
@@ -1185,9 +1193,11 @@ export async function simpanJenisRab(_prev: ActionState, formData: FormData): Pr
   if (jenis.some((j) => j.code === baru)) {
     return fail(`Kode ${baru} sudah dipakai jenis lain. Beri nama yang sedikit berbeda.`);
   }
-  await prisma.budgetKind.create({ data: { code: baru, name } });
+  // Bentuknya dipilih sekali, saat dibuat: per barang seperti Purchasing, atau per akun.
+  const perBarangBaru = String(formData.get('perBarang') ?? '') === 'ya';
+  await prisma.budgetKind.create({ data: { code: baru, name, perBarang: perBarangBaru } });
   segarkanJenisRab();
-  return ok(`Jenis ${name} ditambahkan. Kini bisa dipilih saat membuat RAB baru.`);
+  return ok(`Jenis ${name} ditambahkan, diisi ${perBarangBaru ? 'per barang' : 'per akun'}. Kini bisa dipilih saat membuat RAB baru.`);
 }
 
 /** Menghapus jenis tambahan yang belum dipakai RAB maupun kategori rencana kas. */
@@ -1237,7 +1247,7 @@ export async function saveBudgetItemLine(_prev: ActionState, formData: FormData)
     }),
   ]);
   if (!budget) return fail('RAB tidak ditemukan.');
-  if (!jenisPerBarang(budget.kind)) {
+  if (!jenisPerBarang(budget.kind, await perBarangSekarang())) {
     return fail('RAB ini diisi per akun, bukan per barang. Pakai formulir akunnya.');
   }
   if (budget.status === 'ACTIVE') return fail('RAB sudah disahkan. Kembalikan ke draf untuk mengubahnya.');

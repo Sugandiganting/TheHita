@@ -335,6 +335,10 @@ model Budget {
 model BudgetKind {
   code      String   @id
   name      String   @unique
+  /// Disusun per barang (jumlah × harga satuan, seperti Purchasing) atau per
+  /// akun. Ditetapkan saat jenisnya dibuat dan tidak berubah sesudahnya:
+  /// isian RAB yang sudah ada tersimpan dalam bentuk itu.
+  perBarang Boolean  @default(false)
   createdAt DateTime @default(now())
 }
 

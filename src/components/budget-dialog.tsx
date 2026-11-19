@@ -211,7 +211,7 @@ export function TambahJenisRabDialog() {
       label="+ Tambah jenis"
       judul="Tambah jenis RAB"
       lebar="sm"
-      keterangan="Misalnya HR untuk gaji dan service, atau Management untuk pembayaran manajemen."
+      keterangan="Misalnya HR untuk gaji dan service, atau Management untuk pembayaran manajemen. Pilih juga cara mengisinya: per akun, atau per barang seperti Purchasing."
     >
       {(tutup) => <JenisRabForm onTutup={tutup} />}
     </DialogTombol>

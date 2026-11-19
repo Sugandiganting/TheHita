@@ -707,9 +707,31 @@ export function JenisRabForm({
         <p className="mt-1 text-xs text-slate-500">
           {nilai
             ? `Kodenya tetap ${nilai.code}, jadi RAB dan kategori rencana kas yang sudah memakainya tidak terputus.`
-            : 'Jenis baru selalu diisi per akun, seperti RAB Umum.'}
+            : 'Kode dibentuk dari namanya dan tidak berubah sesudahnya.'}
         </p>
       </div>
+      {!nilai && (
+        <fieldset>
+          <legend className="label">Diisi</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 hover:bg-slate-50">
+              <input type="radio" name="perBarang" value="tidak" defaultChecked className="mt-1" />
+              <span className="text-sm">
+                <span className="font-medium">Per akun</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Nominal per akun: gaji, listrik, langganan.</span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 p-2 hover:bg-slate-50">
+              <input type="radio" name="perBarang" value="ya" className="mt-1" />
+              <span className="text-sm">
+                <span className="font-medium">Per barang</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Barang dari master: jumlah × harga satuan, seperti Purchasing.</span>
+              </span>
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">Tidak bisa diubah setelah jenisnya dibuat.</p>
+        </fieldset>
+      )}
       {state.message && (
         <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
       )}
