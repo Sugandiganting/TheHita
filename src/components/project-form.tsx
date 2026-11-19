@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { saveProject, type ActionState } from '@/app/actions';
+import { deleteProject, saveProject, type ActionState } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { monthlyInstallment } from '@/lib/forecast';
 import { MoneyInput } from './money-input';
@@ -220,10 +221,41 @@ export function ProjectForm({
           }`}
         >
           {state.message}
+          {/* Proyek baru: dua jalan sesudahnya, isi rinciannya atau kembali ke daftar. */}
+          {state.ok && state.id && (
+            <span className="mt-2 flex flex-wrap gap-2">
+              <Link href={`/proyek/${state.id}`} className="btn-primary">Isi rincian biaya →</Link>
+              <Link href="/proyek" className="btn-secondary">Ke daftar proyek</Link>
+            </span>
+          )}
         </div>
       )}
 
       <SubmitButton />
+    </form>
+  );
+}
+
+/**
+ * Hapus proyek, dua langkah: sekali untuk bertanya, sekali untuk sungguhan.
+ * Menghapus proyek ikut menghapus seluruh item biaya dan riwayat
+ * persetujuannya, jadi tidak boleh terjadi karena satu klik yang meleset.
+ */
+export function HapusProyekTombol({ id, nama }: { id: string; nama: string }) {
+  const [yakin, setYakin] = useState(false);
+  if (!yakin) {
+    return (
+      <button type="button" className="btn-danger" onClick={() => setYakin(true)}>
+        Hapus proyek
+      </button>
+    );
+  }
+  return (
+    <form action={deleteProject} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="id" value={id} />
+      <span className="text-sm text-slate-700">Hapus &ldquo;{nama}&rdquo; beserta item dan riwayatnya?</span>
+      <button type="submit" className="btn-danger">Ya, hapus</button>
+      <button type="button" className="btn-secondary" onClick={() => setYakin(false)}>Batal</button>
     </form>
   );
 }

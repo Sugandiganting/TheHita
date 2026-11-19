@@ -5,8 +5,8 @@ import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
 import { LABEL_STATUS_PROYEK, statusEfektif } from '@/lib/proyek';
 import { ProjectApproval } from '@/components/project-approval';
 import { monthlyInstallment } from '@/lib/forecast';
-import { deleteCostItem, deleteProject, toggleCostItemPaid } from '@/app/actions';
-import { ProjectForm } from '@/components/project-form';
+import { deleteCostItem, toggleCostItemPaid } from '@/app/actions';
+import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
 import { CostItemAccount, CostItemForm, UbahItemProyekDialog } from '@/components/cost-item-form';
 import { hargaSatuanItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
@@ -58,12 +58,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
             <Link href="/peramalan" className="btn-secondary">
               Lihat dampak di peramalan
             </Link>
-            <form action={deleteProject}>
-              <input type="hidden" name="id" value={project.id} />
-              <button type="submit" className="btn-danger">
-                Hapus proyek
-              </button>
-            </form>
+            <HapusProyekTombol id={project.id} nama={project.name} />
           </div>
         }
       />

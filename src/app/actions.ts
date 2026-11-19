@@ -51,6 +51,8 @@ export type ActionState = {
   message: string;
   /** Berhasil, tetapi ada yang perlu diperhatikan — ditampilkan berbeda. */
   warn?: boolean;
+  /** Id yang baru dibuat, bila formulirnya perlu menautkan ke sana. */
+  id?: string;
 };
 
 const empty: ActionState = { ok: false, message: '' };
@@ -486,7 +488,9 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
   revalidatePath('/proyek');
   revalidatePath(`/proyek/${project.id}`);
   revalidatePath('/peramalan');
-  return ok(`Proyek "${name}" tersimpan.`);
+  return id
+    ? ok(`Proyek "${name}" tersimpan.`)
+    : { ...ok(`Proyek "${name}" dibuat sebagai Draft.`), id: project.id };
 }
 
 /** Isian item biaya proyek yang sudah dibaca dan diperiksa. */
@@ -652,9 +656,13 @@ export async function deleteCostItem(formData: FormData): Promise<void> {
 export async function deleteProject(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
   if (!id) return;
-  await prisma.project.delete({ where: { id } });
+  await prisma.project.deleteMany({ where: { id } });
   revalidatePath('/proyek');
   revalidatePath('/peramalan');
+  revalidatePath('/');
+  // Dihapus dari halaman proyeknya sendiri, jadi halaman itu sudah tidak ada:
+  // tetap di sana berarti 404. Kembali ke daftar proyek.
+  redirect('/proyek');
 }
 
 /* ------------------------------------------------------------------ */
