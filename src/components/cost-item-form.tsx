@@ -1,8 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
-import { addCostItem, type ActionState } from '@/app/actions';
+import { addCostItem, setCostItemAccount, type ActionState } from '@/app/actions';
 import { SearchableSelect } from './searchable-select';
 import { MoneyInput } from './money-input';
 
@@ -46,13 +46,19 @@ export function CostItemForm({
       </div>
 
       <div>
-        <label className="label" htmlFor="c-account">Akun (opsional)</label>
+        <label className="label" htmlFor="c-account">Dibebankan ke akun</label>
         <SearchableSelect
           id="c-account"
           name="accountId"
           options={accounts.map((a) => ({ value: a.id, code: a.code, label: a.name }))}
-          placeholder="— Tidak ditentukan —"
+          placeholder="— Pilih akun —"
+          searchPlaceholder="Ketik nomor atau nama akun…"
+          required
         />
+        <p className="mt-1 text-xs text-slate-500">
+          Wajib: akun beban atau aset tetap yang menanggung biaya ini, misalnya Biaya Renovasi
+          atau Aset Dalam Pengerjaan.
+        </p>
       </div>
 
       {state.message && (
@@ -67,5 +73,40 @@ export function CostItemForm({
 
       <SubmitButton />
     </form>
+  );
+}
+
+/**
+ * Memilih akun untuk item lama yang dibuat sebelum akun diwajibkan. Disimpan
+ * begitu dipilih; item yang sudah berakun tidak menampilkan pilihan ini.
+ */
+export function CostItemAccount({
+  id,
+  accounts,
+}: {
+  id: string;
+  accounts: { id: string; code: string; name: string }[];
+}) {
+  const [state, action] = useActionState(setCostItemAccount, initial);
+  const [pending, mulai] = useTransition();
+
+  return (
+    <div className="min-w-[12rem]">
+      <span className="mb-1 block text-[11px] font-medium text-amber-700">Belum ada akun — wajib diisi</span>
+      <SearchableSelect
+        options={accounts.map((a) => ({ value: a.id, code: a.code, label: a.name }))}
+        placeholder={pending ? 'Menyimpan…' : '— Pilih akun —'}
+        searchPlaceholder="Ketik nomor atau nama akun…"
+        disabled={pending}
+        onChange={(accountId) => {
+          if (!accountId) return;
+          const data = new FormData();
+          data.set('id', id);
+          data.set('accountId', accountId);
+          mulai(() => action(data));
+        }}
+      />
+      {!state.ok && state.message && <span className="mt-0.5 block text-[11px] text-red-600">{state.message}</span>}
+    </div>
   );
 }

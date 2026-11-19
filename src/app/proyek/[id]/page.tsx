@@ -6,7 +6,7 @@ import { PROJECT_STATUS_LABEL } from '@/lib/accounting';
 import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem, deleteProject, toggleCostItemPaid } from '@/app/actions';
 import { ProjectForm } from '@/components/project-form';
-import { CostItemForm } from '@/components/cost-item-form';
+import { CostItemAccount, CostItemForm } from '@/components/cost-item-form';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -115,7 +115,9 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                       <tr key={item.id} className={item.paid ? 'text-slate-400' : ''}>
                         <td className="td font-medium">{item.name}</td>
                         <td className="td text-xs">
-                          {item.account ? `${item.account.code} ${item.account.name}` : '—'}
+                          {item.account
+                            ? `${item.account.code} ${item.account.name}`
+                            : <CostItemAccount id={item.id} accounts={capexAccounts} />}
                         </td>
                         <td className="td whitespace-nowrap">{formatDate(item.plannedDate)}</td>
                         <td className="td num">{formatRupiah(item.amount)}</td>

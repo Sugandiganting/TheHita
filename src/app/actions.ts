@@ -496,6 +496,8 @@ export async function addCostItem(_prev: ActionState, formData: FormData): Promi
   if (!name) return fail('Nama item biaya wajib diisi.');
   if (amount <= 0) return fail('Nominal harus lebih besar dari nol.');
   if (!plannedDate) return fail('Jadwal pembayaran wajib diisi.');
+  const salahAkun = await periksaAkunProyek(accountId);
+  if (salahAkun) return fail(salahAkun);
 
   await prisma.projectCostItem.create({
     data: {
@@ -503,13 +505,47 @@ export async function addCostItem(_prev: ActionState, formData: FormData): Promi
       name,
       amount,
       plannedDate: parseDate(plannedDate),
-      accountId: accountId || null,
+      accountId,
     },
   });
 
   revalidatePath(`/proyek/${projectId}`);
   revalidatePath('/peramalan');
   return ok(`Item "${name}" ditambahkan.`);
+}
+
+/**
+ * Akun yang boleh menanggung biaya proyek: akun beban atau aset tetap, aktif,
+ * dan bukan akun induk — pilihan yang sama dengan yang ditawarkan formulirnya.
+ * Wajib, karena tanpa akun tidak diketahui biaya proyek dibebankan ke mana.
+ * Null bila sah; selain itu alasannya.
+ */
+async function periksaAkunProyek(accountId: string): Promise<string | null> {
+  if (!accountId) return 'Akun wajib dipilih: biaya ini dibebankan ke akun apa?';
+  const akun = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { code: true, name: true, type: true, subtype: true, isHeader: true, active: true },
+  });
+  if (!akun) return 'Akun tidak ditemukan.';
+  if (akun.isHeader) return `${akun.code} ${akun.name} adalah akun induk. Pilih akun rinciannya.`;
+  if (!akun.active) return `${akun.code} ${akun.name} sudah tidak aktif.`;
+  if (akun.type !== 'EXPENSE' && akun.subtype !== 'FIXED_ASSET') {
+    return `${akun.code} ${akun.name} bukan akun beban atau aset tetap.`;
+  }
+  return null;
+}
+
+/** Mengisi akun item biaya yang dibuat sebelum akun diwajibkan. */
+export async function setCostItemAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const accountId = String(formData.get('accountId') ?? '');
+  const item = await prisma.projectCostItem.findUnique({ where: { id }, select: { projectId: true, name: true } });
+  if (!item) return fail('Item biaya tidak ditemukan.');
+  const salahAkun = await periksaAkunProyek(accountId);
+  if (salahAkun) return fail(salahAkun);
+  await prisma.projectCostItem.update({ where: { id }, data: { accountId } });
+  revalidatePath(`/proyek/${item.projectId}`);
+  return ok(`Akun "${item.name}" disimpan.`);
 }
 
 export async function toggleCostItemPaid(formData: FormData): Promise<void> {
