@@ -229,8 +229,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.cadanganGaji > 0 && (
                 <p className="-mt-2 text-xs text-slate-500">
-                  Ketiga angka di atas sudah menyisihkan gaji{' '}
-                  {formatPeriod(bulanSesudah(data.period))}{' '}
+                  Ketiga angka di atas sudah menyisihkan gaji awal{' '}
+                  {formatPeriod(bulanSesudah(data.period))} (tanggal 1–7){' '}
                   <strong>{formatRupiah(rencana.cadanganGaji)}</strong> — gaji dibayar di awal
                   bulan, jadi yang menutupinya adalah saldo akhir bulan ini.
                 </p>
@@ -564,14 +564,27 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                 {berjalan && (
                                   <span className="block text-[11px] font-normal text-slate-400">
                                     sisa {data.rencana?.hari ?? 0} hari ·{' '}
-                                    {laju
-                                      ? `terukur ${formatRupiahShort(laju.perHari)}/hari`
-                                      : 'dari asumsi bulanan'}
-                                    {/* Gaji yang sudah dibayar tidak ikut laju: ia keluar
-                                        sekaligus, bukan tiap hari. Disebut supaya laju yang
-                                        turun tidak terbaca seperti belanja yang berkurang. */}
-                                    {laju && data.asumsi.gajiRab && data.asumsi.gajiRab.sudahKeluar > 0 && (
-                                      <> · di luar gaji {formatRupiahShort(data.asumsi.gajiRab.sudahKeluar)} yang sudah dibayar</>
+                                    {data.asumsi.sisaBulanDari === 'KATEGORI' ? (
+                                      // Dari rencana, bukan dari kebiasaan: yang belum
+                                      // direalisasi di tabel kategori, ditambah komitmen.
+                                      <>
+                                        kategori belum direalisasi{' '}
+                                        {formatRupiahShort(data.asumsi.keluarKategori ?? 0)}
+                                        {(data.rencana?.komitmenBelumBayar ?? 0) > 0 && (
+                                          <> + komitmen {formatRupiahShort(data.rencana!.komitmenBelumBayar)}</>
+                                        )}
+                                      </>
+                                    ) : laju ? (
+                                      <>
+                                        terukur {formatRupiahShort(laju.perHari)}/hari
+                                        {/* Gaji yang sudah dibayar tidak ikut laju: ia keluar
+                                            sekaligus, bukan tiap hari. */}
+                                        {data.asumsi.gajiRab && data.asumsi.gajiRab.sudahKeluar > 0 && (
+                                          <> · di luar gaji {formatRupiahShort(data.asumsi.gajiRab.sudahKeluar)} yang sudah dibayar</>
+                                        )}
+                                      </>
+                                    ) : (
+                                      'dari asumsi bulanan'
                                     )}
                                   </span>
                                 )}
@@ -621,12 +634,20 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   )}
                   <p className="mt-4 text-xs text-slate-500">
                     Pengeluaran rutin {formatRupiah(data.asumsi.monthlyOutflow ?? data.asumsi.usulanOutflow ?? 0)} per
-                    bulan, kebutuhan gaji {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
+                    bulan, gaji awal bulan yang dijaga {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
                     bulan — ubah di panel samping.{' '}
                     <strong>Bulan berjalan</strong> dikurangi komitmen yang belum dibayar{' '}
                     {formatRupiah(rencana.komitmenBelumBayar)}
                     {sekaliIni > 0 && <> — di antaranya {formatRupiah(sekaliIni)} sekali ini saja</>}, lalu
-                    belanja operasional sisa bulan.{' '}
+                    {data.asumsi.sisaBulanDari === 'KATEGORI' ? (
+                      <>
+                        {' '}seluruh kategori yang belum direalisasi{' '}
+                        {formatRupiah(data.asumsi.keluarKategori ?? 0)} — kategori yang belanjanya sudah
+                        menyamai jatahnya tidak lagi mengurangi apa pun.{' '}
+                      </>
+                    ) : (
+                      <> belanja operasional sisa bulan.{' '}</>
+                    )}
                     <strong>Bulan-bulan berikutnya</strong> memakai proyeksinya masing-masing dikurangi
                     pengeluaran rutin
                     {data.musim.aktif ? (

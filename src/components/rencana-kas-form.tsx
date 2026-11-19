@@ -626,11 +626,18 @@ export function AssumptionForm({
     monthlyOutflow: number | null; salaryNeed: number | null;
     usulanOutflow: number | null; usulanGaji: number | null;
     sumberUsulanGaji?: { jenis: 'RAB'; period: string } | { jenis: 'KOMITMEN' } | null;
+    gajiAwal?: { total: number; tanpaTanggal: number; seluruhRab: number } | null;
   };
 }) {
   const [state, action] = useActionState(saveAssumptions, initial);
   const asalGaji = asumsi.sumberUsulanGaji?.jenis === 'RAB'
-    ? ` dari RAB gaji ${formatPeriod(asumsi.sumberUsulanGaji.period)} (akun 6130, seluruh cabang)`
+    ? ` — gaji tanggal 1–7 dari RAB gaji ${formatPeriod(asumsi.sumberUsulanGaji.period)} (akun 6130, seluruh cabang)`
+      + (asumsi.gajiAwal && asumsi.gajiAwal.seluruhRab > asumsi.gajiAwal.total
+        ? `, dari seluruhnya ${formatRupiah(asumsi.gajiAwal.seluruhRab)}; service dan bonus pertengahan bulan ditutup uang masuk bulan itu`
+        : '')
+      + (asumsi.gajiAwal && asumsi.gajiAwal.tanpaTanggal > 0
+        ? `. ${formatRupiah(asumsi.gajiAwal.tanpaTanggal)} belum bertanggal sehingga ikut dijaga — isi tanggal bayarnya di RAB`
+        : '')
     : asumsi.sumberUsulanGaji?.jenis === 'KOMITMEN' ? ' dari komitmen bernama gaji' : '';
   const baris = [
     {
@@ -641,8 +648,8 @@ export function AssumptionForm({
     {
       name: 'salaryNeed', label: 'Kebutuhan gaji per bulan',
       nilai: asumsi.salaryNeed, usul: asumsi.usulanGaji,
-      jelas: 'Gaji bulan depan yang disisihkan dari plafon, dan batas aman rencana belanja. '
-        + 'Biarkan kosong untuk mengikuti RAB gaji.',
+      jelas: 'Gaji awal bulan depan yang harus tersedia di saldo akhir bulan ini: disisihkan dari plafon, '
+        + 'dan menjadi batas aman rencana belanja. Biarkan kosong untuk mengikuti RAB gaji.',
       asal: asalGaji,
     },
   ];

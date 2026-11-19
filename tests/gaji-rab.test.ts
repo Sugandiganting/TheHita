@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { akunGajiKah, gajiRabBulanIni, lajuOperasionalBerjalan } from '../src/lib/rencana-kas.ts';
+import {
+  akunGajiKah, gajiAwalBulan, gajiRabBulanIni, hitungRencana, hitungRunway, lajuOperasionalBerjalan,
+} from '../src/lib/rencana-kas.ts';
 
 /*
  * Gaji dari RAB dibaca lewat COA-nya, lalu dipisah: yang sudah dibayar tidak
@@ -55,4 +57,80 @@ test('gaji yang sudah keluar tidak ikut terbagi menjadi laju harian', () => {
   })!;
   assert.equal(Math.round(tanpa.perHari), 15_543_281);
   assert.equal(Math.round(dengan.perHari), 7_926_731);
+});
+
+/* ------------------------------------------------------------------ */
+/* Sisa bulan dari kategori, dan gaji awal bulan sebagai batas aman    */
+/* ------------------------------------------------------------------ */
+
+test('gaji awal bulan: hanya tanggal 1 sampai 7; tanpa tanggal tetap dijaga', () => {
+  // RAB gaji November pemilik: tanggal 1 dan 7 = 55.775.361, tanggal 15 = 81.322.553.
+  const hasil = gajiAwalBulan([
+    { amount: 10_584_359, tanggal: tgl('2026-12-01') },
+    { amount: 18_134_336, tanggal: tgl('2026-12-01') },
+    { amount: 17_700_769, tanggal: tgl('2026-12-01') },
+    { amount: 9_355_897, tanggal: tgl('2026-12-07') },
+    { amount: 81_322_553, tanggal: tgl('2026-12-15') },
+  ]);
+  assert.deepEqual(hasil, { total: 55_775_361, tanpaTanggal: 0 });
+  assert.deepEqual(gajiAwalBulan([{ amount: 100, tanggal: null }]), { total: 100, tanpaTanggal: 100 });
+  assert.equal(gajiAwalBulan([{ amount: 100, tanggal: tgl('2026-12-08') }]).total, 0);
+});
+
+const rencanaNov = (kategori: Parameters<typeof hitungRencana>[0]['kategori']) => hitungRencana({
+  period: '2026-11',
+  tanggal: tgl('2026-11-18'),
+  saldoKas: 131_164_015,
+  masukSampaiKini: 224_421_928,
+  proyeksi: { PESIMIS: 326_882_758, NORMAL: 359_571_034, OPTIMIS: 449_463_792 },
+  komitmen: [{ label: 'Cicilan Bank', amount: 75_650_000, dueDay: 20, paid: false }],
+  kategori,
+  terpakai: 0,
+  kebutuhanGaji: 55_775_361,
+});
+
+test('kategori yang belanjanya sudah menyamai jatah tidak lagi menyumbang uang keluar', () => {
+  const r = rencanaNov([
+    { label: 'Purchasing', weight: 1, jatah: 300_000_000, terpakaiBulanIni: 113_221_270 },
+    { label: 'HR', weight: 1, jatah: 88_982_851, terpakaiBulanIni: 88_982_851 },
+    { label: 'Bank Perusahaan', weight: 1, jatah: 77_574_942, terpakaiBulanIni: 77_574_942 },
+  ]);
+  assert.deepEqual(r.kategori.map((k) => k.akanKeluar), [186_778_730, 0, 0]);
+  assert.equal(r.keluarKategori, 186_778_730);
+  // Boleh belanja menyisihkan gaji awal Desember saja, bukan seluruh RAB gaji.
+  assert.equal(Math.round(r.skenario.NORMAL.bolehBelanja), 134_887_760);
+});
+
+test('kategori yang lewat jatah tidak membuat uang keluar minus', () => {
+  const r = rencanaNov([{ label: 'X', weight: 1, jatah: 10, terpakaiBulanIni: 25 }]);
+  assert.equal(r.kategori[0].akanKeluar, 0);
+});
+
+test('kategori bertaut RAB memakai sisa baris yang belum selesai, bukan hanya yang belum tersentuh', () => {
+  const r = rencanaNov([{ label: 'HR', weight: 1, jatah: 100, terpakaiBulanIni: 40, belum: 30, akanKeluar: 55 }]);
+  assert.equal(r.kategori[0].sisa, 30);
+  assert.equal(r.kategori[0].akanKeluar, 55);
+});
+
+test('ramalan November: sisa keluar dari kategori menggantikan laju harian', () => {
+  const r = hitungRunway({
+    period: '2026-11',
+    saldoKas: 131_164_015,
+    sisaMasuk: 135_149_106,
+    proyeksiBulanan: 359_571_034,
+    proyeksiBerikutnya: () => 472_711_920,
+    pengeluaranBulanan: 335_834_450,
+    komitmenBelumBayar: 75_650_000,
+    komitmenRutinSebulan: 75_650_000,
+    kebutuhanGaji: 55_775_361,
+    lajuOperasionalHarian: 7_926_731,
+    sisaKeluarRencana: 186_778_730,
+    hariTersisa: 12,
+    hariSebulan: 30,
+  });
+  // 131.164.015 + 135.149.106 − 75.650.000 − 186.778.730
+  assert.equal(r.bulan[0].saldoAkhir, 3_884_391);
+  assert.equal(r.bulan[0].cukupGaji, false);
+  // Desember tidak berubah caranya: proyeksi musim − pengeluaran rutin.
+  assert.equal(r.bulan[1].saldoAkhir, 3_884_391 + 472_711_920 - 335_834_450);
 });

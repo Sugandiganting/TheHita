@@ -331,11 +331,17 @@ lain milik cabang dan bulan yang sama.
 
 **Gaji dibaca dari RAB lewat akunnya.** Baris RAB berakun kelompok `6130 Biaya Karyawan`
 (gaji, service, THR, bonus dan gaji management), di RAB jenis apa pun, dipakai Rencana
-Kas dengan dua cara: total RAB gaji bulan depan menjadi *kebutuhan gaji* (cadangan di plafon
-dan batas aman rencana belanja), dan gaji bulan berjalan yang perkiraan tanggalnya sudah
-lewat dianggap sudah dibayar sekaligus — tidak ikut terbagi sebagai laju belanja harian.
-Gaji yang tanggalnya belum lewat dihitung sebagai pengeluaran yang masih akan keluar.
-Angka yang diketik di *Asumsi bulanan* tetap menang.
+Kas sebagai *kebutuhan gaji*: gaji **awal** bulan depan, yaitu baris yang dibayar tanggal
+1–7, harus tersedia di saldo akhir bulan ini. Itulah cadangan di plafon dan batas aman
+rencana belanja. Service dan bonus pertengahan bulan ditutup uang masuk bulan itu sendiri.
+Baris bulan depan yang belum bertanggal memakai tanggal baris yang sama bulan ini; yang
+tidak punya keduanya ikut dijaga. Angka yang diketik di *Asumsi bulanan* tetap menang.
+
+**Sisa uang keluar bulan berjalan diambil dari kategori.** Ramalan kas dan rencana belanja
+mengurangkan jumlah *Belum direalisasi* seluruh kategori (jatah − sudah direalisasi, atau
+sisa baris RAB yang belum selesai bila kategorinya ditautkan), ditambah komitmen yang belum
+dibayar. Kategori yang belanjanya sudah menyamai jatah tidak lagi mengurangi apa pun.
+Bulan tanpa kategori masih memakai laju belanja harian.
 
 Satu RAB dimiliki satu **pemilik anggaran**, yang bisa berupa satu cabang (`THL`) atau satu
 kelompok cabang (`THL+SKR`) untuk biaya yang ditanggung bersama. Bentuknya sama persis

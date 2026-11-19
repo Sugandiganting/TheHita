@@ -74,6 +74,14 @@ export type Kategori = {
    * kas adalah "berapa yang masih akan keluar".
    */
   belum?: number | null;
+  /**
+   * Yang masih akan keluar dari kategori yang ditautkan ke RAB: sisa anggaran
+   * baris yang belum selesai, termasuk yang sudah sebagian berjalan. Berbeda
+   * dari `belum`, yang hanya memuat baris yang belum tersentuh sama sekali —
+   * angka tampilan tabel. Kosong untuk kategori yang tidak ditautkan; di sana
+   * yang masih akan keluar adalah jatah dikurangi belanja.
+   */
+  akanKeluar?: number | null;
 };
 
 export type Masukan = {
@@ -190,6 +198,12 @@ export type PorsiKategori = {
   dariRab: boolean;
   /** Sisa dibagi jumlah minggu yang tersisa. */
   perMinggu: number;
+  /**
+   * Uang yang masih akan keluar dari kategori ini sampai akhir bulan; tidak
+   * pernah minus. Kategori yang belanjanya sudah menyamai jatah tidak lagi
+   * menyumbang apa pun.
+   */
+  akanKeluar: number;
 };
 
 export type BulanRunway = {
@@ -262,6 +276,11 @@ export type Rencana = {
   jatahKategori: number;
   /** Yang kas sanggup tanggung sebulan ini menurut skenario normal. */
   jatahKas: number;
+  /**
+   * Jumlah yang masih akan keluar dari seluruh kategori sampai akhir bulan.
+   * Dipakai ramalan kas sebagai sisa uang keluar bulan berjalan.
+   */
+  keluarKategori: number;
   skenario: Record<Skenario, HasilSkenario>;
   minggu: Minggu[];
   kategori: PorsiKategori[];
@@ -484,6 +503,10 @@ export function hitungRencana(m: Masukan): Rencana {
       // Dinolkan saat jatahnya sudah terlampaui: "boleh belanja minus tiga
       // belas juta seminggu" bukan aturan yang bisa dijalankan siapa pun.
       perMinggu: potongan.length > 0 ? bulatkan(Math.max(0, sisa) / potongan.length) : 0,
+      // Yang tautannya ke RAB memakai sisa baris yang belum selesai — baris
+      // yang baru dibayar separuh masih menuntut sisanya. Yang tidak ditautkan
+      // memakai sisa jatahnya; yang sudah lewat jatah tidak keluar lagi.
+      akanKeluar: Math.max(0, dariRab && k.akanKeluar != null ? k.akanKeluar : sisa),
     };
   });
 
@@ -492,6 +515,7 @@ export function hitungRencana(m: Masukan): Rencana {
     cadanganGaji,
     jatahKategori: kategori.reduce((t, k) => t + k.jatah, 0),
     jatahKas,
+    keluarKategori: kategori.reduce((t, k) => t + k.akanKeluar, 0),
     skenario, minggu, kategori,
     rencanaRab: minggu.reduce((t, w) => t + w.rencanaRab, 0),
     rencanaRabTanpaTanggal: tanpaTanggal,
@@ -637,6 +661,14 @@ export function hitungRunway(opsi: {
    * memakai `pengeluaranBulanan`: di sana belum ada apa pun untuk diukur.
    */
   lajuOperasionalHarian?: number | null;
+  /**
+   * Sisa uang keluar bulan berjalan menurut rencana: jumlah yang belum
+   * direalisasi dari seluruh kategori. Bila ada, ia menggantikan belanja
+   * operasional yang diukur dari laju harian — bulan ini dihitung dari apa
+   * yang memang direncanakan, bukan dari kebiasaan delapan belas hari
+   * terakhir. Komitmen, cicilan dan kewajiban tetap dikurangkan sendiri.
+   */
+  sisaKeluarRencana?: number | null;
   horizon?: number;
 }): Runway {
   const {
@@ -644,6 +676,7 @@ export function hitungRunway(opsi: {
     komitmenBelumBayar, komitmenRutinSebulan,
     kebutuhanGaji, cicilanPada, kewajibanPada, hariTersisa, hariSebulan,
     lajuOperasionalHarian = null,
+    sisaKeluarRencana = null,
     horizon = HORIZON_BULAN,
   } = opsi;
   const cicilan = cicilanPada ?? (() => 0);
@@ -666,9 +699,11 @@ export function hitungRunway(opsi: {
 
   // Sisa bulan berjalan: dari laju yang terukur bila ada, kalau tidak dari
   // angka bulanan yang dibagi rata menurut sisa hari.
-  const sisaOperasional = lajuOperasionalHarian !== null
-    ? lajuOperasionalHarian * hariTersisa
-    : operasionalSebulan * porsi;
+  const sisaOperasional = sisaKeluarRencana !== null
+    ? sisaKeluarRencana
+    : lajuOperasionalHarian !== null
+      ? lajuOperasionalHarian * hariTersisa
+      : operasionalSebulan * porsi;
 
   const catat = (period: Period, saldoAwal: number, masuk: number, keluar: number) => {
     const saldoAkhir = saldoAwal + masuk - keluar;
@@ -807,4 +842,38 @@ export function gajiRabBulanIni(
     }
   }
   return { sudahKeluar, akanKeluar, tanpaTanggal };
+}
+
+/**
+ * Batas hari "gaji awal bulan": gaji yang dibayar sebelum uang masuk bulan itu
+ * sempat terkumpul, sehingga harus sudah tersedia di saldo akhir bulan
+ * sebelumnya. Tanggal 1 sampai 7 — gaji pokok di tanggal 1, dan gaji cabang
+ * yang dibayar di minggu pertama. Service dan bonus yang dibayar pertengahan
+ * bulan ditutup oleh uang masuk bulan itu sendiri.
+ */
+export const HARI_GAJI_AWAL = 7;
+
+/**
+ * Gaji bulan depan yang harus tersedia di saldo akhir bulan ini: baris RAB
+ * gaji yang dibayar tanggal 1 sampai HARI_GAJI_AWAL.
+ *
+ * `tanggal` adalah perkiraan tanggal bayar baris itu, atau — bila belum
+ * diisi — tanggal baris yang sama di bulan sebelumnya. Yang tidak punya
+ * keduanya tetap dihitung, karena tidak diketahui kapan dibayar: lebih aman
+ * menjaganya daripada menganggapnya ditutup uang masuk yang belum datang.
+ */
+export function gajiAwalBulan(
+  baris: readonly { amount: number; tanggal: Date | null }[],
+): { total: number; tanpaTanggal: number } {
+  let total = 0;
+  let tanpaTanggal = 0;
+  for (const b of baris) {
+    if (b.tanggal === null) {
+      total += b.amount;
+      tanpaTanggal += b.amount;
+    } else if (b.tanggal.getUTCDate() <= HARI_GAJI_AWAL) {
+      total += b.amount;
+    }
+  }
+  return { total, tanpaTanggal };
 }

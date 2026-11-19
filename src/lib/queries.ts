@@ -8,7 +8,7 @@ import { prisma } from './db';
 import { isProfitLoss, round, signedBalance } from './accounting';
 import {
   anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
-  gabungJenisRab, jenisPerBarang, pemilikSisa, ringkasRab, scopeBersamaKah,
+  gabungJenisRab, jenisPerBarang, pemilikSisa, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
 } from './rab';
@@ -19,7 +19,7 @@ import { rekapPenampung, type RekapPenampung } from './penampung';
 import { addMonths, currentPeriod, monthOf, periodEndExclusive, periodStart, periodsBetween, toPeriod, type Period } from './period';
 import type { MonthlyActual } from './forecast';
 import {
-  HORIZON_BULAN, SKENARIO, akunGajiKah, gajiRabBulanIni, hitungRencana, hitungRunway,
+  HORIZON_BULAN, SKENARIO, akunGajiKah, gajiAwalBulan, gajiRabBulanIni, hitungRencana, hitungRunway,
   lajuOperasionalBerjalan, lipatBelanja, usulkanProyeksi,
   type LajuOperasional, type ModeBelanja, type Rencana, type Runway, type Skenario,
 } from './rencana-kas';
@@ -1026,6 +1026,18 @@ export type RencanaKasDetail = {
      */
     gajiRab: { sudahKeluar: number; akanKeluar: number; tanpaTanggal: number } | null;
     /**
+     * Gaji awal bulan (tanggal 1-7) dari RAB yang jadi kebutuhan gaji, dan
+     * berapa di antaranya yang tanggalnya belum diketahui sama sekali.
+     */
+    gajiAwal: { total: number; tanpaTanggal: number; seluruhRab: number } | null;
+    /**
+     * Asal sisa uang keluar bulan berjalan di ramalan: kategori yang belum
+     * direalisasi, atau laju belanja harian bila belum ada kategori.
+     */
+    sisaBulanDari: 'KATEGORI' | 'LAJU';
+    /** Jumlah yang belum direalisasi seluruh kategori; null tanpa kategori. */
+    keluarKategori: number | null;
+    /**
      * Laju belanja operasional harian yang terukur dari bulan berjalan, dipakai
      * meramalkan sisa bulan ini. null bila belum layak diukur — bulan masih
      * terlalu muda, atau bulan sebelumnya belum pernah dilaporkan.
@@ -1792,6 +1804,14 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     kumpulan.push(...baris);
     barisPerJenis.set(b.kind, kumpulan);
   }
+  // Yang masih akan keluar dari tiap jenis RAB: sisa baris yang belum
+  // selesai, termasuk yang baru sebagian dibayar. Dipakai ramalan kas sebagai
+  // sisa uang keluar kategori yang ditautkan ke RAB.
+  const sisaKeluarPerJenis = new Map<string, number>(
+    [...barisPerJenis].map(([kind, baris]) => [
+      kind, round(baris.reduce((t, b) => t + sisaAkanKeluar(b, round), 0)),
+    ]),
+  );
   const rekapPerJenis = new Map<string, RekapRab>(
     [...barisPerJenis].map(([kind, baris]) => [kind, rekapRab(baris, round)]),
   );
@@ -1834,6 +1854,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     budget: k.budget,
     rabKind: k.rabKind,
     rab: k.rabKind ? (rekapPerJenis.get(k.rabKind) ?? REKAP_KOSONG) : null,
+    akanKeluarRab: k.rabKind ? (sisaKeluarPerJenis.get(k.rabKind) ?? 0) : null,
     cashAccountId: k.cashAccountId,
     cashAccountLabel: k.cashAccount ? `${k.cashAccount.code} ${k.cashAccount.name}` : null,
     manual: terpakaiKategori(k.id, false),
@@ -1927,8 +1948,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       account: { subtype: 'PAYROLL', code: { startsWith: '6130.' } },
     },
     select: {
-      amount: true, planDate: true, realAmount: true, realDate: true,
-      budget: { select: { period: true } },
+      amount: true, planDate: true, realAmount: true, realDate: true, accountId: true, notes: true,
+      budget: { select: { period: true, scope: true } },
       account: { select: { code: true, subtype: true } },
     },
   })).filter((l) => akunGajiKah(l.account));
@@ -1945,6 +1966,23 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // harus menutupinya; tanpa RAB bulan depan, RAB bulan ini sebagai gantinya.
   // Komitmen bernama gaji tinggal sebagai pilihan terakhir untuk bulan-bulan
   // yang belum punya RAB gaji sama sekali.
+  //
+  // Hanya gaji AWAL BULAN (tanggal 1-7) yang dijaga: dibayar sebelum uang
+  // masuk bulan itu sempat terkumpul. Service dan bonus pertengahan bulan
+  // ditutup uang masuk bulan itu sendiri. Baris bulan depan yang belum
+  // bertanggal — Salin RAB memang tidak menyalin tanggal — memakai tanggal
+  // baris yang sama di bulan ini.
+  const kunciGaji = (l: { accountId: string; notes: string | null; budget: { scope: string } }) =>
+    `${l.budget.scope}|${l.accountId}|${(l.notes ?? '').trim().toLowerCase()}`;
+  const tanggalBulanIni = new Map(
+    barisGaji.filter((l) => l.budget.period === period && l.planDate).map((l) => [kunciGaji(l), l.planDate!]),
+  );
+  const awalBulan = (p: Period) => gajiAwalBulan(
+    barisGaji.filter((l) => l.budget.period === p).map((l) => ({
+      amount: l.amount,
+      tanggal: l.planDate ?? (p === bulanDepan ? tanggalBulanIni.get(kunciGaji(l)) ?? null : null),
+    })),
+  );
   const gajiKomitmen = plan.commitments
     .filter((k) => k.recurring && /gaji/i.test(k.label))
     .reduce((s, k) => s + k.amount, 0);
@@ -1953,9 +1991,16 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       : totalGaji(period) > 0 ? { jenis: 'RAB', period }
         : gajiKomitmen > 0 ? { jenis: 'KOMITMEN' }
           : null;
+  const gajiAwal = sumberUsulanGaji?.jenis === 'RAB' ? awalBulan(sumberUsulanGaji.period) : null;
   const usulanGaji = sumberUsulanGaji === null ? null
-    : sumberUsulanGaji.jenis === 'RAB' ? totalGaji(sumberUsulanGaji.period)
+    : gajiAwal ? round(gajiAwal.total)
       : gajiKomitmen;
+
+  // Sisa uang keluar bulan berjalan diambil dari kategori begitu kategorinya
+  // ada: jumlah yang belum direalisasi. Gaji bulan ini pun ikut di sana —
+  // lewat kategori HR — jadi tidak dikurangkan sendiri lagi. Tanpa kategori,
+  // sisa bulan diramal dari laju harian seperti sebelumnya.
+  const modeKategori = kategori.length > 0;
   const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
 
   const rencana = terakhir
@@ -1975,9 +2020,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
           ...plan.commitments.map((k) => ({
             label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
           })),
-          // Gaji RAB yang tanggalnya sesudah posisi kas belum tercermin di
-          // saldo, jadi diperlakukan seperti komitmen yang belum dibayar.
-          ...(gajiRab && gajiRab.akanKeluar > 0
+          // Tanpa kategori, gaji RAB yang tanggalnya sesudah posisi kas belum
+          // tercermin di saldo, jadi diperlakukan seperti komitmen yang belum
+          // dibayar. Dengan kategori, gaji itu sudah ada di kategori HR.
+          ...(!modeKategori && gajiRab && gajiRab.akanKeluar > 0
             ? [{ label: 'Gaji menurut RAB', amount: gajiRab.akanKeluar, dueDay: null, paid: false }]
             : []),
         ],
@@ -1999,6 +2045,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
           // butuh uang. Tanpa RAB angka ini tidak diketahui, dan diturunkan
           // dari jatah dikurangi belanja seperti sebelumnya.
           belum: k.rab ? k.rab.belum : null,
+          akanKeluar: k.akanKeluarRab,
         })),
       })
     : null;
@@ -2049,6 +2096,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             cicilanPada: cicilanBulan,
             kewajibanPada: kewajibanBulan,
             lajuOperasionalHarian: laju?.perHari ?? null,
+            sisaKeluarRencana: modeKategori ? rencana.keluarKategori : null,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
@@ -2213,6 +2261,11 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       usulanGaji,
       sumberUsulanGaji,
       gajiRab,
+      gajiAwal: gajiAwal && sumberUsulanGaji?.jenis === 'RAB'
+        ? { total: round(gajiAwal.total), tanpaTanggal: round(gajiAwal.tanpaTanggal), seluruhRab: totalGaji(sumberUsulanGaji.period) }
+        : null,
+      sisaBulanDari: modeKategori ? 'KATEGORI' : 'LAJU',
+      keluarKategori: modeKategori && rencana ? round(rencana.keluarKategori) : null,
       lajuBerjalan: laju,
     },
     runway,
