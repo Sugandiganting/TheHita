@@ -110,6 +110,13 @@ export type Masukan = {
    */
   proyek?: number;
   /**
+   * Seluruh uang keluar terjadwal bulan ini sesudah posisi kas, dari panel
+   * Belanja bulan ini: sisa baris RAB yang disahkan, item proyek, komitmen,
+   * kewajiban, dan cicilan rencana belanja, ditambah yang sudah dibayar
+   * sesudah posisi kas. Menggantikan kategori dengan jatah yang diketik.
+   */
+  keluarTerjadwal?: number;
+  /**
    * Yang sudah dibelanjakan SETELAH tanggal posisi kas di atas. Belanja sebelum
    * tanggal itu tidak dihitung di sini karena sudah tercermin pada saldo yang
    * dilaporkan — menghitungnya dua kali akan mengecilkan anggaran tanpa sebab.
@@ -271,6 +278,8 @@ export type Rencana = {
   kewajiban: number;
   /** Uang proyek Approved yang keluar bulan ini sesudah posisi kas. */
   proyek: number;
+  /** Seluruh uang keluar terjadwal bulan ini sesudah posisi kas. */
+  keluarTerjadwal: number;
   terpakai: number;
   /** Gaji bulan depan yang disisihkan dari plafon belanja bulan ini. */
   cadanganGaji: number;
@@ -401,6 +410,7 @@ export function hitungRencana(m: Masukan): Rencana {
   const cicilanBelanja = m.cicilanBelanja ?? 0;
   const kewajiban = m.kewajiban ?? 0;
   const proyek = m.proyek ?? 0;
+  const keluarTerjadwal = m.keluarTerjadwal ?? 0;
   const terpakai = m.terpakai ?? m.kategori.reduce((s, k) => s + (k.terpakai ?? 0), 0);
   const cadanganGaji = Math.max(0, m.kebutuhanGaji ?? 0);
 
@@ -409,7 +419,7 @@ export function hitungRencana(m: Masukan): Rencana {
       s,
       hasilSkenario(
         s, m.proyeksi[s], m.masukSampaiKini, m.saldoKas,
-        komitmenBelumBayar + cicilanBelanja + kewajiban + proyek, terpakai, potongan.length,
+        komitmenBelumBayar + cicilanBelanja + kewajiban + proyek + keluarTerjadwal, terpakai, potongan.length,
         cadanganGaji,
       ),
     ]),
@@ -519,7 +529,7 @@ export function hitungRencana(m: Masukan): Rencana {
   });
 
   return {
-    mulai, selesai, hari, komitmenBelumBayar, cicilanBelanja, kewajiban, proyek, terpakai,
+    mulai, selesai, hari, komitmenBelumBayar, cicilanBelanja, kewajiban, proyek, keluarTerjadwal, terpakai,
     cadanganGaji,
     jatahKategori: kategori.reduce((t, k) => t + k.jatah, 0),
     jatahKas,

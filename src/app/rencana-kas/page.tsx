@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getJenisRab, getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
+import { getRencanaKas, getRencanaKasPeriods } from '@/lib/queries';
 import { addMonths, currentPeriod } from '@/lib/period';
 import { HORIZON_BULAN, NAMA_SKENARIO, SKENARIO, type Skenario } from '@/lib/rencana-kas';
 import { NAMA_KADENS } from '@/lib/rencana-belanja';
@@ -14,13 +14,12 @@ import { BulananChart } from '@/components/bulanan-chart';
 import { CapaianTarget } from '@/components/capaian-target';
 import { LajuHarianBlok } from '@/components/laju-harian';
 import { NonOperasiForm } from '@/components/non-operasi-form';
-import { namaJenis } from '@/lib/rab';
 import type { SearchParams } from '@/lib/search-params';
 import {
-  AssumptionForm, CategoryBudget, CategoryDelete, CategoryForm, CategoryRab,
-  CheckpointDelete, CheckpointForm,
-  CommitmentForm, CommitmentRow, PlanDelete, PlanForm, ProjectionForm, SpendDelete, SpendForm,
+  AssumptionForm, CheckpointDelete, CheckpointForm,
+  CommitmentForm, PlanDelete, PlanForm, ProjectionForm,
 } from '@/components/rencana-kas-form';
+import { BelanjaBulanPanel } from '@/components/belanja-bulan-panel';
 import { JadwalTersimpan, PurchaseActions, PurchaseCalculator } from '@/components/belanja-form';
 import { Alert, Badge, Card, EmptyState, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 
@@ -89,7 +88,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   await pastikanBulanBerjalan(currentPeriod());
   const daftar = await getRencanaKasPeriods();
   const dipilih = one(params.periode) ?? daftar[0] ?? currentPeriod();
-  const [data, jenisRab] = await Promise.all([getRencanaKas(dipilih), getJenisRab()]);
+  const data = await getRencanaKas(dipilih);
 
   const pemilih = (
     <Card className="card-pad">
@@ -125,7 +124,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
         <div className="mt-6">
           <EmptyState
             title={`Belum ada rencana untuk ${formatPeriod(dipilih)}`}
-            description="Buat rencana lewat formulir di atas. Setelah bulan pertama ada, bulan-bulan berikutnya muncul sendiri — kategori, komitmen berulang dan asumsinya tersalin."
+            description="Buat rencana lewat formulir di atas. Setelah bulan pertama ada, bulan-bulan berikutnya muncul sendiri — komitmen berulang dan asumsinya tersalin."
           />
         </div>
       </>
@@ -169,10 +168,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
   const lanjutanDari = data.checkpoint.length === 0 && data.belanja.length === 0
     ? daftar[daftar.indexOf(dipilih) + 1] ?? null
     : null;
-  const belumBayar = data.komitmen.filter((k) => !k.paid);
-  // Komitmen sekali ini tidak termasuk dalam pengeluaran rutin bulanan, jadi
-  // hanya yang ini yang betul-betul menambah tekanan di bulan berjalan.
-  const sekaliIni = belumBayar.filter((k) => !k.recurring).reduce((t, k) => t + k.amount, 0);
 
   return (
     <>
@@ -194,8 +189,8 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 terisi terbaca seperti sisa bulan kemarin yang lupa dibersihkan. */}
             {lanjutanDari && (
               <>
-                Rencana {formatPeriod(dipilih)} melanjutkan {formatPeriod(lanjutanDari)} — kategori,
-                komitmen berulang, pengeluaran rutin dan kebutuhan gaji sudah tersalin.{' '}
+                Rencana {formatPeriod(dipilih)} melanjutkan {formatPeriod(lanjutanDari)} — komitmen
+                berulang, pengeluaran rutin dan kebutuhan gaji sudah tersalin.{' '}
               </>
             )}
             Belum ada laporan posisi kas untuk bulan ini. Isi saldo kas dan uang masuk kumulatif di panel
@@ -238,9 +233,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {rencana.skenario.NORMAL.bolehBelanja < 0 && (
                 <Alert tone="danger">
-                  Pada skenario normal, kas tidak cukup menutup komitmen yang belum dibayar — kurang{' '}
-                  <strong>{formatRupiah(-rencana.skenario.NORMAL.bolehBelanja)}</strong>. Tidak ada ruang belanja
-                  sampai ada uang masuk tambahan atau komitmen digeser.
+                  Pada skenario normal, kas tidak cukup menutup belanja bulan ini dan gaji awal bulan depan —
+                  kurang <strong>{formatRupiah(-rencana.skenario.NORMAL.bolehBelanja)}</strong>. Tidak ada ruang
+                  belanja tambahan sampai ada uang masuk tambahan atau sebagian belanja digeser ke bulan depan.
                 </Alert>
               )}
 
@@ -459,7 +454,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
 
               {data.runway && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Bila pola belanja tidak berubah dan plafon mingguan di bawah tidak diikuti. Saldo akhir sebuah bulan harus menutup gaji yang jatuh tempo awal bulan berikutnya. Uang keluarnya sama untuk ketiga skenario — yang membedakan hanya uang masuknya.">
+                  <SectionTitle hint="Bulan berjalan dikurangi seluruh belanja bulan ini; bulan-bulan sesudahnya dikurangi pengeluaran rutin. Saldo akhir sebuah bulan harus menutup gaji yang jatuh tempo awal bulan berikutnya. Uang keluarnya sama untuk ketiga skenario — yang membedakan hanya uang masuknya.">
                     Kapan kas habis
                   </SectionTitle>
 
@@ -565,15 +560,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                   <span className="block text-[11px] font-normal text-slate-400">
                                     sisa {data.rencana?.hari ?? 0} hari ·{' '}
                                     {data.asumsi.sisaBulanDari === 'KATEGORI' ? (
-                                      // Dari rencana, bukan dari kebiasaan: yang belum
-                                      // direalisasi di tabel kategori, ditambah komitmen.
-                                      <>
-                                        kategori belum direalisasi{' '}
-                                        {formatRupiahShort(data.asumsi.keluarKategori ?? 0)}
-                                        {(data.rencana?.komitmenBelumBayar ?? 0) > 0 && (
-                                          <> + komitmen {formatRupiahShort(data.rencana!.komitmenBelumBayar)}</>
-                                        )}
-                                      </>
+                                      // Dari rencana, bukan dari kebiasaan: seluruh
+                                      // belanja bulan ini yang masih akan keluar.
+                                      <>belanja bulan ini {formatRupiahShort(data.asumsi.keluarKategori ?? 0)}</>
                                     ) : laju ? (
                                       <>
                                         terukur {formatRupiahShort(laju.perHari)}/hari
@@ -636,18 +625,10 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     Pengeluaran rutin {formatRupiah(data.asumsi.monthlyOutflow ?? data.asumsi.usulanOutflow ?? 0)} per
                     bulan, gaji awal bulan yang dijaga {formatRupiah(data.asumsi.salaryNeed ?? data.asumsi.usulanGaji ?? 0)} per
                     bulan — ubah di panel samping.{' '}
-                    <strong>Bulan berjalan</strong> dikurangi komitmen yang belum dibayar{' '}
-                    {formatRupiah(rencana.komitmenBelumBayar)}
-                    {sekaliIni > 0 && <> — di antaranya {formatRupiah(sekaliIni)} sekali ini saja</>}, lalu
-                    {data.asumsi.sisaBulanDari === 'KATEGORI' ? (
-                      <>
-                        {' '}seluruh kategori yang belum direalisasi{' '}
-                        {formatRupiah(data.asumsi.keluarKategori ?? 0)} — kategori yang belanjanya sudah
-                        menyamai jatahnya tidak lagi mengurangi apa pun.{' '}
-                      </>
-                    ) : (
-                      <> belanja operasional sisa bulan.{' '}</>
-                    )}
+                    <strong>Bulan berjalan</strong> dikurangi seluruh{' '}
+                    <a href="#belanja-bulan" className="text-brand-700 hover:underline">belanja bulan ini</a> yang
+                    masih akan keluar {formatRupiah(rencana.keluarTerjadwal)} — RAB yang disahkan, proyek,
+                    komitmen, kewajiban, dan cicilan.{' '}
                     <strong>Bulan-bulan berikutnya</strong> memakai proyeksinya masing-masing dikurangi
                     pengeluaran rutin
                     {data.musim.aktif ? (
@@ -684,30 +665,10 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   <Suku label={`Saldo ${terakhir ? formatDate(terakhir.date) : ''}`} value={terakhir?.cashOnHand ?? 0} />
                   <Operator>+</Operator>
                   <Suku label="Sisa uang masuk" value={rencana.skenario.NORMAL.sisaMasuk} />
-                  {belumBayar.map((k) => (
-                    <span key={k.id} className="flex items-start gap-4">
-                      <Operator>−</Operator>
-                      <Suku label={k.dueDay ? `${k.label} tgl ${k.dueDay}` : k.label} value={k.amount} />
-                    </span>
-                  ))}
-                  {rencana.cicilanBelanja > 0 && (
-                    <span className="flex items-start gap-4">
-                      <Operator>−</Operator>
-                      <Suku label="Cicilan rencana belanja" value={rencana.cicilanBelanja} />
-                    </span>
-                  )}
-                  {rencana.kewajiban > 0 && (
-                    <span className="flex items-start gap-4">
-                      <Operator>−</Operator>
-                      <Suku label="Kewajiban terjadwal" value={rencana.kewajiban} />
-                    </span>
-                  )}
-                  {rencana.proyek > 0 && (
-                    <span className="flex items-start gap-4">
-                      <Operator>−</Operator>
-                      <Suku label="Proyek Approved" value={rencana.proyek} />
-                    </span>
-                  )}
+                  <span className="flex items-start gap-4">
+                    <Operator>−</Operator>
+                    <Suku label="Belanja bulan ini" value={rencana.keluarTerjadwal} />
+                  </span>
                   {rencana.cadanganGaji > 0 && (
                     <span className="flex items-start gap-4">
                       <Operator>−</Operator>
@@ -717,18 +678,14 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       />
                     </span>
                   )}
-                  {rencana.terpakai > 0 && (
-                    <span className="flex items-start gap-4">
-                      <Operator>−</Operator>
-                      <Suku label="Sudah dibelanjakan" value={rencana.terpakai} />
-                    </span>
-                  )}
                   <Operator>=</Operator>
                   <Suku label="Boleh belanja" value={rencana.skenario.NORMAL.bolehBelanja} tebal />
                 </div>
                 <p className="mt-4 text-xs text-slate-500">
                   Sisa uang masuk = proyeksi normal {formatRupiah(data.dipakai.NORMAL)} − yang sudah masuk{' '}
-                  {formatRupiah(terakhir?.incomeToDate ?? 0)}. Di luar gaji, service, dan cicilan.
+                  {formatRupiah(terakhir?.incomeToDate ?? 0)}. <strong>Boleh belanja</strong> adalah ruang belanja
+                  di luar semua yang sudah dijadwalkan di panel Belanja bulan ini — angka yang sama dipakai
+                  kalkulator rencana belanja.
                 </p>
               </Card>
 
@@ -737,7 +694,7 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                   terjadi, dan merencanakannya lagi tidak ada artinya. */}
               {mingguan && mingguan.baris.length > 0 && (
                 <Card className="card-pad min-w-0">
-                  <SectionTitle hint="Baris yang sudah lewat memakai laporan posisi kas, jadi uang masuknya angka nyata — bukan hasil membagi rata. Plafon dasar selalu boleh dipakai; tambahan baru dibuka bila uang masuk kumulatif sudah mencapai ambangnya. Rencana belanja adalah RAB bulan ini yang uangnya belum keluar, ditaruh di minggu perkiraan tanggalnya; ia tidak mengubah plafon, hanya memperlihatkan minggu mana yang merencanakan lebih banyak daripada yang sanggup dibayar.">
+                  <SectionTitle hint="Baris yang sudah lewat memakai laporan posisi kas, jadi uang masuknya angka nyata — bukan hasil membagi rata. Jadwal keluar adalah belanja bulan ini (RAB disahkan, proyek, komitmen, kewajiban, cicilan) yang uangnya belum keluar, ditaruh di minggu tanggalnya; bandingkan dengan target uang masuk minggu itu. Plafon adalah ruang belanja di luar jadwal itu: dasarnya selalu boleh dipakai, tambahannya baru dibuka bila uang masuk kumulatif sudah mencapai ambangnya.">
                     Aturan mingguan
                   </SectionTitle>
 
@@ -769,9 +726,9 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <thead className="border-b border-slate-200">
                         <tr>
                           <th className="th">Minggu</th>
-                          <th className="th num">Plafon dasar</th>
+                          <th className="th num">Jadwal keluar</th>
+                          <th className="th num">Plafon di luar jadwal</th>
                           <th className="th num">Maksimum</th>
-                          <th className="th num">Rencana belanja</th>
                           <th className="th num">Target masuk</th>
                           <th className="th num">Masuk nyata</th>
                         </tr>
@@ -808,6 +765,40 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                   </span>
                                 )}
                               </td>
+                              {/* Jadwal keluar minggu ini dari panel Belanja bulan ini,
+                                  disandingkan dengan target uang masuk minggu itu:
+                                  minggu yang jadwalnya melebihi targetnya perlu
+                                  ditutup dari saldo atau digeser. */}
+                              <td className="td num">
+                                {(() => {
+                                  const w = rencanaMinggu.get(b.mulai.toISOString());
+                                  if (!w || w.rencanaRab === 0) {
+                                    return <span className="text-xs text-slate-400">—</span>;
+                                  }
+                                  const lewat = !b.lalu && w.rencanaRab > b.target;
+                                  return (
+                                    <>
+                                      <span className={lewat ? 'font-medium text-amber-700' : ''}>
+                                        {formatRupiah(w.rencanaRab)}
+                                      </span>
+                                      {w.rencanaRabBertanggal === 0 ? (
+                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                          disebar rata
+                                        </span>
+                                      ) : w.rencanaRabBertanggal < w.rencanaRab ? (
+                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                                          {formatRupiahShort(w.rencanaRabBertanggal)} bertanggal
+                                        </span>
+                                      ) : null}
+                                      {lewat && (
+                                        <span className="mt-0.5 block text-[11px] font-medium text-amber-700">
+                                          {formatRupiahShort(w.rencanaRab - b.target)} di atas target masuk
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </td>
                               <td className="td num">
                                 {b.plafonDasar === null ? '—' : formatRupiah(b.plafonDasar)}
                               </td>
@@ -823,43 +814,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                                     {formatRupiahShort(b.targetKumulatif)}
                                   </span>
                                 ) : null}
-                              </td>
-                              {/* Rencana belanja RAB minggu ini, disandingkan dengan
-                                  plafonnya. Plafon menjawab "kas sanggup berapa",
-                                  kolom ini menjawab "yang direncanakan berapa" —
-                                  dan yang perlu dilihat justru ketika keduanya
-                                  berselisih, karena di situlah belanja perlu digeser
-                                  atau uang masuk perlu dikejar lebih dulu. */}
-                              <td className="td num">
-                                {(() => {
-                                  const w = rencanaMinggu.get(b.mulai.toISOString());
-                                  if (!w || w.rencanaRab === 0) {
-                                    return <span className="text-xs text-slate-400">—</span>;
-                                  }
-                                  const maks = (b.plafonDasar ?? 0) + (b.tambahan ?? 0);
-                                  const lewat = b.plafonDasar !== null && w.rencanaRab > maks;
-                                  return (
-                                    <>
-                                      <span className={lewat ? 'font-medium text-red-600' : ''}>
-                                        {formatRupiah(w.rencanaRab)}
-                                      </span>
-                                      {w.rencanaRabBertanggal === 0 ? (
-                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                          disebar rata
-                                        </span>
-                                      ) : w.rencanaRabBertanggal < w.rencanaRab ? (
-                                        <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                          {formatRupiahShort(w.rencanaRabBertanggal)} bertanggal
-                                        </span>
-                                      ) : null}
-                                      {lewat && (
-                                        <span className="mt-0.5 block text-[11px] font-medium text-red-600">
-                                          lewat plafon {formatRupiahShort(w.rencanaRab - maks)}
-                                        </span>
-                                      )}
-                                    </>
-                                  );
-                                })()}
                               </td>
                               <td className="td num text-slate-500">{formatRupiah(b.target)}</td>
                               {/* Selisihnya menempel pada angka nyatanya, bukan jadi kolom
@@ -890,13 +844,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                         <tr>
                           <td className="td whitespace-nowrap">Sisa {formatPeriod(data.period)}</td>
                           <td className="td num">
+                            {rencana.rencanaRab === 0 ? '—' : formatRupiah(rencana.rencanaRab)}
+                          </td>
+                          <td className="td num">
                             {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar, 0))}
                           </td>
                           <td className="td num">
                             {formatRupiah(rencana.minggu.reduce((s, m) => s + m.plafonDasar + m.tambahan, 0))}
-                          </td>
-                          <td className="td num">
-                            {rencana.rencanaRab === 0 ? '—' : formatRupiah(rencana.rencanaRab)}
                           </td>
                           <td className="td num">
                             {formatRupiah(
@@ -920,17 +874,17 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                     <p className="mt-3 text-xs text-slate-500">
                       {rencana.rencanaRabTanpaTanggal > 0 && (
                         <>
-                          <strong>{formatRupiah(rencana.rencanaRabTanpaTanggal)}</strong> dari rencana
-                          belanja itu belum punya perkiraan tanggal, jadi disebar rata menurut panjang
-                          tiap minggu. Isi tanggalnya di menu RAB supaya tahu minggu mana yang
+                          <strong>{formatRupiah(rencana.rencanaRabTanpaTanggal)}</strong> dari jadwal
+                          keluar itu belum punya tanggal, jadi disebar rata menurut panjang tiap minggu.
+                          Isi tanggalnya di menu RAB atau komitmen supaya tahu minggu mana yang
                           sebenarnya padat.{' '}
                         </>
                       )}
                       {rencana.rencanaRabTerlambat > 0 && (
                         <>
                           <strong>{formatRupiah(rencana.rencanaRabTerlambat)}</strong> tanggalnya sudah
-                          lewat tetapi belum dilaporkan terealisasi, jadi ditarik ke minggu pertama —
-                          uangnya tetap harus keluar.
+                          lewat tetapi belum dibayar, jadi ditarik ke minggu pertama — uangnya tetap
+                          harus keluar.
                         </>
                       )}
                     </p>
@@ -945,240 +899,13 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                 </Card>
               )}
 
-              {/*
-                * Kartu ini muncul walau belum ada satu kategori pun.
-                *
-                * Dulu ia hanya muncul begitu kategorinya ada — padahal di
-                * dalamnya justru terletak satu-satunya formulir untuk
-                * menambah kategori. Bulan yang belum punya kategori karena
-                * itu menampilkan "Tambahkan kategori terlebih dahulu" di
-                * panel belanja, tanpa menyediakan tempat untuk melakukannya.
-                */}
-              <Card className="card-pad min-w-0" id="kategori">
-                  <SectionTitle hint="Kategori yang ditautkan ke RAB mengambil ketiga angkanya dari sana dan tidak bisa diketik: jatah adalah total RAB jenis itu bulan ini seluruh cabang, sudah direalisasi adalah yang dilaporkan di menu RAB, dan belum direalisasi adalah anggaran baris yang belum dilaporkan sama sekali. Ketiganya tidak saling menjumlah — jatah adalah rencana, realisasi adalah uang nyata. Baris yang sudah sebagian berjalan disebut terpisah. Kategori yang belum ditautkan masih memakai jatah yang diketik sendiri, dengan sisa = jatah − belanja.">
-                    Plafon dan realisasi per kategori
-                  </SectionTitle>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[860px]">
-                      {/* Urutannya mengikuti hitungannya: jatah − dipakai = sisa, bersebelahan
-                          dan terbaca dari kiri ke kanan. Belanja yang sudah tercermin di saldo
-                          tidak jadi kolom tersendiri — ia hampir selalu sama dengan kolom
-                          sebelahnya, dan dua angka kembar bersebelahan membuat seluruh tabel
-                          terbaca seperti teka-teki. Tempatnya di baris kecil, hanya saat berbeda —
-                          dan baris itu menyebut akibatnya, bukan hanya keberadaannya, karena yang
-                          membacanya justru sedang bertanya mengapa sisa tidak ikut berkurang. */}
-                      <thead className="border-b border-slate-200">
-                        <tr>
-                          <th className="th">Kategori</th>
-                          <th className="th num">Jatah bulan ini</th>
-                          <th className="th num">Sudah direalisasi</th>
-                          <th className="th num">Belum direalisasi</th>
-                          <th className="th num">Plafon/minggu</th>
-                          <th className="th num">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {rencana.kategori.length === 0 && (
-                          <tr>
-                            <td className="td text-slate-500" colSpan={6}>
-                              Belum ada kategori. Tambahkan di bawah — biasanya Purchasing, HR dan
-                              Bank Perusahaan, satu untuk tiap kantong uang yang dipegang terpisah.
-                            </td>
-                          </tr>
-                        )}
-                        {rencana.kategori.map((k, i) => {
-                          const sumber = data.kategori[i];
-                          const sisa = k.sisa;
-                          return (
-                            <tr key={k.label} className={sisa < 0 ? 'bg-red-50/40' : ''}>
-                              <td className="td">
-                                {k.label}
-                                {/* Tinggal satu tautan di sini: jenis RAB. Tautan ke kas
-                                    departemen dulu dipakai menghitung "sudah dipakai" dari
-                                    transfer, dan sejak angka itu diambil dari realisasi RAB
-                                    ia tidak lagi menentukan apa pun — transfer ke petty cash
-                                    purchasing memang belum berarti barangnya sudah dibeli.
-                                    Tautan yang sudah tersimpan tetap dipakai oleh kategori
-                                    yang belum ditautkan ke RAB. */}
-                                {sumber && (
-                                  <CategoryRab
-                                    id={sumber.id}
-                                    rabKind={sumber.rabKind}
-                                    jenis={jenisRab.map((j) => ({ nilai: j.code, label: j.name }))}
-                                  />
-                                )}
-                              </td>
-                              <td className="td num">
-                                {/* Kategori yang ditautkan ke RAB tidak bisa diketik:
-                                    RAB-lah keputusannya, dan angka yang bisa ditimpa di
-                                    sini akan diam-diam ketinggalan tiap kali RAB berubah.
-                                    Yang belum ditautkan tetap bisa diketik supaya
-                                    menautkan bisa satu per satu. */}
-                                {sumber?.rab
-                                  ? formatRupiah(k.jatah)
-                                  : sumber
-                                    ? <CategoryBudget id={sumber.id} jatah={k.jatah} />
-                                    : formatRupiah(k.jatah)}
-                                {sumber?.rab && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-brand-700">
-                                    dari RAB {namaJenis(jenisRab, sumber.rabKind!)}
-                                    {sumber.rab.anggaran === 0 && ' — bulan ini belum ada'}
-                                  </span>
-                                )}
-                                {/* Satu keterangan saja, dan yang benar: angka di kotak
-                                    isian bisa berasal dari pembagian menurut porsi, bukan
-                                    dari ketikan siapa pun. Menyebutnya "diketik sendiri"
-                                    membuat orang mengira ada yang pernah menetapkannya. */}
-                                {sumber && !sumber.rab && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
-                                    {k.ditetapkan
-                                      ? 'diketik sendiri — tautkan ke RAB agar ikut otomatis'
-                                      : 'belum ditetapkan — sementara dibagi menurut porsi'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="td num">
-                                {k.terpakai > 0 ? formatRupiah(k.terpakai) : '—'}
-                                {/* Jumlah barisnya disebut, bukan hanya rupiahnya: nol
-                                    rupiah dari sepuluh baris yang belum dilaporkan dan nol
-                                    rupiah dari sepuluh baris yang dibatalkan terlihat sama
-                                    di kolom angka, padahal yang pertama masih butuh uang. */}
-                                {sumber?.rab && sumber.rab.jumlah.SELESAI > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    {sumber.rab.jumlah.SELESAI} baris selesai
-                                    {sumber.rab.hemat !== 0 && (
-                                      <>
-                                        {' · '}
-                                        <span className={sumber.rab.hemat < 0 ? 'text-red-600' : 'text-emerald-700'}>
-                                          {sumber.rab.hemat < 0 ? 'lewat ' : 'hemat '}
-                                          {formatRupiahShort(Math.abs(sumber.rab.hemat))}
-                                        </span>
-                                      </>
-                                    )}
-                                  </span>
-                                )}
-                                {sumber?.rab && sumber.rab.jumlah.SELESAI === 0 && sumber.rab.anggaran > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    belum ada yang dilaporkan selesai
-                                  </span>
-                                )}
-                                {sumber && !sumber.rab && sumber.transfer > 0 && sumber.manual > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    transfer {formatRupiahShort(sumber.transfer)} + manual{' '}
-                                    {formatRupiahShort(sumber.manual)}
-                                  </span>
-                                )}
-                                {sumber && !sumber.rab && sumber.transfer > 0 && sumber.manual === 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    dari transfer
-                                    {sumber.transferPerCabang.length > 1
-                                      && ` · ${sumber.transferPerCabang.length} cabang`}
-                                  </span>
-                                )}
-                              </td>
-                              <td className={`td num ${sisa < 0 ? 'font-semibold text-red-600' : ''}`}>
-                                {formatRupiah(sisa)}
-                                {sisa < 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-red-600">
-                                    lewat jatah
-                                  </span>
-                                )}
-                                {/* Yang sedang berjalan bukan "belum" dan bukan "selesai":
-                                    sisanya masih mungkin keluar, tetapi belum tentu sebesar
-                                    anggarannya. Disebut terpisah supaya angka di atasnya
-                                    tidak terbaca sebagai seluruh yang masih akan keluar. */}
-                                {sumber?.rab && sumber.rab.berjalan > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
-                                    + {formatRupiahShort(sumber.rab.berjalan)} sedang berjalan
-                                    {` (${sumber.rab.jumlah.BERJALAN} baris)`}
-                                  </span>
-                                )}
-                                {sumber?.rab && sumber.rab.jumlah.BELUM > 0 && (
-                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    {sumber.rab.jumlah.BELUM} baris belum tersentuh
-                                  </span>
-                                )}
-                              </td>
-                              <td className="td num text-slate-500">{formatRupiah(k.perMinggu)}</td>
-                              <td className="td num">
-                                {sumber && (
-                                  <CategoryDelete
-                                    id={sumber.id}
-                                    jumlahBelanja={data.belanja.filter((e) => e.categoryId === sumber.id).length}
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="border-t-2 border-slate-200 font-semibold">
-                        <tr>
-                          <td className="td">Total</td>
-                          <td className="td num">{formatRupiah(rencana.jatahKategori)}</td>
-                          <td className="td num">
-                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.terpakai, 0))}
-                          </td>
-                          <td className="td num">
-                            {formatRupiah(rencana.kategori.reduce((t, k) => t + k.sisa, 0))}
-                            {data.kategori.some((k) => (k.rab?.berjalan ?? 0) > 0) && (
-                              <span className="mt-0.5 block text-[11px] font-normal text-amber-700">
-                                + {formatRupiahShort(
-                                  data.kategori.reduce((t, k) => t + (k.rab?.berjalan ?? 0), 0),
-                                )}{' '}
-                                sedang berjalan
-                              </span>
-                            )}
-                          </td>
-                          <td className="td num" colSpan={2} />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                  {/* Sejak jatahnya diketik sendiri, jumlahnya tidak lagi otomatis
-                      sama dengan yang kas sanggup — dan itu justru angka yang perlu
-                      dilihat. RAB menjawab "berapa yang direncanakan", kas menjawab
-                      "berapa yang ada"; keduanya memang bisa berbeda, asal bedanya
-                      tidak diam-diam. */}
-                  {rencana.jatahKategori > rencana.jatahKas ? (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, sedangkan
-                      kas bulan ini hanya sanggup{' '}
-                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal
-                      {rencana.cadanganGaji > 0 && ' (sesudah menyisihkan gaji bulan depan)'}
-                      &mdash; kelebihan <strong>{formatRupiah(rencana.jatahKategori - rencana.jatahKas)}</strong>.
-                      Plafon mingguan di bawah tetap mengikuti jatah yang Anda tetapkan, jadi
-                      selisih itu perlu ditutup dari uang masuk yang melebihi perkiraan, atau
-                      jatahnya yang diturunkan.
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-xs text-slate-500">
-                      Jumlah jatah <strong>{formatRupiah(rencana.jatahKategori)}</strong>, masih di
-                      dalam kemampuan kas bulan ini{' '}
-                      <strong>{formatRupiah(rencana.jatahKas)}</strong> menurut skenario normal
-                      {rencana.cadanganGaji > 0 && ' (sesudah menyisihkan gaji bulan depan)'}.
-                    </p>
-                  )}
-
-                  {/* Dua kolom angka di tabel ini tidak saling menjumpai, dan itu
-                      perlu dikatakan: jatah adalah rencana, realisasi adalah uang
-                      nyata, dan selisih keduanya bukan "sisa jatah" melainkan
-                      penghematan ditambah yang belum dibeli. Tanpa kalimat ini
-                      pembacanya akan menjumlahkan sendiri dan menyimpulkan ada
-                      angka yang salah. */}
-                  <p className="mt-3 text-xs text-slate-500">
-                    Kolom <strong>jatah</strong> dan <strong>sudah direalisasi</strong> mengukur
-                    dua hal berbeda, jadi selisihnya bukan kolom ketiga: yang masih akan keluar
-                    adalah <strong>belum direalisasi</strong>, sedangkan baris yang sudah selesai
-                    dengan harga di bawah anggarannya menjadi penghematan, bukan jatah yang masih
-                    bisa dipakai. Angka <strong>boleh belanja</strong> di kartu paling atas
-                    memakai aturan lain lagi: ia berangkat dari kas yang ada, bukan dari RAB.
-                  </p>
-
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <CategoryForm planId={data.id} jenis={jenisRab.map((j) => ({ nilai: j.code, label: j.name }))} />
-                  </div>
-                </Card>
+              <BelanjaBulanPanel
+                items={data.belanjaBulan.items}
+                rekap={data.belanjaBulan.rekap}
+                rabDraf={data.belanjaBulan.rabDraf}
+                cabangTanpaRab={data.belanjaBulan.cabangTanpaRab}
+                tanggalPosisi={terakhir?.date ?? null}
+              />
             </>
           )}
 
@@ -1252,217 +979,17 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
             )}
           </Card>
 
-          {data.belanja.length > 0 && (
+
+
+
+          {data.kewajiban.mendatang.length > 0 && (
             <Card className="card-pad min-w-0">
-              <SectionTitle hint="Urut menurut tanggal. SETEL membuang seluruh laporan sebelumnya di kategori itu.">
-                Laporan belanja
+              <SectionTitle hint="Berasal dari master data Kewajiban Terjadwal — pajak kendaraan, PBB, perizinan. Yang jatuh tempo bulan ini ada di panel Belanja bulan ini.">
+                Kewajiban terjadwal mendatang
               </SectionTitle>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px]">
-                  <thead className="border-b border-slate-200">
-                    <tr>
-                      <th className="th">Tanggal</th>
-                      <th className="th">Kategori</th>
-                      <th className="th">Cara</th>
-                      <th className="th num">Nominal</th>
-                      <th className="th">Catatan</th>
-                      <th className="th num">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {/* Laporan yang sudah ditimpa "setel ulang" berikutnya tidak lagi
-                        ikut menentukan total. Tanpa ditandai, ia terbaca seperti masih
-                        dihitung — dan itu persis yang membuat pembetulan salah ketik
-                        terlihat tidak berpengaruh. */}
-                    {data.belanja.map((e) => (
-                      <tr
-                        key={e.id}
-                        className={e.terabaikan || e.sebelumPosisi ? 'text-slate-400' : ''}
-                      >
-                        <td className="td whitespace-nowrap">{formatDate(e.date)}</td>
-                        <td className="td">{e.categoryLabel}</td>
-                        <td className="td">
-                          <Badge tone={e.mode === 'SETEL' ? 'amber' : 'slate'}>
-                            {e.mode === 'SETEL' ? 'Setel ulang' : 'Tambah'}
-                          </Badge>
-                        </td>
-                        <td className={`td num ${e.terabaikan ? 'line-through' : ''}`}>
-                          {formatRupiah(e.amount)}
-                        </td>
-                        <td className="td text-xs">
-                          {e.terabaikan
-                            ? 'Sudah ditimpa setel ulang yang lebih baru'
-                            : e.sebelumPosisi
-                              ? 'Sudah termasuk di saldo kas yang dilaporkan'
-                              : e.notes ?? '—'}
-                        </td>
-                        <td className="td num"><SpendDelete id={e.id} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t-2 border-slate-200 font-semibold">
-                    <tr>
-                      <td className="td" colSpan={3}>Terpakai sejak posisi kas terakhir</td>
-                      <td className="td num">{formatRupiah(rencana?.terpakai ?? 0)}</td>
-                      <td className="td" colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </Card>
-          )}
-
-          <Card className="card-pad min-w-0">
-            <SectionTitle hint="Pengeluaran yang sudah pasti. Yang ditandai sudah dibayar tidak lagi mengurangi anggaran.">
-              Komitmen bulan ini
-            </SectionTitle>
-            {data.komitmen.length === 0 ? (
-              <p className="py-4 text-sm text-slate-500">
-                Belum ada komitmen. Tambahkan cicilan bank, gaji, dan service lewat panel di samping.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
-                  <thead className="border-b border-slate-200">
-                    <tr>
-                      <th className="th">Komitmen</th>
-                      <th className="th">Jatuh tempo</th>
-                      <th className="th">Status</th>
-                      <th className="th num">Nominal</th>
-                      <th className="th num">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.komitmen.map((k) => (
-                      <tr key={k.id} className={k.paid ? 'text-slate-400' : ''}>
-                        <td className="td">
-                          {k.label}
-                          {!k.recurring && <span className="ml-2 text-xs text-slate-400">sekali ini</span>}
-                        </td>
-                        <td className="td">{k.dueDay ? `Tanggal ${k.dueDay}` : '—'}</td>
-                        <td className="td">
-                          <Badge tone={k.paid ? 'slate' : 'brand'}>{k.paid ? 'Sudah dibayar' : 'Belum'}</Badge>
-                        </td>
-                        <td className="td num">{formatRupiah(k.amount)}</td>
-                        <td className="td num"><CommitmentRow id={k.id} paid={k.paid} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t-2 border-slate-200 font-semibold">
-                    <tr>
-                      <td className="td" colSpan={3}>Belum dibayar</td>
-                      <td className="td num">
-                        {formatRupiah(belumBayar.reduce((s, k) => s + k.amount, 0))}
-                      </td>
-                      <td className="td num">—</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </Card>
-
-          {data.proyek.rincian.length > 0 && (
-            <Card className="card-pad min-w-0">
-              <SectionTitle hint="Proyek yang dananya sudah disetujui (Approved / In Progress). Item yang belum selesai dihitung sisanya pada tanggal rencana dibayar; item selesai hanya realisasinya. Pembayaran sebelum tanggal posisi kas sudah ada di saldo, jadi tidak dihitung lagi. Hemat tidak ikut dihitung.">
-                Proyek Approved
-              </SectionTitle>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px]">
-                  <thead className="border-b border-slate-200">
-                    <tr>
-                      <th className="th">Tanggal</th>
-                      <th className="th">Proyek / item</th>
-                      <th className="th num">Nominal</th>
-                      <th className="th">Keterangan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.proyek.rincian.map((k) => (
-                      <tr key={`${k.itemId}-${k.jenis}-${k.tanggal.toISOString()}`}>
-                        <td className="td whitespace-nowrap">
-                          {formatDate(k.tanggal)}
-                          {k.period !== data.period && (
-                            <span className="block text-[11px] text-slate-400">{formatPeriodShort(k.period)}</span>
-                          )}
-                        </td>
-                        <td className="td">
-                          <Link href={`/proyek/${k.projectId}`} className="text-slate-900 hover:text-brand-700">{k.item}</Link>
-                          <span className="block text-xs text-slate-500">{k.proyek}</span>
-                        </td>
-                        <td className="td num whitespace-nowrap">{formatRupiah(k.amount)}</td>
-                        <td className="td text-xs text-slate-500">
-                          {k.jenis === 'BAYAR'
-                            ? k.selesai
-                              ? 'Realisasi item selesai, dibayar sesudah posisi kas'
-                              : 'Dibayar sesudah posisi kas, belum ada di saldo'
-                            : k.terlambat
-                              ? 'Sisa belum dibayar — tanggal rencana sudah lewat, dihitung bulan ini'
-                              : 'Sisa belum dibayar'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t-2 border-slate-200 font-semibold">
-                    <tr>
-                      <td className="td" colSpan={2}>Keluar bulan ini</td>
-                      <td className="td num">{formatRupiah(data.proyek.bulanIni)}</td>
-                      <td className="td" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Menekan boleh belanja bulan ini, saldo di &ldquo;Kapan kas habis&rdquo; pada bulannya masing-masing,
-                dan kemampuan beli di rencana belanja. Pembayaran proyek cukup dicatat di menu Proyek —
-                jangan dicatat lagi di kategori, supaya tidak terpotong dua kali.
-              </p>
-            </Card>
-          )}
-
-          {(data.kewajiban.bulanIni.length > 0 || data.kewajiban.mendatang.length > 0) && (
-            <Card className="card-pad min-w-0">
-              <SectionTitle hint="Berasal dari master data Kewajiban Terjadwal — pajak kendaraan, PBB, perizinan. Tidak perlu diketik ulang tiap bulan.">
-                Kewajiban terjadwal
-              </SectionTitle>
-
-              {data.kewajiban.bulanIni.length > 0 && (
-                <div className="overflow-x-auto">
-                  <p className="mb-2 text-sm font-medium text-slate-700">Bulan ini</p>
-                  <table className="w-full min-w-[560px]">
-                    <thead className="border-b border-slate-200">
-                      <tr>
-                        <th className="th">Jatuh tempo</th>
-                        <th className="th">Kewajiban</th>
-                        <th className="th num">Nominal</th>
-                        <th className="th">Keterangan</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {data.kewajiban.bulanIni.map((e) => (
-                        <tr key={`${e.id}-${e.jatuhTempo.toISOString()}`} className={e.sebelumPosisi ? 'text-slate-400' : ''}>
-                          <td className="td whitespace-nowrap">{formatDate(e.jatuhTempo)}</td>
-                          <td className="td">{e.label}</td>
-                          <td className="td num">{formatRupiah(e.amount)}</td>
-                          <td className="td text-xs">
-                            {e.sebelumPosisi ? 'Sudah termasuk di saldo kas yang dilaporkan' : 'Menekan plafon bulan ini'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="border-t-2 border-slate-200 font-semibold">
-                      <tr>
-                        <td className="td" colSpan={2}>Masih akan keluar bulan ini</td>
-                        <td className="td num">{formatRupiah(data.kewajiban.belumKeluar)}</td>
-                        <td className="td" />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
 
               {data.kewajiban.mendatang.length > 0 && (
-                <div className={data.kewajiban.bulanIni.length > 0 ? 'mt-6' : ''}>
+                <div>
                   <p className="mb-2 text-sm font-medium text-slate-700">
                     {HORIZON_BULAN} bulan ke depan
                   </p>
@@ -1693,25 +1220,6 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
             )}
           </Card>
 
-          <Card className="card-pad">
-            <SectionTitle hint="Berapa yang sudah dibelanjakan sejak posisi kas terakhir.">
-              Catat belanja
-            </SectionTitle>
-            {/* Angka di daftar pilihan harus angka yang sama dengan kolom
-                "Sudah dipakai" di tabel kategori. Sebelumnya ia selalu
-                menampilkan belanja sejak posisi kas, padahal jatah dari RAB
-                dipotong seluruh belanja bulan ini — dua angka berbeda dengan
-                satu nama, dan yang satu terbaca nol padahal yang lain tidak. */}
-            <SpendForm
-              planId={data.id}
-              kategori={data.kategori.map((k, i) => ({
-                id: k.id,
-                label: k.label,
-                terpakai: rencana?.kategori[i]?.terpakai ?? k.terpakai,
-              }))}
-              defaultDate={tanggalBawaan}
-            />
-          </Card>
 
           <Card className="card-pad">
             <SectionTitle hint="Hanya dipakai untuk meramalkan kapan kas habis, tidak memengaruhi plafon.">

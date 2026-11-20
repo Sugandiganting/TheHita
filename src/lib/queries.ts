@@ -9,7 +9,7 @@ import { isProfitLoss, round, signedBalance } from './accounting';
 import {
   anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
   gabungJenisRab, jenisPerBarang, kodePerBarang, pemilikSisa, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
-  entriRealisasi, lamaAkun, lamaBarang, realisasiSesudahPosisi, susunRealisasi,
+  entriRealisasi, lamaAkun, lamaBarang, namaJenis, realisasiSesudahPosisi, susunRealisasi,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
 } from './rab';
@@ -36,6 +36,10 @@ import {
   type Kejadian, type Kewajiban, type Pengulangan,
 } from './kewajiban';
 import { hitungTren, type Tren } from './tren-masuk';
+import {
+  itemJatuhTempo, itemKomitmen, itemProyek, itemRab, rekapBelanja, urutkanBelanja,
+  type ItemBelanja, type RekapBelanja,
+} from './belanja-bulan';
 import { STATUS_MEMOTONG_KAS, keluarProyekPada, keluarProyekUntukKas, type KeluarProyek } from './proyek';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 import { CABANG_SAJA } from '@/lib/penampung-master';
@@ -1068,6 +1072,15 @@ export type RencanaKasDetail = {
     /** Yang dihitung di bulan berjalan. */
     bulanIni: number;
   };
+  /** Seluruh uang yang harus keluar bulan ini, dari sumbernya masing-masing. */
+  belanjaBulan: {
+    items: ItemBelanja[];
+    rekap: RekapBelanja;
+    /** RAB bulan ini yang masih draf: belum dihitung. */
+    rabDraf: { id: string; nama: string; total: number }[];
+    /** Cabang yang belum punya RAB disahkan bulan ini. */
+    cabangTanpaRab: string[];
+  };
   /**
    * Konteks penilaian pembelian baru, satu untuk tiap skenario. Yang dipakai
    * dipilih di layar; pesimis adalah pilihan bawaannya.
@@ -1759,16 +1772,19 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     where: { period },
     select: {
       kind: true,
+      id: true, scope: true, status: true,
       lines: {
         select: {
-          amount: true, planDate: true,
+          id: true, amount: true, planDate: true, notes: true,
+          account: { select: { code: true, name: true } },
           realAmount: true, realDate: true, realDone: true, realNotes: true,
           pembayaran: { select: { date: true, amount: true, quantity: true, note: true } },
         },
       },
       itemLines: {
         select: {
-          quantity: true, unitPrice: true, planDate: true,
+          id: true, quantity: true, unitPrice: true, planDate: true,
+          item: { select: { code: true, name: true, unit: { select: { code: true } } } },
           realQuantity: true, realUnitPrice: true, realDate: true, realDone: true, realNotes: true,
           pembayaran: { select: { date: true, amount: true, quantity: true, note: true } },
         },
@@ -1940,6 +1956,72 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const proyekBulanIni = keluarProyekPada(keluarProyek, period);
   const proyekBulan = (p: Period) => keluarProyekPada(keluarProyek, p);
 
+  /*
+   * Belanja bulan ini: satu daftar seluruh uang yang harus keluar, langsung
+   * dari sumbernya — baris RAB yang sudah disahkan, item proyek Approved,
+   * komitmen, kewajiban terjadwal, dan cicilan rencana belanja. Menggantikan
+   * kategori dengan jatah yang diketik sendiri. RAB draf belum dihitung:
+   * rencananya belum diputuskan.
+   */
+  const jenisRab = await getJenisRab();
+  const itemBelanja: ItemBelanja[] = [
+    ...rabBulanIni.filter((b) => b.status === 'ACTIVE').flatMap((b) => {
+      const asal = `RAB ${namaJenis(jenisRab, b.kind)} · ${b.scope}`;
+      const href = `/rab/${b.id}`;
+      return [
+        ...b.itemLines.map((l) => itemRab({
+          id: l.id,
+          label: `${l.item.name} · ${l.quantity.toLocaleString('id-ID')} ${l.item.unit.code}`,
+          asal, href,
+          anggaran: nilaiBarisBarang(l, round),
+          tanggal: l.planDate,
+          lama: lamaBarang(l),
+          pembayaran: l.pembayaran,
+          selesai: l.realDone,
+        }, batas)),
+        ...b.lines.map((l) => itemRab({
+          id: l.id,
+          label: `${l.account.code} ${l.account.name}${l.notes ? ` — ${l.notes}` : ''}`,
+          asal, href,
+          anggaran: l.amount,
+          tanggal: l.planDate,
+          lama: lamaAkun(l),
+          pembayaran: l.pembayaran,
+          selesai: l.realDone,
+        }, batas)),
+      ];
+    }),
+    ...itemProyek(proyekDisetujui, batas, period),
+    ...plan.commitments.map((k) => itemKomitmen(k, period, batas)),
+    ...kejadianKewajiban(period, period).map((e) => itemJatuhTempo({
+      kunci: `kewajiban-${e.id}-${e.jatuhTempo.toISOString()}`, sumber: 'KEWAJIBAN', label: e.label,
+      asal: 'Kewajiban terjadwal', href: '/kewajiban', jatuhTempo: e.jatuhTempo, amount: e.amount,
+    }, batas)),
+    ...disetujui.flatMap((b) => b.jadwal
+      .filter((c) => toPeriod(c.jatuhTempo) === period)
+      .map((c) => itemJatuhTempo({
+        kunci: `cicilan-${b.id}-${c.ke}`, sumber: 'CICILAN', label: `${b.label} — cicilan ${c.ke}/${b.instalments}`,
+        asal: 'Rencana belanja', href: null, jatuhTempo: c.jatuhTempo, amount: c.amount,
+      }, batas))),
+  ];
+  const rekapBelanjaBulan = rekapBelanja(itemBelanja);
+  // RAB yang belum disahkan tidak dihitung; disebut supaya tidak terlupa.
+  const rabDraf = rabBulanIni
+    .filter((b) => b.status !== 'ACTIVE')
+    .map((b) => ({
+      id: b.id,
+      nama: `${namaJenis(jenisRab, b.kind)} · ${b.scope}`,
+      total: round(b.lines.reduce((t, l) => t + l.amount, 0)
+        + b.itemLines.reduce((t, l) => t + nilaiBarisBarang(l, round), 0)),
+    }));
+  // Cabang yang pernah punya RAB tiga bulan terakhir tetapi belum punya RAB
+  // yang disahkan bulan ini: belanjanya bulan ini belum terhitung sama sekali.
+  const cabangBerRab = new Set((await prisma.budget.findMany({
+    where: { period: { gte: addMonths(period, -3), lte: period } }, select: { scope: true },
+  })).flatMap((b) => cabangDalamScope(b.scope)));
+  const cabangDisahkan = new Set(rabBulanIni.filter((b) => b.status === 'ACTIVE').flatMap((b) => cabangDalamScope(b.scope)));
+  const cabangTanpaRab = [...cabangBerRab].filter((c) => !cabangDisahkan.has(c)).sort();
+
   // Sembilan bulan: tiga ke belakang sebagai pembanding nyata, bulan berjalan,
   // dan lima ke depan dari pola musim. Bulan lalu pun memakai proyeksi pola
   // yang berlaku sekarang, jadi mendampingkannya dengan kenyataan sekaligus
@@ -2024,7 +2106,6 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // ada: jumlah yang belum direalisasi. Gaji bulan ini pun ikut di sana —
   // lewat kategori HR — jadi tidak dikurangkan sendiri lagi. Tanpa kategori,
   // sisa bulan diramal dari laju harian seperti sebelumnya.
-  const modeKategori = kategori.length > 0;
   const gaji = plan.salaryNeed ?? usulanGaji ?? 0;
 
   const rencana = terakhir
@@ -2034,46 +2115,17 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         saldoKas: terakhir.cashOnHand,
         masukSampaiKini: terakhir.incomeToDate,
         proyeksi: dipakai,
-        cicilanBelanja: cicilanBulanIni,
-        kewajiban: kewajibanBulanIni,
-        proyek: proyekBulanIni,
         // Gaji bulan depan disisihkan dari plafon: gaji dibayar di awal bulan,
         // jadi yang menutupinya adalah saldo akhir bulan ini.
         kebutuhanGaji: gaji,
-        rencanaRab,
-        komitmen: [
-          ...plan.commitments.map((k) => ({
-            label: k.label, amount: k.amount, dueDay: k.dueDay, paid: k.paid,
-          })),
-          // Tanpa kategori, gaji RAB yang tanggalnya sesudah posisi kas belum
-          // tercermin di saldo, jadi diperlakukan seperti komitmen yang belum
-          // dibayar. Dengan kategori, gaji itu sudah ada di kategori HR.
-          ...(!modeKategori && gajiRab && gajiRab.akanKeluar > 0
-            ? [{ label: 'Gaji menurut RAB', amount: gajiRab.akanKeluar, dueDay: null, paid: false }]
-            : []),
-        ],
-        // Total terpakai diturunkan dari rinciannya, jadi keduanya tidak bisa
-        // berbeda — dan kategori yang terhapus tidak meninggalkan selisih.
-        kategori: kategori.map((k) => ({
-          label: k.label,
-          weight: k.weight,
-          // Kategori yang ditautkan ke RAB mengambil ketiga angkanya dari sana
-          // dan tidak bisa ditimpa dengan tangan: RAB-lah keputusannya, dan dua
-          // angka untuk satu hal berarti salah satunya pasti ketinggalan.
-          // Kategori yang belum ditautkan tetap memakai jatah yang diketik,
-          // supaya menautkan bisa dilakukan satu per satu tanpa ada bulan yang
-          // mendadak kosong.
-          jatah: k.rab ? k.rab.anggaran : k.budget,
-          // Yang sudah dibelanjakan sesudah posisi kas: realisasi RAB yang
-          // dibayar sebelum tanggal itu sudah ada di saldo.
-          terpakai: k.rab ? (k.rabSesudahPosisi ?? 0) : k.terpakai,
-          terpakaiBulanIni: k.rab ? k.rab.realisasi : k.terpakaiBulanIni,
-          // Hanya baris RAB yang belum tersentuh sama sekali yang pasti masih
-          // butuh uang. Tanpa RAB angka ini tidak diketahui, dan diturunkan
-          // dari jatah dikurangi belanja seperti sebelumnya.
-          belum: k.rab ? k.rab.belum : null,
-          akanKeluar: k.akanKeluarRab,
-        })),
+        // Seluruh uang keluar terjadwal bulan ini datang dari satu daftar —
+        // RAB disahkan, proyek, komitmen, kewajiban, cicilan — sehingga
+        // komitmen dan kategori tidak lagi dikurangkan sendiri-sendiri.
+        komitmen: [],
+        kategori: [],
+        keluarTerjadwal: rekapBelanjaBulan.keluar,
+        // Untuk tabel mingguan: kapan uang tiap item keluar.
+        rencanaRab: itemBelanja.flatMap((i) => i.jadwal),
       })
     : null;
 
@@ -2115,19 +2167,22 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             proyeksiBulanan: dipakai[sk],
             proyeksiBerikutnya: proyeksiUntuk(sk),
             pengeluaranBulanan: outflow,
-            komitmenBelumBayar: rencana.komitmenBelumBayar,
+            // Sudah termasuk di daftar belanja bulan ini.
+            komitmenBelumBayar: 0,
             komitmenRutinSebulan: plan.commitments
               .filter((k) => k.recurring)
               .reduce((t, k) => t + k.amount, 0),
             kebutuhanGaji: gaji,
-            cicilanPada: cicilanBulan,
-            kewajibanPada: kewajibanBulan,
-            proyekPada: proyekBulan,
+            // Bulan berjalan sudah ada di daftar belanja; bulan-bulan
+            // sesudahnya tetap dari sumbernya masing-masing.
+            cicilanPada: (p) => (p === period ? 0 : cicilanBulan(p)),
+            kewajibanPada: (p) => (p === period ? 0 : kewajibanBulan(p)),
+            proyekPada: (p) => (p === period ? 0 : proyekBulan(p)),
             lajuOperasionalHarian: laju?.perHari ?? null,
             // Sisa rencana kategori, ditambah yang sudah dibelanjakan sesudah
             // posisi kas: uang itu sudah keluar tetapi belum tercermin di
             // saldo yang menjadi titik awal ramalan ini.
-            sisaKeluarRencana: modeKategori ? rencana.keluarKategori + rencana.terpakai : null,
+            sisaKeluarRencana: rekapBelanjaBulan.keluar,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,
@@ -2295,8 +2350,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       gajiAwal: gajiAwal && sumberUsulanGaji?.jenis === 'RAB'
         ? { total: round(gajiAwal.total), tanpaTanggal: round(gajiAwal.tanpaTanggal), seluruhRab: totalGaji(sumberUsulanGaji.period) }
         : null,
-      sisaBulanDari: modeKategori ? 'KATEGORI' : 'LAJU',
-      keluarKategori: modeKategori && rencana ? round(rencana.keluarKategori) : null,
+      sisaBulanDari: 'KATEGORI',
+      keluarKategori: round(rekapBelanjaBulan.keluar),
       lajuBerjalan: laju,
     },
     runway,
@@ -2314,6 +2369,12 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       belumKeluar: kewajibanBulanIni,
     },
     proyek: { rincian: keluarProyek, bulanIni: proyekBulanIni },
+    belanjaBulan: {
+      items: urutkanBelanja(itemBelanja),
+      rekap: rekapBelanjaBulan,
+      rabDraf,
+      cabangTanpaRab,
+    },
     konteksBeli: runway && terakhir
       ? (Object.fromEntries(
           SKENARIO.map((sk) => [

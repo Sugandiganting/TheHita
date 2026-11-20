@@ -345,8 +345,8 @@ Proyek yang **Approved / In Progress** ikut memotong kas di **Rencana Kas Minggu
 rencana dibayar tiap item. Item yang belum selesai dihitung sisanya (RAB − sudah dibayar);
 yang tanggal rencananya sudah lewat dihitung di bulan berjalan. Item selesai hanya
 realisasinya. Pembayaran yang tanggalnya sebelum atau pada tanggal posisi kas sudah ada di
-saldo, jadi tidak dihitung lagi. Pembayaran proyek cukup dicatat di menu Proyek, jangan
-dicatat lagi di kategori Rencana Kas.
+saldo, jadi tidak dihitung lagi. Item proyek bulan itu tampil di panel **Belanja bulan
+ini** di Rencana Kas.
 
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
@@ -359,9 +359,9 @@ anggaran, **Laporan RAB** untuk melihat anggaran, realisasi, dan sisanya.
 
 Tiap RAB punya **jenis**: Purchasing (disusun per barang), Umum, dan jenis yang
 ditambahkan sendiri di **Master Data › Jenis RAB** seperti HR atau Management (per akun).
-Satu cabang boleh punya satu RAB tiap jenis dalam sebulan. Kategori di Rencana Kas bisa
-ditautkan ke sebuah jenis, sehingga misalnya jatah gaji diambil dari seluruh RAB HR bulan
-itu. RAB per akun yang masih draf bisa diganti jenisnya, dan barisnya bisa dipindah ke RAB
+Satu cabang boleh punya satu RAB tiap jenis dalam sebulan. Seluruh baris RAB yang
+**sudah disahkan** masuk panel *Belanja bulan ini* di Rencana Kas; RAB draf belum dihitung
+dan disebut di bawah panel itu. RAB per akun yang masih draf bisa diganti jenisnya, dan barisnya bisa dipindah ke RAB
 lain milik cabang dan bulan yang sama.
 
 **Gaji dibaca dari RAB lewat akunnya.** Baris RAB berakun kelompok `6130 Biaya Karyawan`
@@ -372,11 +372,21 @@ rencana belanja. Service dan bonus pertengahan bulan ditutup uang masuk bulan it
 Baris bulan depan yang belum bertanggal memakai tanggal baris yang sama bulan ini; yang
 tidak punya keduanya ikut dijaga. Angka yang diketik di *Asumsi bulanan* tetap menang.
 
-**Sisa uang keluar bulan berjalan diambil dari kategori.** Ramalan kas dan rencana belanja
-mengurangkan jumlah *Belum direalisasi* seluruh kategori (jatah − sudah direalisasi, atau
-sisa baris RAB yang belum selesai bila kategorinya ditautkan), ditambah komitmen yang belum
-dibayar. Kategori yang belanjanya sudah menyamai jatah tidak lagi mengurangi apa pun.
-Bulan tanpa kategori masih memakai laju belanja harian.
+**Belanja bulan ini.** Rencana Kas tidak lagi memakai kategori dengan jatah yang diketik
+sendiri. Seluruh uang keluar bulan berjalan diambil dari satu panel, *Belanja bulan ini*,
+yang terisi otomatis dari sumbernya: baris RAB yang sudah disahkan (semua jenis, semua
+cabang), item proyek Approved, komitmen, kewajiban terjadwal, dan cicilan rencana belanja.
+Aturannya satu: yang belum selesai dihitung sisanya, yang selesai hanya realisasinya, dan
+pembayaran sebelum atau pada tanggal posisi kas sudah ada di saldo. Realisasinya dicatat
+di menu asalnya (RAB, Proyek, atau tanda dibayar komitmen di panel itu).
+
+*Boleh belanja* = saldo posisi kas + sisa uang masuk − belanja bulan ini − gaji awal bulan
+depan: ruang belanja di luar semua yang sudah dijadwalkan, angka yang sama dipakai
+kalkulator rencana belanja. Tabel mingguan menaruh jadwal keluar di minggu tanggalnya dan
+membandingkannya dengan target uang masuk. Belanja yang tidak ada di RAB, komitmen, atau
+proyek tidak terhitung, jadi panel memperingatkan RAB yang masih draf dan cabang yang
+belum punya RAB disahkan bulan itu. Bulan-bulan sesudahnya tetap memakai pengeluaran
+rutin.
 
 Satu RAB dimiliki satu **pemilik anggaran**, yang bisa berupa satu cabang (`THL`) atau satu
 kelompok cabang (`THL+SKR`) untuk biaya yang ditanggung bersama. Bentuknya sama persis
