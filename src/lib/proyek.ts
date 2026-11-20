@@ -180,3 +180,13 @@ export function rekapRealisasiItem(
     dariLunasLama: lama,
   };
 }
+
+/**
+ * Realisasi (pembayaran dan tanda selesai) baru dibuka setelah dana
+ * disetujui: proyek yang masih Draft, Proposed atau Funding Review belum
+ * boleh dibelanjakan, jadi belum ada yang bisa direalisasikan. Proyek yang
+ * dibatalkan setelah Approved tetap menampilkan realisasi yang sempat terjadi.
+ */
+export function realisasiDibuka(status: StatusProyek): boolean {
+  return status === 'APPROVED' || status === 'ONGOING' || status === 'DONE' || status === 'CANCELLED';
+}

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
+import { LABEL_STATUS_PROYEK, realisasiDibuka, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +49,9 @@ export default async function ProyekPage() {
             // Yang sungguh sudah dibayar, termasuk pembayaran sebagian.
             const paid = p.items.reduce((s, i) => s + rekapRealisasiItem(i, i.pembayaran).realisasi, 0);
             const progress = total > 0 ? (paid / total) * 100 : 0;
+            const status = statusEfektif(p.status, p.startDate, new Date());
+            // Realisasi baru ditampilkan setelah proyek Approved.
+            const dibuka = realisasiDibuka(status);
 
             return (
               <Card key={p.id} className="card-pad">
@@ -59,8 +62,8 @@ export default async function ProyekPage() {
                     </Link>
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <Badge tone="brand">{p.unit.code}</Badge>
-                      <Badge tone={STATUS_TONE[statusEfektif(p.status, p.startDate, new Date())]}>
-                        {LABEL_STATUS_PROYEK[statusEfektif(p.status, p.startDate, new Date())]}
+                      <Badge tone={STATUS_TONE[status]}>
+                        {LABEL_STATUS_PROYEK[status]}
                       </Badge>
                       <span>Mulai {formatDate(p.startDate)}</span>
                     </p>
@@ -72,6 +75,11 @@ export default async function ProyekPage() {
 
                 {p.description && <p className="mt-3 line-clamp-2 text-sm text-slate-600">{p.description}</p>}
 
+                {!dibuka ? (
+                  <p className="mt-4 text-xs text-slate-500">
+                    {p.items.length} item · realisasi dibuka setelah Approved
+                  </p>
+                ) : (
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>
@@ -83,6 +91,7 @@ export default async function ProyekPage() {
                     <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, progress)}%` }} />
                   </div>
                 </div>
+                )}
 
                 {p.fundingAmount > 0 && (
                   <p className="mt-3 text-xs text-slate-500">

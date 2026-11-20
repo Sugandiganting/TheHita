@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, statusEfektif } from '@/lib/proyek';
+import { LABEL_STATUS_PROYEK, STATUS_MEMOTONG_KAS, statusEfektif } from '@/lib/proyek';
 import { ProjectApproval } from '@/components/project-approval';
 import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem } from '@/app/actions';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
 import { CostItemAccount, CostItemForm, RealisasiItemDialog, UbahItemProyekDialog } from '@/components/cost-item-form';
-import { LABEL_REALISASI_ITEM, hargaSatuanItem, rekapRealisasiItem } from '@/lib/proyek';
+import { LABEL_REALISASI_ITEM, hargaSatuanItem, realisasiDibuka, rekapRealisasiItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -54,6 +54,10 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
   // Selisih item yang sudah selesai: positif hemat, negatif lebih mahal.
   const selisihSelesai = items.reduce((s, i) => s + (i.real.selisih ?? 0), 0);
   const hariIni = toDateInput(new Date());
+  // Realisasi baru dibuka setelah dana disetujui (Approved dan sesudahnya).
+  const dibuka = realisasiDibuka(status);
+  const adaPembayaran = items.some((i) => i.pembayaran.length > 0 || i.real.dariLunasLama);
+  const masukPeramalan = (STATUS_MEMOTONG_KAS as readonly string[]).includes(status);
   const installment =
     project.fundingType === 'LOAN'
       ? monthlyInstallment(project.fundingAmount, project.loanRatePct, project.loanTenorMonths)
@@ -78,9 +82,11 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
         <StatCard label="Total biaya proyek" value={formatRupiah(total)} hint={`${project.items.length} item`} />
         <StatCard
           label="Sudah dibayar"
-          value={formatRupiah(paid)}
-          tone="positive"
-          hint={selisihSelesai === 0
+          value={dibuka ? formatRupiah(paid) : '—'}
+          tone={dibuka ? 'positive' : 'neutral'}
+          hint={!dibuka
+            ? 'Realisasi dibuka setelah proyek Approved'
+            : selisihSelesai === 0
             ? undefined
             : selisihSelesai > 0
               ? `Hemat ${formatRupiah(selisihSelesai)} dari item yang selesai`
@@ -89,7 +95,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
         <StatCard
           label="Belum dibayar"
           value={formatRupiah(outstanding)}
-          hint="Inilah yang dihitung di peramalan"
+          hint={masukPeramalan ? 'Inilah yang dihitung di peramalan' : 'Belum masuk peramalan sebelum Approved'}
           tone={outstanding > 0 ? 'warning' : 'neutral'}
         />
         <StatCard
@@ -135,7 +141,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className={`w-full ${dibuka ? 'min-w-[900px]' : 'min-w-[620px]'}`}>
               <thead className="border-b border-slate-200">
                 <tr>
                   <th className="th">Item</th>
@@ -143,15 +149,15 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                   <th className="th num">Qty</th>
                   <th className="th num">Harga satuan</th>
                   <th className="th num">Total</th>
-                  <th className="th num">Realisasi</th>
-                  <th className="th num">Selisih</th>
-                  <th className="th">Status</th>
+                  {dibuka && <th className="th num">Realisasi</th>}
+                  {dibuka && <th className="th num">Selisih</th>}
+                  {dibuka && <th className="th">Status</th>}
                   <th className="th num">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {items.map((item) => (
-                  <tr key={item.id} className={item.real.selesai ? 'text-slate-500' : ''}>
+                  <tr key={item.id} className={dibuka && item.real.selesai ? 'text-slate-500' : ''}>
                     <td className="td">
                       <span className="font-medium text-slate-900">{item.name}</span>
                       {/* Akunnya di bawah nama, supaya kolom realisasi muat. */}
@@ -165,33 +171,37 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                     <td className="td num">{item.quantity.toLocaleString('id-ID')}</td>
                     <td className="td num whitespace-nowrap">{formatRupiah(hargaSatuanItem(item))}</td>
                     <td className="td num whitespace-nowrap font-medium">{formatRupiah(item.amount)}</td>
-                    <td className="td num whitespace-nowrap">
-                      {item.real.realisasi > 0 ? formatRupiah(item.real.realisasi) : <span className="text-slate-400">—</span>}
-                      {item.pembayaran.length > 1 && (
-                        <span className="block text-[11px] text-slate-400">{item.pembayaran.length} kali bayar</span>
-                      )}
-                      {item.real.dariLunasLama && (
-                        <span className="block text-[11px] text-slate-400">dari tanda Lunas lama</span>
-                      )}
-                    </td>
-                    <td className="td num whitespace-nowrap">
-                      {item.real.selisih === null || item.real.selisih === 0 ? (
-                        item.real.selisih === 0 ? <span className="text-slate-400">pas</span>
-                          : <span className="text-[11px] text-slate-400">sisa {formatRupiah(item.real.sisaAkanKeluar)}</span>
-                      ) : item.real.selisih > 0 ? (
-                        <span className="text-emerald-700">hemat {formatRupiah(item.real.selisih)}</span>
-                      ) : (
-                        <span className="text-red-600">lebih {formatRupiah(-item.real.selisih)}</span>
-                      )}
-                    </td>
-                    <td className="td">
-                      <Badge tone={item.real.status === 'SELESAI' ? 'green' : item.real.status === 'SEBAGIAN' ? 'blue' : 'amber'}>
-                        {LABEL_REALISASI_ITEM[item.real.status]}
-                      </Badge>
-                    </td>
+                    {dibuka && (
+                      <>
+                        <td className="td num whitespace-nowrap">
+                          {item.real.realisasi > 0 ? formatRupiah(item.real.realisasi) : <span className="text-slate-400">—</span>}
+                          {item.pembayaran.length > 1 && (
+                            <span className="block text-[11px] text-slate-400">{item.pembayaran.length} kali bayar</span>
+                          )}
+                          {item.real.dariLunasLama && (
+                            <span className="block text-[11px] text-slate-400">dari tanda Lunas lama</span>
+                          )}
+                        </td>
+                        <td className="td num whitespace-nowrap">
+                          {item.real.selisih === null || item.real.selisih === 0 ? (
+                            item.real.selisih === 0 ? <span className="text-slate-400">pas</span>
+                              : <span className="text-[11px] text-slate-400">sisa {formatRupiah(item.real.sisaAkanKeluar)}</span>
+                          ) : item.real.selisih > 0 ? (
+                            <span className="text-emerald-700">hemat {formatRupiah(item.real.selisih)}</span>
+                          ) : (
+                            <span className="text-red-600">lebih {formatRupiah(-item.real.selisih)}</span>
+                          )}
+                        </td>
+                        <td className="td">
+                          <Badge tone={item.real.status === 'SELESAI' ? 'green' : item.real.status === 'SEBAGIAN' ? 'blue' : 'amber'}>
+                            {LABEL_REALISASI_ITEM[item.real.status]}
+                          </Badge>
+                        </td>
+                      </>
+                    )}
                     <td className="td">
                       <span className="flex items-center justify-end gap-3">
-                        <RealisasiItemDialog
+                        {dibuka && <RealisasiItemDialog
                           itemId={item.id}
                           nama={item.name}
                           total={item.amount}
@@ -201,7 +211,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                           pembayaran={item.pembayaran.map((p) => ({
                             id: p.id, tanggal: formatDate(p.date), amount: p.amount, note: p.note,
                           }))}
-                        />
+                        />}
                         <UbahItemProyekDialog
                           accounts={capexAccounts}
                           nilai={{
@@ -230,17 +240,25 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                     Total
                   </td>
                   <td className="td num whitespace-nowrap">{formatRupiah(total)}</td>
-                  <td className="td num whitespace-nowrap">{formatRupiah(paid)}</td>
-                  <td className="td num whitespace-nowrap">
-                    {selisihSelesai > 0 ? <span className="text-emerald-700">hemat {formatRupiah(selisihSelesai)}</span>
-                      : selisihSelesai < 0 ? <span className="text-red-600">lebih {formatRupiah(-selisihSelesai)}</span>
-                        : '—'}
-                  </td>
-                  <td className="td" colSpan={2} />
+                  {dibuka && <td className="td num whitespace-nowrap">{formatRupiah(paid)}</td>}
+                  {dibuka && (
+                    <td className="td num whitespace-nowrap">
+                      {selisihSelesai > 0 ? <span className="text-emerald-700">hemat {formatRupiah(selisihSelesai)}</span>
+                        : selisihSelesai < 0 ? <span className="text-red-600">lebih {formatRupiah(-selisihSelesai)}</span>
+                          : '—'}
+                    </td>
+                  )}
+                  <td className="td" colSpan={dibuka ? 2 : 1} />
                 </tr>
               </tfoot>
             </table>
           </div>
+        )}
+        {!dibuka && project.items.length > 0 && (
+          <p className="mt-3 text-xs text-slate-500">
+            Realisasi pembayaran dan status selesai per item muncul setelah proyek <strong>Approved</strong> (sesudah Funding Review).
+            {adaPembayaran && ' Pembayaran yang sempat dicatat sebelumnya tetap tersimpan dan tampil lagi saat itu.'}
+          </p>
         )}
       </Card>
 

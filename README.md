@@ -328,6 +328,10 @@ pembelanjaannya (**Belum dibayar / Sebagian / Selesai**) berdiri sendiri; item b
 ditandai selesai walau realisasinya tidak sama dengan rencana, dan selisihnya tampil
 sebagai *hemat* atau *lebih*. Peramalan hanya menghitung yang masih akan keluar: nol
 untuk item selesai, rencana dikurangi yang sudah dibayar untuk yang belum.
+Kolom realisasi, selisih, status per item, dan tombol **Realisasi** baru muncul setelah
+proyek **Approved** (sesudah Funding Review), dan server pun menolak pencatatan sebelum itu.
+Bila proyek dikembalikan ke Draft, pembayaran yang sudah tercatat tetap tersimpan dan tampil
+lagi setelah disetujui ulang.
 
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,

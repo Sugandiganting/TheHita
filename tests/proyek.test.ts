@@ -87,3 +87,9 @@ test('tanda Lunas lama tanpa pembayaran dibaca selesai sebesar totalnya', () => 
   assert.equal(r.selisih, 0);
   assert.equal(r.dariLunasLama, true);
 });
+
+import { realisasiDibuka } from '../src/lib/proyek.ts';
+test('realisasi baru dibuka setelah dana disetujui', () => {
+  for (const s of ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'REJECTED'] as const) assert.equal(realisasiDibuka(s), false, s);
+  for (const s of ['APPROVED', 'ONGOING', 'DONE', 'CANCELLED'] as const) assert.equal(realisasiDibuka(s), true, s);
+});

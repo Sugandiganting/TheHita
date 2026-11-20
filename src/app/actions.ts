@@ -15,7 +15,7 @@ import {
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
 import {
-  AKSI_PROYEK, LABEL_STATUS_PROYEK, bacaJumlah, statusEfektif, totalItemProyek, type AksiProyek,
+  AKSI_PROYEK, LABEL_STATUS_PROYEK, bacaJumlah, realisasiDibuka, statusEfektif, totalItemProyek, type AksiProyek,
 } from '@/lib/proyek';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
@@ -653,6 +653,21 @@ async function ubahLunasLama(itemId: string) {
   ]);
 }
 
+/**
+ * Alasan realisasi item belum boleh dicatat, atau null bila boleh: hanya
+ * setelah dana proyeknya disetujui (Approved, In Progress, Completed).
+ */
+async function realisasiDitolak(itemId: string): Promise<string | null> {
+  const item = await prisma.projectCostItem.findUnique({
+    where: { id: itemId }, select: { project: { select: { status: true, startDate: true } } },
+  });
+  if (!item) return 'Item biaya tidak ditemukan.';
+  const status = statusEfektif(item.project.status, item.project.startDate, new Date());
+  return realisasiDibuka(status)
+    ? null
+    : `Realisasi baru bisa dicatat setelah proyek Approved — sekarang ${LABEL_STATUS_PROYEK[status]}.`;
+}
+
 function segarkanProyek(projectId: string) {
   revalidatePath('/proyek');
   revalidatePath(`/proyek/${projectId}`);
@@ -669,6 +684,8 @@ export async function tambahPembayaranItem(_prev: ActionState, formData: FormDat
 
   const item = await prisma.projectCostItem.findUnique({ where: { id: itemId }, select: { projectId: true, name: true } });
   if (!item) return fail('Item biaya tidak ditemukan.');
+  const ditolak = await realisasiDitolak(itemId);
+  if (ditolak) return fail(ditolak);
   if (amount <= 0) return fail('Nominal pembayaran harus lebih besar dari nol.');
   if (!tanggal) return fail('Tanggal pembayaran wajib diisi.');
 
@@ -701,6 +718,8 @@ export async function setItemSelesai(_prev: ActionState, formData: FormData): Pr
   const selesai = String(formData.get('selesai') ?? '') === 'ya';
   const item = await prisma.projectCostItem.findUnique({ where: { id: itemId }, select: { projectId: true, name: true } });
   if (!item) return fail('Item biaya tidak ditemukan.');
+  const ditolak = await realisasiDitolak(itemId);
+  if (ditolak) return fail(ditolak);
 
   await ubahLunasLama(itemId);
   await prisma.projectCostItem.update({ where: { id: itemId }, data: { done: selesai, paid: false } });
