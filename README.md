@@ -406,6 +406,13 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   yang membedakan, jadi catatan wajib diisi begitu akunnya sudah ada di RAB itu.
   Realisasi dilaporkan per baris; perbandingan dengan jurnal tetap per akun, karena
   jurnal tidak mencatat tagihan mana yang dibayar.
+- **Realisasi RAB sama dengan realisasi item proyek.** Setelah RAB disahkan, setiap baris
+  dicatat per pembayaran: tanggal, nominal, catatan, dan qty untuk RAB per barang (nominal
+  terisi dari qty × harga satuan dan bisa diubah). Baris ditandai **selesai** bila belanjanya
+  tuntas; hemat = anggaran − realisasi, informasi saja. Realisasi lama yang dulu diketik
+  sekali tetap terbaca sebagai entri pertama. Di Rencana Kas, sisa baris yang belum selesai
+  tetap dihitung akan keluar, item selesai hanya realisasinya, dan pembayaran bertanggal
+  sebelum atau pada tanggal posisi kas tidak dikurangkan lagi karena sudah ada di saldo.
 
 ### COA
 Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di Indonesia).

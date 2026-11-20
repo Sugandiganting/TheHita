@@ -391,8 +391,9 @@ model BudgetLine {
   realDone   Boolean   @default(false)
   realNotes  String?
 
-  budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  account Account @relation(fields: [accountId], references: [id])
+  budget     Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account    Account         @relation(fields: [accountId], references: [id])
+  pembayaran BudgetPayment[]
 
   // Satu akun boleh muncul di beberapa baris, dibedakan oleh catatannya:
   // Neuviz, Guestpro dan STAAH sama-sama Biaya Software dan Langganan, tetapi
@@ -440,6 +441,7 @@ model BudgetItemLine {
   realNotes     String?
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  pembayaran BudgetPayment[]
   item   Item   @relation(fields: [itemId], references: [id])
 
   @@unique([budgetId, itemId])
@@ -849,4 +851,28 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Satu pembayaran realisasi sebuah baris RAB — boleh beberapa kali,
+/// sebagian-sebagian, seperti realisasi item proyek. Tepat satu dari lineId
+/// (RAB per akun) dan itemLineId (RAB per barang) yang terisi.
+///
+/// Realisasi lama yang dulu diketik sekali per baris (realAmount,
+/// realQuantity × realUnitPrice) tetap terbaca sebagai entri pertamanya.
+model BudgetPayment {
+  id         String   @id @default(cuid())
+  lineId     String?
+  itemLineId String?
+  date       DateTime
+  amount     Float
+  /// Qty yang dibeli; hanya untuk RAB per barang, dan boleh kosong untuk DP.
+  quantity   Float?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  line     BudgetLine?     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  itemLine BudgetItemLine? @relation(fields: [itemLineId], references: [id], onDelete: Cascade)
+
+  @@index([lineId])
+  @@index([itemLineId])
 }

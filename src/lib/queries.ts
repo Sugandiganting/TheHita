@@ -9,6 +9,7 @@ import { isProfitLoss, round, signedBalance } from './accounting';
 import {
   anggaranAkunDariBaris, anggaranPerAkun, barisMasukScope, cabangDalamScope, nilaiBarisBarang, REKAP_KOSONG, rekapRab,
   gabungJenisRab, jenisPerBarang, kodePerBarang, pemilikSisa, ringkasRab, scopeBersamaKah, sisaAkanKeluar,
+  entriRealisasi, lamaAkun, lamaBarang, realisasiSesudahPosisi, susunRealisasi,
   type BarisBarangRab, type BarisRab, type JenisRab, type RealisasiBaris, type RekapRab,
   type RingkasanRab,
 } from './rab';
@@ -788,6 +789,7 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
       lines: { include: { account: true } },
       itemLines: {
         include: {
+          pembayaran: { orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] },
           item: {
             include: {
               account: { select: { id: true, code: true, name: true } },
@@ -858,17 +860,8 @@ export async function getBudgetDetail(id: string): Promise<RabRinci | null> {
     anggaran: nilaiBarisBarang(l, round),
     rencanaTanggal: l.planDate,
     catatan: l.notes,
-    realisasi: {
-      quantity: l.realQuantity,
-      unitPrice: l.realUnitPrice,
-      tanggal: l.realDate,
-      selesai: l.realDone,
-      catatan: l.realNotes,
-      // null bila salah satunya belum diisi: separuh keterangan bukan angka.
-      nilai: l.realQuantity === null || l.realUnitPrice === null
-        ? null
-        : round(l.realQuantity * l.realUnitPrice),
-    },
+    realisasi: susunRealisasi(lamaBarang(l), l.pembayaran, l.realDone),
+    entri: entriRealisasi(lamaBarang(l), l.pembayaran),
   }));
 
   // Baris anggaran RAB ini, selalu di tingkat akun supaya bisa dibandingkan
@@ -1770,12 +1763,14 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         select: {
           amount: true, planDate: true,
           realAmount: true, realDate: true, realDone: true, realNotes: true,
+          pembayaran: { select: { date: true, amount: true, quantity: true, note: true } },
         },
       },
       itemLines: {
         select: {
           quantity: true, unitPrice: true, planDate: true,
           realQuantity: true, realUnitPrice: true, realDate: true, realDone: true, realNotes: true,
+          pembayaran: { select: { date: true, amount: true, quantity: true, note: true } },
         },
       },
     },
@@ -1788,40 +1783,31 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   // RAB yang masih draf pun ikut: yang menentukan berapa uang harus disiapkan
   // adalah rencananya, bukan sudah atau belum ditandatangani. Baris draf selalu
   // berstatus BELUM, karena realisasi baru bisa diinput setelah RAB disahkan.
-  const barisPerJenis = new Map<string, { anggaran: number; realisasi: RealisasiBaris }[]>();
+  const barisPerJenis = new Map<string, { anggaran: number; realisasi: RealisasiBaris; sesudahPosisi: number }[]>();
   for (const b of rabBulanIni) {
     // Baris barang dan baris akun digabung: sebuah RAB hanya berisi salah satunya.
     const baris = [
       ...b.itemLines.map((l) => ({
           anggaran: nilaiBarisBarang(l, round),
-          realisasi: {
-            quantity: l.realQuantity,
-            unitPrice: l.realUnitPrice,
-            tanggal: l.realDate,
-            selesai: l.realDone,
-            catatan: l.realNotes,
-            // null bila salah satunya belum diisi: separuh keterangan bukan angka.
-            nilai: l.realQuantity === null || l.realUnitPrice === null
-              ? null
-              : round(l.realQuantity * l.realUnitPrice),
-          } satisfies RealisasiBaris,
+          realisasi: susunRealisasi(lamaBarang(l), l.pembayaran, l.realDone),
+          sesudahPosisi: realisasiSesudahPosisi(lamaBarang(l), l.pembayaran, batas),
         })),
       ...b.lines.map((l) => ({
           anggaran: l.amount,
-          realisasi: {
-            quantity: null,
-            unitPrice: null,
-            tanggal: l.realDate,
-            selesai: l.realDone,
-            catatan: l.realNotes,
-            nilai: l.realAmount,
-          } satisfies RealisasiBaris,
+          realisasi: susunRealisasi(lamaAkun(l), l.pembayaran, l.realDone),
+          sesudahPosisi: realisasiSesudahPosisi(lamaAkun(l), l.pembayaran, batas),
         })),
     ];
     const kumpulan = barisPerJenis.get(b.kind) ?? [];
     kumpulan.push(...baris);
     barisPerJenis.set(b.kind, kumpulan);
   }
+  // Realisasi RAB yang belum tercermin di saldo posisi kas — sama seperti
+  // pembayaran proyek. Yang dibayar sebelum atau pada tanggal posisi kas
+  // sudah ada di saldo; mengurangkannya lagi berarti menghitungnya dua kali.
+  const sesudahPosisiPerJenis = new Map<string, number>(
+    [...barisPerJenis].map(([kind, baris]) => [kind, round(baris.reduce((t, b) => t + b.sesudahPosisi, 0))]),
+  );
   // Yang masih akan keluar dari tiap jenis RAB: sisa baris yang belum
   // selesai, termasuk yang baru sebagian dibayar. Dipakai ramalan kas sebagai
   // sisa uang keluar kategori yang ditautkan ke RAB.
@@ -1849,15 +1835,13 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       ...b.itemLines.map((l) => ({
           planDate: l.planDate,
           anggaran: nilaiBarisBarang(l, round),
-          nilai: l.realQuantity === null || l.realUnitPrice === null
-            ? null
-            : round(l.realQuantity * l.realUnitPrice),
+          nilai: susunRealisasi(lamaBarang(l), l.pembayaran, l.realDone).nilai,
           selesai: l.realDone,
         })),
       ...b.lines.map((l) => ({
           planDate: l.planDate,
           anggaran: l.amount,
-          nilai: l.realAmount,
+          nilai: susunRealisasi(lamaAkun(l), l.pembayaran, l.realDone).nilai,
           selesai: l.realDone,
         })),
     ];
@@ -1875,6 +1859,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
     rabKind: k.rabKind,
     rab: k.rabKind ? (rekapPerJenis.get(k.rabKind) ?? REKAP_KOSONG) : null,
     akanKeluarRab: k.rabKind ? (sisaKeluarPerJenis.get(k.rabKind) ?? 0) : null,
+    rabSesudahPosisi: k.rabKind ? (sesudahPosisiPerJenis.get(k.rabKind) ?? 0) : null,
     cashAccountId: k.cashAccountId,
     cashAccountLabel: k.cashAccount ? `${k.cashAccount.code} ${k.cashAccount.name}` : null,
     manual: terpakaiKategori(k.id, false),
@@ -1986,7 +1971,8 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       account: { subtype: 'PAYROLL', code: { startsWith: '6130.' } },
     },
     select: {
-      amount: true, planDate: true, realAmount: true, realDate: true, accountId: true, notes: true,
+      amount: true, planDate: true, realAmount: true, realDate: true, realDone: true, accountId: true, notes: true,
+      pembayaran: { select: { date: true, amount: true } },
       budget: { select: { period: true, scope: true } },
       account: { select: { code: true, subtype: true } },
     },
@@ -2078,7 +2064,9 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
           // supaya menautkan bisa dilakukan satu per satu tanpa ada bulan yang
           // mendadak kosong.
           jatah: k.rab ? k.rab.anggaran : k.budget,
-          terpakai: k.rab ? k.rab.realisasi : k.terpakai,
+          // Yang sudah dibelanjakan sesudah posisi kas: realisasi RAB yang
+          // dibayar sebelum tanggal itu sudah ada di saldo.
+          terpakai: k.rab ? (k.rabSesudahPosisi ?? 0) : k.terpakai,
           terpakaiBulanIni: k.rab ? k.rab.realisasi : k.terpakaiBulanIni,
           // Hanya baris RAB yang belum tersentuh sama sekali yang pasti masih
           // butuh uang. Tanpa RAB angka ini tidak diketahui, dan diturunkan
@@ -2136,7 +2124,10 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             kewajibanPada: kewajibanBulan,
             proyekPada: proyekBulan,
             lajuOperasionalHarian: laju?.perHari ?? null,
-            sisaKeluarRencana: modeKategori ? rencana.keluarKategori : null,
+            // Sisa rencana kategori, ditambah yang sudah dibelanjakan sesudah
+            // posisi kas: uang itu sudah keluar tetapi belum tercermin di
+            // saldo yang menjadi titik awal ramalan ini.
+            sisaKeluarRencana: modeKategori ? rencana.keluarKategori + rencana.terpakai : null,
             hariTersisa: rencana.hari,
             hariSebulan: new Date(Date.UTC(
               Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0,

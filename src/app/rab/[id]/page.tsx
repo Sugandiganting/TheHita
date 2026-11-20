@@ -3,10 +3,14 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getBudgetDetail, getJenisRab } from '@/lib/queries';
 import { formatDate, formatPeriod, formatPercent, formatRupiah } from '@/lib/format';
-import { jenisPerBarang, kodePerBarang, namaJenis, penghematanBaris, type BarisBarangRab } from '@/lib/rab';
+import {
+  entriRealisasi, jenisPerBarang, kodePerBarang, lamaAkun, namaJenis, penghematanBaris, susunRealisasi,
+  type BarisBarangRab, type EntriRealisasi,
+} from '@/lib/rab';
+import { RealisasiRabDialog, type EntriRealisasiTampil } from '@/components/realisasi-rab';
 import { type BarangOption } from '@/components/budget-form';
 import {
-  GantiJenisRabDialog, RealisasiAkunDialog, RealisasiBarangDialog,
+  GantiJenisRabDialog,
   TambahAnggaranDialog, TambahBarangRabDialog, UbahAnggaranDialog, UbahBarangRabDialog,
 } from '@/components/budget-dialog';
 import { BudgetActions, BudgetItemLineDelete, BudgetLineDelete } from '@/components/budget-actions';
@@ -16,7 +20,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RabDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [rab, accounts, lines, barang, jenis] = await Promise.all([
+  const [rab, accounts, barisAkun, barang, jenis] = await Promise.all([
     getBudgetDetail(id),
     prisma.account.findMany({
       where: { isHeader: false, active: true, type: { in: ['EXPENSE', 'COGS'] } },
@@ -30,6 +34,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
         id: true, accountId: true, amount: true, notes: true, planDate: true,
         realAmount: true, realDate: true, realDone: true, realNotes: true,
         account: { select: { code: true, name: true } },
+        pembayaran: { orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] },
       },
     }),
     prisma.item.findMany({
@@ -47,6 +52,17 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   ]);
 
   if (!rab) notFound();
+
+  // Realisasi tiap baris per akun: realisasi lama ditambah pembayaran-pembayarannya.
+  const lines = barisAkun.map((l) => ({
+    ...l,
+    real: susunRealisasi(lamaAkun(l), l.pembayaran, l.realDone),
+    entri: entriRealisasi(lamaAkun(l), l.pembayaran),
+  }));
+  const keEntriTampil = (e: EntriRealisasi): EntriRealisasiTampil => ({
+    id: e.id, tanggal: e.tanggal ? formatDate(e.tanggal) : null, amount: e.amount,
+    quantity: e.quantity, note: e.note, lama: e.lama,
+  });
 
   // RAB lain milik pemilik dan bulan yang sama yang bisa menerima pindahan
   // baris: per akun dan masih draf. Baris gaji di RAB Umum, misalnya, bisa
@@ -80,7 +96,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
   const tagihanPerAkun = new Map<string, number>();
   for (const l of lines) tagihanPerAkun.set(l.accountId, (tagihanPerAkun.get(l.accountId) ?? 0) + 1);
   const hematTagihan = (l: (typeof lines)[number]) =>
-    l.realDone && l.realAmount !== null ? l.amount - l.realAmount : null;
+    penghematanBaris({ anggaran: l.amount, realisasi: l.real });
   const r = rab.ringkasan;
 
   const opsiBarang: BarangOption[] = barang.map((b) => ({
@@ -248,8 +264,9 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                               <>
                                 {formatRupiah(b.realisasi.nilai)}
                                 <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                  {b.realisasi.quantity} {b.satuan}
-                                  {!b.realisasi.selesai && ' · sebagian'}
+                                  {b.realisasi.quantity !== null && `${b.realisasi.quantity.toLocaleString('id-ID')} dari ${b.quantity.toLocaleString('id-ID')} ${b.satuan} · `}
+                                  {b.realisasi.selesai ? 'selesai' : 'sebagian'}
+                                  {b.entri.length > 1 && ` · ${b.entri.length} kali bayar`}
                                 </span>
                               </>
                             )}
@@ -269,22 +286,19 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                         <td className="td num">
                           <span className="flex items-center justify-end gap-3">
                             {disahkan && (
-                              <RealisasiBarangDialog
+                              <RealisasiRabDialog
+                                bentuk="barang"
                                 lineId={b.lineId}
                                 nama={`${b.itemCode} ${b.itemName}`}
-                                satuan={b.satuan}
                                 anggaran={b.anggaran}
-                                sudahAda={b.realisasi.nilai !== null}
-                                defaultDate={tanggalBawaanRealisasi}
-                                nilai={{
-                                  quantity: b.realisasi.quantity,
-                                  unitPrice: b.realisasi.unitPrice,
-                                  tanggal: b.realisasi.tanggal
-                                    ? b.realisasi.tanggal.toISOString().slice(0, 10)
-                                    : null,
-                                  selesai: b.realisasi.selesai,
-                                  catatan: b.realisasi.catatan,
-                                }}
+                                qtyRencana={b.quantity}
+                                hargaSatuan={b.unitPrice}
+                                satuan={b.satuan}
+                                realisasi={b.realisasi.nilai ?? 0}
+                                qtyDibeli={b.realisasi.quantity}
+                                selesai={b.realisasi.selesai}
+                                entri={b.entri.map(keEntriTampil)}
+                                tanggalBawaan={tanggalBawaanRealisasi}
                               />
                             )}
                             <UbahBarangRabDialog
@@ -381,13 +395,14 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                           </td>
                           {disahkan && (
                             <td className="td num">
-                              {l.realAmount === null ? (
+                              {l.real.nilai === null ? (
                                 <span className="text-xs text-slate-400">belum dilaporkan</span>
                               ) : (
                                 <>
-                                  {formatRupiah(l.realAmount)}
+                                  {formatRupiah(l.real.nilai)}
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                                    {l.realDone ? 'selesai' : 'sebagian'}
+                                    {l.real.selesai ? 'selesai' : 'sebagian'}
+                                    {l.entri.length > 1 && ` · ${l.entri.length} kali bayar`}
                                   </span>
                                 </>
                               )}
@@ -407,18 +422,16 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                           <td className="td num">
                             <span className="flex items-center justify-end gap-3">
                               {disahkan && (
-                                <RealisasiAkunDialog
+                                <RealisasiRabDialog
+                                  bentuk="akun"
                                   lineId={l.id}
                                   nama={nama}
                                   anggaran={l.amount}
-                                  nilai={{
-                                    amount: l.realAmount,
-                                    tanggal: l.realDate?.toISOString().slice(0, 10) ?? null,
-                                    selesai: l.realDone,
-                                    catatan: l.realNotes,
-                                  }}
-                                  defaultDate={tanggalBawaanRealisasi}
-                                  sudahAda={l.realAmount !== null}
+                                  realisasi={l.real.nilai ?? 0}
+                                  qtyDibeli={null}
+                                  selesai={l.real.selesai}
+                                  entri={l.entri.map(keEntriTampil)}
+                                  tanggalBawaan={tanggalBawaanRealisasi}
                                 />
                               )}
                               <UbahAnggaranDialog
@@ -450,7 +463,7 @@ export default async function RabDetailPage({ params }: { params: Promise<{ id: 
                       <td className="td">—</td>
                       {disahkan && (
                         <td className="td num">
-                          {formatRupiah(lines.reduce((t, l) => t + (l.realAmount ?? 0), 0))}
+                          {formatRupiah(lines.reduce((t, l) => t + (l.real.nilai ?? 0), 0))}
                         </td>
                       )}
                       {disahkan && (

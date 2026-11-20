@@ -134,3 +134,15 @@ test('ramalan November: sisa keluar dari kategori menggantikan laju harian', () 
   // Desember tidak berubah caranya: proyeksi musim − pengeluaran rutin.
   assert.equal(r.bulan[1].saldoAkhir, 3_884_391 + 472_711_920 - 335_834_450);
 });
+
+test('gaji RAB dibayar sebagian lewat pembayaran: tiap entri menurut tanggalnya, sisanya menurut rencana', () => {
+  const posisi = new Date(Date.UTC(2026, 10, 15));
+  const r = gajiRabBulanIni([{
+    amount: 10_000_000, planDate: new Date(Date.UTC(2026, 10, 25)), realAmount: null, realDate: null, realDone: false,
+    pembayaran: [
+      { date: new Date(Date.UTC(2026, 10, 1)), amount: 4_000_000 },
+      { date: new Date(Date.UTC(2026, 10, 20)), amount: 1_000_000 },
+    ],
+  }], posisi);
+  assert.deepEqual(r, { sudahKeluar: 4_000_000, akanKeluar: 6_000_000, tanpaTanggal: 0 });
+});

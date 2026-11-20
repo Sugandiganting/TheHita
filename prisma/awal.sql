@@ -436,6 +436,20 @@ CREATE TABLE "User" (
     "updatedAt" DATETIME NOT NULL
 );
 
+-- CreateTable
+CREATE TABLE "BudgetPayment" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "lineId" TEXT,
+    "itemLineId" TEXT,
+    "date" DATETIME NOT NULL,
+    "amount" REAL NOT NULL,
+    "quantity" REAL,
+    "note" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "BudgetPayment_lineId_fkey" FOREIGN KEY ("lineId") REFERENCES "BudgetLine" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "BudgetPayment_itemLineId_fkey" FOREIGN KEY ("itemLineId") REFERENCES "BudgetItemLine" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "BusinessGroup_code_key" ON "BusinessGroup"("code");
 
@@ -588,4 +602,10 @@ CREATE INDEX "ObligationPayment_obligationId_idx" ON "ObligationPayment"("obliga
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+
+-- CreateIndex
+CREATE INDEX "BudgetPayment_lineId_idx" ON "BudgetPayment"("lineId");
+
+-- CreateIndex
+CREATE INDEX "BudgetPayment_itemLineId_idx" ON "BudgetPayment"("itemLineId");
 

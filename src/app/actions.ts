@@ -1359,93 +1359,117 @@ export async function saveBudgetItemLine(_prev: ActionState, formData: FormData)
   return ok(`Anggaran ${item.name} disimpan.`);
 }
 
-/**
- * Mencatat realisasi satu baris RAB Purchasing.
- *
- * Hanya boleh pada RAB yang SUDAH DISAHKAN, dan itu disengaja: realisasi
- * dibandingkan dengan rencana, jadi rencananya harus berhenti bergerak lebih
- * dulu. RAB yang masih draf belum menjanjikan apa-apa untuk dibandingkan.
- *
- * Kosong berarti "belum dilaporkan" dan mengembalikan baris ini ke keadaan
- * semula — berbeda dari nol, yang berarti sudah diputuskan tidak jadi dibeli.
- */
-export async function simpanRealisasiBarang(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const id = String(formData.get('id') ?? '');
-  const quantity = angkaAtauNull(formData, 'realQuantity');
-  const unitPrice = angkaAtauNull(formData, 'realUnitPrice');
-  const tanggal = String(formData.get('realDate') ?? '').trim();
-  const selesai = String(formData.get('realDone') ?? '') === 'true';
-  const catatan = String(formData.get('realNotes') ?? '').trim();
+/* ------------------------------------------------------------------ */
+/* Realisasi RAB per pembayaran — sama dengan realisasi item proyek    */
+/* ------------------------------------------------------------------ */
 
-  const line = await prisma.budgetItemLine.findUnique({
-    where: { id },
-    include: { budget: { select: { status: true } }, item: { select: { name: true, unit: { select: { code: true } } } } },
-  });
-  if (!line) return fail('Baris barang tidak ditemukan.');
-  if (line.budget.status !== 'ACTIVE') {
-    return fail('RAB ini belum disahkan. Realisasi dicatat setelah rencananya berhenti bergerak, '
-      + 'supaya ada yang bisa dibandingkan.');
-  }
-  if ((quantity ?? 0) < 0 || (unitPrice ?? 0) < 0) return fail('Realisasi tidak boleh negatif.');
-  // Separuh keterangan bukan angka: tanpa keduanya, nilainya tidak bisa dihitung.
-  if ((quantity === null) !== (unitPrice === null)) {
-    return fail('Isi jumlah dan harga satuannya sekaligus, atau kosongkan dua-duanya.');
-  }
-  if (selesai && quantity === null) {
-    return fail('Tandai selesai hanya bila jumlahnya sudah diisi — isi 0 bila barangnya tidak jadi dibeli.');
-  }
+type BentukBaris = 'akun' | 'barang';
 
-  await prisma.budgetItemLine.update({
-    where: { id },
-    data: {
-      realQuantity: quantity,
-      realUnitPrice: unitPrice,
-      realDate: tanggal ? new Date(`${tanggal}T00:00:00.000Z`) : null,
-      realDone: selesai,
-      realNotes: catatan || null,
-    },
+/** Baris RAB beserta status RAB-nya, untuk kedua bentuk. */
+async function bacaBarisRab(bentuk: BentukBaris, id: string) {
+  if (bentuk === 'barang') {
+    const l = await prisma.budgetItemLine.findUnique({
+      where: { id }, select: { budget: { select: { status: true } }, item: { select: { name: true } } },
+    });
+    return l && { status: l.budget.status, nama: l.item.name };
+  }
+  const l = await prisma.budgetLine.findUnique({
+    where: { id }, select: { budget: { select: { status: true } }, account: { select: { code: true, name: true } }, notes: true },
   });
-  segarkanRab();
-  if (quantity === null) return ok(`Realisasi ${line.item.name} dikosongkan.`);
-  return ok(`Realisasi ${line.item.name}: ${quantity} ${line.item.unit.code} `
-    + `${selesai ? '— selesai' : '— masih berjalan'}.`);
+  return l && { status: l.budget.status, nama: `${l.account.name}${l.notes ? ` — ${l.notes}` : ''}` };
 }
 
-/** Mencatat realisasi satu baris RAB per akun. Aturannya sama dengan per barang. */
-export async function simpanRealisasiAkun(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const id = String(formData.get('id') ?? '');
-  const amount = angkaAtauNull(formData, 'realAmount');
-  const tanggal = String(formData.get('realDate') ?? '').trim();
-  const selesai = String(formData.get('realDone') ?? '') === 'true';
-  const catatan = String(formData.get('realNotes') ?? '').trim();
+const RAB_BELUM_DISAHKAN = 'RAB ini belum disahkan. Realisasi dicatat setelah rencananya berhenti bergerak, '
+  + 'supaya ada yang bisa dibandingkan.';
 
-  const line = await prisma.budgetLine.findUnique({
-    where: { id },
-    include: { budget: { select: { status: true } }, account: { select: { code: true, name: true } } },
-  });
-  if (!line) return fail('Baris anggaran tidak ditemukan.');
-  if (line.budget.status !== 'ACTIVE') {
-    return fail('RAB ini belum disahkan. Realisasi dicatat setelah rencananya berhenti bergerak, '
-      + 'supaya ada yang bisa dibandingkan.');
-  }
-  if ((amount ?? 0) < 0) return fail('Realisasi tidak boleh negatif.');
-  if (selesai && amount === null) {
-    return fail('Tandai selesai hanya bila nominalnya sudah diisi — isi 0 bila tidak jadi keluar.');
-  }
+const bentukDari = (formData: FormData): BentukBaris =>
+  (String(formData.get('bentuk') ?? '') === 'barang' ? 'barang' : 'akun');
 
-  await prisma.budgetLine.update({
-    where: { id },
+function segarkanRealisasiRab() {
+  segarkanRab();
+  revalidatePath('/rab/[id]', 'page');
+  revalidatePath('/rencana-kas');
+}
+
+/** Mencatat satu pembayaran realisasi baris RAB — boleh sebagian-sebagian. */
+export async function tambahPembayaranRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const bentuk = bentukDari(formData);
+  const id = String(formData.get('lineId') ?? '');
+  const tanggal = String(formData.get('date') ?? '').trim();
+  const amount = parseAmount(formData.get('amount'));
+  const note = String(formData.get('note') ?? '').trim();
+  // Qty hanya untuk RAB per barang, dan boleh kosong untuk DP.
+  const qtyTeks = bentuk === 'barang' ? String(formData.get('quantity') ?? '').trim() : '';
+  const quantity = qtyTeks === '' ? null : bacaJumlah(qtyTeks);
+
+  const baris = await bacaBarisRab(bentuk, id);
+  if (!baris) return fail('Baris RAB tidak ditemukan.');
+  if (baris.status !== 'ACTIVE') return fail(RAB_BELUM_DISAHKAN);
+  if (quantity !== null && quantity <= 0) return fail('Qty harus lebih besar dari nol, atau kosongkan untuk DP/termin.');
+  if (amount <= 0) return fail('Nominal pembayaran harus lebih besar dari nol.');
+  if (!tanggal) return fail('Tanggal pembayaran wajib diisi.');
+
+  await prisma.budgetPayment.create({
     data: {
-      realAmount: amount,
-      realDate: tanggal ? new Date(`${tanggal}T00:00:00.000Z`) : null,
-      realDone: selesai,
-      realNotes: catatan || null,
+      ...(bentuk === 'barang' ? { itemLineId: id } : { lineId: id }),
+      date: parseDate(tanggal), amount, quantity, note: note || null,
     },
   });
-  segarkanRab();
-  if (amount === null) return ok(`Realisasi ${line.account.name} dikosongkan.`);
-  return ok(`Realisasi ${line.account.code} ${line.account.name} tercatat`
-    + `${selesai ? ' dan ditandai selesai' : ', masih berjalan'}.`);
+  segarkanRealisasiRab();
+  return ok(`Pembayaran ${formatRupiahShort(amount)} untuk "${baris.nama}" dicatat.`);
+}
+
+export async function hapusPembayaranRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const bayar = await prisma.budgetPayment.findUnique({
+    where: { id },
+    select: {
+      line: { select: { budget: { select: { status: true } } } },
+      itemLine: { select: { budget: { select: { status: true } } } },
+    },
+  });
+  if (!bayar) return fail('Pembayaran tidak ditemukan.');
+  if ((bayar.line ?? bayar.itemLine)?.budget.status !== 'ACTIVE') return fail(RAB_BELUM_DISAHKAN);
+  await prisma.budgetPayment.delete({ where: { id } });
+  segarkanRealisasiRab();
+  return ok('Pembayaran dihapus.');
+}
+
+/** Menghapus realisasi lama — isian sekali per baris dari sebelum ada pembayaran. */
+export async function hapusRealisasiLamaRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const bentuk = bentukDari(formData);
+  const id = String(formData.get('lineId') ?? '');
+  const baris = await bacaBarisRab(bentuk, id);
+  if (!baris) return fail('Baris RAB tidak ditemukan.');
+  if (baris.status !== 'ACTIVE') return fail(RAB_BELUM_DISAHKAN);
+  if (bentuk === 'barang') {
+    await prisma.budgetItemLine.update({
+      where: { id }, data: { realQuantity: null, realUnitPrice: null, realDate: null, realNotes: null },
+    });
+  } else {
+    await prisma.budgetLine.update({ where: { id }, data: { realAmount: null, realDate: null, realNotes: null } });
+  }
+  segarkanRealisasiRab();
+  return ok('Realisasi lama dihapus.');
+}
+
+/**
+ * Menandai belanja sebuah baris RAB selesai atau belum, berapa pun
+ * realisasinya. Selesai tanpa pembayaran berarti tidak jadi dibelanjakan.
+ */
+export async function setSelesaiRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const bentuk = bentukDari(formData);
+  const id = String(formData.get('lineId') ?? '');
+  const selesai = String(formData.get('selesai') ?? '') === 'ya';
+  const baris = await bacaBarisRab(bentuk, id);
+  if (!baris) return fail('Baris RAB tidak ditemukan.');
+  if (baris.status !== 'ACTIVE') return fail(RAB_BELUM_DISAHKAN);
+  if (bentuk === 'barang') await prisma.budgetItemLine.update({ where: { id }, data: { realDone: selesai } });
+  else await prisma.budgetLine.update({ where: { id }, data: { realDone: selesai } });
+  segarkanRealisasiRab();
+  return ok(selesai
+    ? `"${baris.nama}" ditandai selesai — sisa anggarannya tidak lagi dihitung akan keluar.`
+    : `"${baris.nama}" dibuka lagi — sisa anggarannya kembali dihitung akan keluar.`);
 }
 
 export async function deleteBudgetItemLine(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -1512,8 +1536,8 @@ export async function duplicateBudget(_prev: ActionState, formData: FormData): P
         // dikembalikan ke draf: barisnya yang menyimpan kenyataan itu.
         _count: {
           select: {
-            lines: { where: { OR: [{ realAmount: { not: null } }, { realDone: true }] } },
-            itemLines: { where: { OR: [{ realQuantity: { not: null } }, { realDone: true }] } },
+            lines: { where: { OR: [{ realAmount: { not: null } }, { realDone: true }, { pembayaran: { some: {} } }] } },
+            itemLines: { where: { OR: [{ realQuantity: { not: null } }, { realDone: true }, { pembayaran: { some: {} } }] } },
           },
         },
       },

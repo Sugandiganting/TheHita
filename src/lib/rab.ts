@@ -193,6 +193,8 @@ export type BarisBarangRab = {
   rencanaTanggal: Date | null;
   catatan: string | null;
   realisasi: RealisasiBaris;
+  /** Entri realisasi: realisasi lama (bila ada) dan tiap pembayaran. */
+  entri: EntriRealisasi[];
 };
 
 /**
@@ -618,4 +620,140 @@ export function rekapJenisPerBulan(
     p, bulat(daftar.filter((r) => r.period === p).reduce((t, r) => t + r.totalAnggaran, 0)),
   ]));
   return { bulan, baris, totalBulan, total: bulat(baris.reduce((t, b) => t + b.total, 0)) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Realisasi per pembayaran — logika yang sama dengan item proyek      */
+/* ------------------------------------------------------------------ */
+
+export type PembayaranRab = {
+  id?: string;
+  date: Date;
+  amount: number;
+  /** Qty yang dibeli; hanya RAB per barang, boleh kosong untuk DP. */
+  quantity: number | null;
+  note: string | null;
+};
+
+/**
+ * Realisasi lama: satu isian per baris yang dulu diketik dan ditimpa. Tetap
+ * dihitung sebagai entri pertama, supaya data lama tidak hilang ketika
+ * pembayaran berikutnya dicatat.
+ */
+export type RealisasiLama = {
+  nilai: number | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  tanggal: Date | null;
+  catatan: string | null;
+};
+
+const bulat2 = (n: number) => Math.round(n * 100) / 100;
+const hariKe = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+
+/**
+ * Realisasi satu baris RAB dari realisasi lama dan pembayaran-pembayarannya.
+ *
+ * - nilai: jumlah seluruhnya; null selama belum ada apa pun dan belum selesai.
+ *   Baris yang ditandai selesai tanpa pembayaran bernilai 0 — tidak jadi
+ *   dibelanjakan, dan seluruh anggarannya menjadi hemat.
+ * - quantity: jumlah qty dari entri yang mencatatnya; null bila tidak ada.
+ * - unitPrice: harga rata-rata nyata (nilai ÷ qty) bila qty diketahui.
+ * - tanggal: pembayaran terakhir.
+ */
+export function susunRealisasi(
+  lama: RealisasiLama,
+  pembayaran: readonly PembayaranRab[],
+  selesai: boolean,
+): RealisasiBaris {
+  const adaLama = lama.nilai !== null;
+  if (!adaLama && pembayaran.length === 0) {
+    return { quantity: null, unitPrice: null, tanggal: null, selesai, catatan: lama.catatan, nilai: selesai ? 0 : null };
+  }
+  const nilai = bulat2((lama.nilai ?? 0) + pembayaran.reduce((t, p) => t + p.amount, 0));
+  const qtyAda = [
+    ...(adaLama && lama.quantity !== null ? [lama.quantity] : []),
+    ...pembayaran.filter((p) => p.quantity !== null).map((p) => p.quantity as number),
+  ];
+  const quantity = qtyAda.length > 0 ? bulat2(qtyAda.reduce((t, q) => t + q, 0)) : null;
+  const tanggalSemua = [
+    ...(adaLama && lama.tanggal ? [lama.tanggal] : []),
+    ...pembayaran.map((p) => p.date),
+  ];
+  const tanggal = tanggalSemua.length > 0
+    ? tanggalSemua.reduce((a, b) => (b.getTime() > a.getTime() ? b : a))
+    : null;
+  return {
+    quantity,
+    unitPrice: quantity !== null && quantity > 0
+      ? (pembayaran.length === 0 && lama.unitPrice !== null ? lama.unitPrice : bulat2(nilai / quantity))
+      : null,
+    tanggal,
+    selesai,
+    catatan: lama.catatan ?? pembayaran[pembayaran.length - 1]?.note ?? null,
+    nilai,
+  };
+}
+
+/**
+ * Bagian realisasi yang belum tercermin di saldo posisi kas: pembayaran yang
+ * tanggalnya sesudah tanggal posisi kas. Yang sebelum atau pada tanggal itu
+ * sudah ada di saldo, jadi tidak boleh dikurangkan lagi. Realisasi lama tanpa
+ * tanggal tidak diketahui kapan keluarnya, dan dianggap belum tercermin —
+ * sama seperti sebelum aturan ini ada.
+ */
+export function realisasiSesudahPosisi(
+  lama: Pick<RealisasiLama, 'nilai' | 'tanggal'>,
+  pembayaran: readonly Pick<PembayaranRab, 'date' | 'amount'>[],
+  posisi: Date | null,
+): number {
+  if (posisi === null) {
+    return bulat2((lama.nilai ?? 0) + pembayaran.reduce((t, p) => t + p.amount, 0));
+  }
+  const batas = hariKe(posisi);
+  let total = 0;
+  if (lama.nilai !== null && !(lama.tanggal && hariKe(lama.tanggal) <= batas)) total += lama.nilai;
+  for (const p of pembayaran) if (hariKe(p.date) > batas) total += p.amount;
+  return bulat2(total);
+}
+
+/** Realisasi lama baris RAB per akun, dari kolom real* yang dulu diketik sekali. */
+export function lamaAkun(l: { realAmount: number | null; realDate: Date | null; realNotes: string | null }): RealisasiLama {
+  return { nilai: l.realAmount, quantity: null, unitPrice: null, tanggal: l.realDate, catatan: l.realNotes };
+}
+
+/** Realisasi lama baris RAB per barang: jumlah × harga satuan, null bila separuh terisi. */
+export function lamaBarang(l: {
+  realQuantity: number | null; realUnitPrice: number | null; realDate: Date | null; realNotes: string | null;
+}): RealisasiLama {
+  const lengkap = l.realQuantity !== null && l.realUnitPrice !== null;
+  return {
+    nilai: lengkap ? bulat2((l.realQuantity as number) * (l.realUnitPrice as number)) : null,
+    quantity: lengkap ? l.realQuantity : null,
+    unitPrice: lengkap ? l.realUnitPrice : null,
+    tanggal: l.realDate,
+    catatan: l.realNotes,
+  };
+}
+
+export type EntriRealisasi = {
+  /** null untuk realisasi lama — dihapus lewat aksinya sendiri. */
+  id: string | null;
+  tanggal: Date | null;
+  amount: number;
+  quantity: number | null;
+  note: string | null;
+  lama: boolean;
+};
+
+/** Daftar entri realisasi untuk ditampilkan: realisasi lama (bila ada) lalu tiap pembayaran. */
+export function entriRealisasi(lama: RealisasiLama, pembayaran: readonly PembayaranRab[]): EntriRealisasi[] {
+  return [
+    ...(lama.nilai !== null
+      ? [{ id: null, tanggal: lama.tanggal, amount: lama.nilai, quantity: lama.quantity, note: lama.catatan, lama: true }]
+      : []),
+    ...pembayaran.map((p) => ({
+      id: p.id ?? null, tanggal: p.date, amount: p.amount, quantity: p.quantity, note: p.note, lama: false,
+    })),
+  ];
 }

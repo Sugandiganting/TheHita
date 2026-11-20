@@ -815,6 +815,10 @@ export type BarisGajiRab = {
   planDate: Date | null;
   realAmount: number | null;
   realDate: Date | null;
+  /** Baris sudah selesai direalisasi; sisanya tidak akan keluar lagi. */
+  realDone?: boolean;
+  /** Pembayaran realisasi per tanggal, seperti item proyek. */
+  pembayaran?: readonly { date: Date; amount: number }[];
 };
 
 /**
@@ -842,14 +846,38 @@ export function gajiRabBulanIni(
   let akanKeluar = 0;
   let tanpaTanggal = 0;
   for (const b of baris) {
+    const bayar = b.pembayaran ?? [];
+    const adaRealisasi = b.realAmount !== null || bayar.length > 0;
+    if (!adaRealisasi) {
+      if (b.planDate) {
+        if (hari(b.planDate) > batas) akanKeluar += b.amount;
+        else sudahKeluar += b.amount;
+      } else {
+        tanpaTanggal += b.amount;
+      }
+      continue;
+    }
+    // Realisasi yang tercatat: tiap entri menurut tanggalnya.
+    let realisasi = 0;
     if (b.realAmount !== null) {
+      realisasi += b.realAmount;
       if (b.realDate && hari(b.realDate) > batas) akanKeluar += b.realAmount;
       else sudahKeluar += b.realAmount;
-    } else if (b.planDate) {
-      if (hari(b.planDate) > batas) akanKeluar += b.amount;
-      else sudahKeluar += b.amount;
-    } else {
-      tanpaTanggal += b.amount;
+    }
+    for (const p of bayar) {
+      realisasi += p.amount;
+      if (hari(p.date) > batas) akanKeluar += p.amount;
+      else sudahKeluar += p.amount;
+    }
+    // Baris yang baru sebagian dibayar masih menyisakan anggarannya.
+    const sisa = b.realDone === false ? Math.max(0, b.amount - realisasi) : 0;
+    if (sisa > 0) {
+      if (b.planDate) {
+        if (hari(b.planDate) > batas) akanKeluar += sisa;
+        else sudahKeluar += sisa;
+      } else {
+        tanpaTanggal += sisa;
+      }
     }
   }
   return { sudahKeluar, akanKeluar, tanpaTanggal };

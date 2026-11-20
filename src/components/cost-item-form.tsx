@@ -218,8 +218,11 @@ function HapusPembayaran({ id }: { id: string }) {
  * selama belum diketik tangan — harga nyata boleh berbeda, jadi tetap bisa
  * diubah. Qty boleh kosong untuk DP atau termin.
  */
-function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty }: {
+export function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty, pakaiQty = true, satuan = 'qty' }: {
   itemId: string; tanggalBawaan: string; hargaSatuan: number; sisa: number; sisaQty: number;
+  /** RAB per akun tidak punya qty: gaji dan listrik tidak punya satuan. */
+  pakaiQty?: boolean;
+  satuan?: string;
 }) {
   const [qty, setQty] = useState('');
   const [nominal, setNominal] = useState('');
@@ -229,13 +232,13 @@ function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty }: {
 
   return (
     <>
-      <div className="grid grid-cols-[1fr_6rem] gap-3">
+      <div className={pakaiQty ? 'grid grid-cols-[1fr_6rem] gap-3' : ''}>
         <div>
           <label className="label" htmlFor={`bayar-tgl-${itemId}`}>Tanggal bayar</label>
           <input id={`bayar-tgl-${itemId}`} name="date" type="date" className="input" defaultValue={tanggalBawaan} required />
         </div>
-        <div>
-          <label className="label" htmlFor={`bayar-qty-${itemId}`}>Qty</label>
+        {pakaiQty && <div>
+          <label className="label" htmlFor={`bayar-qty-${itemId}`}>Qty{satuan !== 'qty' ? ` (${satuan})` : ''}</label>
           <input
             id={`bayar-qty-${itemId}`}
             name="quantity"
@@ -249,7 +252,7 @@ function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty }: {
               if (!diketik) setNominal(baru > 0 ? String(Math.round(baru * hargaSatuan)) : '');
             }}
           />
-        </div>
+        </div>}
       </div>
       <div className="min-w-0">
         <label className="label" htmlFor={`bayar-nom-${itemId}`}>Nominal</label>
@@ -261,11 +264,11 @@ function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty }: {
           onChange={(v) => { setNominal(v); setDiketik(v !== ''); }}
           required
         />
-        <p className="mt-1 text-[11px] text-slate-500">
+        {pakaiQty && <p className="mt-1 text-[11px] text-slate-500">
           {menurutRab > 0
             ? `Harga RAB: ${angkaQty(n)} × ${formatRupiah(hargaSatuan)} = ${formatRupiah(menurutRab)}${diketik && bacaJumlah(nominal) !== menurutRab ? ' — nominal diubah sesuai harga nyata' : ''}`
             : 'Isi qty yang dibeli; kosongkan untuk DP atau termin.'}
-        </p>
+        </p>}
       </div>
       <div>
         <label className="label" htmlFor={`bayar-cat-${itemId}`}>Catatan</label>

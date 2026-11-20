@@ -125,6 +125,7 @@ const barang = (o: Partial<BarisBarangRab>): BarisBarangRab => ({
   accountId: 'a1', accountCode: '6150.01', accountName: 'Biaya Pemeliharaan',
   quantity: 0, unitPrice: 0, anggaran: 0, rencanaTanggal: null, catatan: null,
   realisasi: { quantity: null, unitPrice: null, tanggal: null, selesai: false, catatan: null, nilai: null },
+  entri: [],
   ...o,
 });
 
@@ -480,4 +481,48 @@ test('jenis tambahan bisa per barang, dibaca dari master', () => {
   assert.deepEqual([...pb].sort(), ['ATK', 'PURCHASING']);
   // Tanpa himpunan, hanya Purchasing yang dianggap per barang (perilaku lama).
   assert.equal(pemilikSisa(['ATK', 'HR'], pb), 'HR');
+});
+
+import { realisasiSesudahPosisi, susunRealisasi } from '../src/lib/rab.ts';
+const tgR = (s: string) => new Date(`${s}T00:00:00.000Z`);
+const tanpaLama = { nilai: null, quantity: null, unitPrice: null, tanggal: null, catatan: null };
+
+test('realisasi RAB per pembayaran: dijumlah, qty dan harga rata-rata nyata', () => {
+  const r = susunRealisasi(tanpaLama, [
+    { date: tgR('2026-11-05'), amount: 1_000_000, quantity: null, note: 'DP' },
+    { date: tgR('2026-11-12'), amount: 2_000_000, quantity: 20, note: null },
+  ], false);
+  assert.equal(r.nilai, 3_000_000);
+  assert.equal(r.quantity, 20);
+  assert.equal(r.unitPrice, 150_000);
+  assert.deepEqual(r.tanggal, tgR('2026-11-12'));
+  assert.equal(r.selesai, false);
+});
+
+test('realisasi lama tetap dihitung sebagai entri pertama', () => {
+  const lama = { nilai: 500_000, quantity: 5, unitPrice: 100_000, tanggal: tgR('2026-11-03'), catatan: 'lama' };
+  assert.equal(susunRealisasi(lama, [], false).unitPrice, 100_000);
+  const r = susunRealisasi(lama, [{ date: tgR('2026-11-10'), amount: 300_000, quantity: 3, note: null }], true);
+  assert.equal(r.nilai, 800_000);
+  assert.equal(r.quantity, 8);
+  assert.equal(r.catatan, 'lama');
+});
+
+test('baris selesai tanpa pembayaran bernilai nol; belum apa-apa bernilai null', () => {
+  assert.equal(susunRealisasi(tanpaLama, [], true).nilai, 0);
+  assert.equal(susunRealisasi(tanpaLama, [], false).nilai, null);
+});
+
+test('realisasi RAB sebelum posisi kas sudah ada di saldo', () => {
+  const posisi = tgR('2026-11-15');
+  const bayar = [
+    { date: tgR('2026-11-10'), amount: 1_000_000 },
+    { date: tgR('2026-11-15'), amount: 2_000_000 },
+    { date: tgR('2026-11-16'), amount: 4_000_000 },
+  ];
+  assert.equal(realisasiSesudahPosisi({ nilai: null, tanggal: null }, bayar, posisi), 4_000_000);
+  // Realisasi lama: bertanggal sebelum posisi tidak dihitung; tanpa tanggal dihitung.
+  assert.equal(realisasiSesudahPosisi({ nilai: 500_000, tanggal: tgR('2026-11-01') }, [], posisi), 0);
+  assert.equal(realisasiSesudahPosisi({ nilai: 500_000, tanggal: null }, [], posisi), 500_000);
+  assert.equal(realisasiSesudahPosisi({ nilai: null, tanggal: null }, bayar, null), 7_000_000);
 });
