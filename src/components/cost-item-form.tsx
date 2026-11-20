@@ -7,7 +7,7 @@ import {
   type ActionState,
 } from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
-import { bacaJumlah, totalItemProyek } from '@/lib/proyek';
+import { bacaJumlah, qtyTerealisasi, totalItemProyek } from '@/lib/proyek';
 import { DialogTombol } from './dialog';
 import { SearchableSelect } from './searchable-select';
 import { MoneyInput } from './money-input';
@@ -198,7 +198,9 @@ export function CostItemAccount({
   );
 }
 
-export type PembayaranTampil = { id: string; tanggal: string; amount: number; note: string | null };
+export type PembayaranTampil = { id: string; tanggal: string; amount: number; quantity: number | null; note: string | null };
+
+const angkaQty = (n: number) => n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 
 function HapusPembayaran({ id }: { id: string }) {
   const [state, action] = useActionState(hapusPembayaranItem, initial);
@@ -212,15 +214,80 @@ function HapusPembayaran({ id }: { id: string }) {
 }
 
 /**
+ * Isian satu pembayaran. Nominal terisi sendiri dari qty × harga satuan RAB
+ * selama belum diketik tangan — harga nyata boleh berbeda, jadi tetap bisa
+ * diubah. Qty boleh kosong untuk DP atau termin.
+ */
+function IsianBayar({ itemId, tanggalBawaan, hargaSatuan, sisa, sisaQty }: {
+  itemId: string; tanggalBawaan: string; hargaSatuan: number; sisa: number; sisaQty: number;
+}) {
+  const [qty, setQty] = useState('');
+  const [nominal, setNominal] = useState('');
+  const [diketik, setDiketik] = useState(false);
+  const n = bacaJumlah(qty);
+  const menurutRab = n > 0 ? Math.round(n * hargaSatuan) : 0;
+
+  return (
+    <>
+      <div className="grid grid-cols-[1fr_6rem] gap-3">
+        <div>
+          <label className="label" htmlFor={`bayar-tgl-${itemId}`}>Tanggal bayar</label>
+          <input id={`bayar-tgl-${itemId}`} name="date" type="date" className="input" defaultValue={tanggalBawaan} required />
+        </div>
+        <div>
+          <label className="label" htmlFor={`bayar-qty-${itemId}`}>Qty</label>
+          <input
+            id={`bayar-qty-${itemId}`}
+            name="quantity"
+            inputMode="decimal"
+            className="input"
+            placeholder={sisaQty > 0 ? angkaQty(sisaQty) : ''}
+            value={qty}
+            onChange={(e) => {
+              setQty(e.target.value);
+              const baru = bacaJumlah(e.target.value);
+              if (!diketik) setNominal(baru > 0 ? String(Math.round(baru * hargaSatuan)) : '');
+            }}
+          />
+        </div>
+      </div>
+      <div className="min-w-0">
+        <label className="label" htmlFor={`bayar-nom-${itemId}`}>Nominal</label>
+        <MoneyInput
+          id={`bayar-nom-${itemId}`}
+          name="amount"
+          placeholder={sisa > 0 ? Math.round(sisa).toLocaleString('id-ID') : '0'}
+          value={nominal}
+          onChange={(v) => { setNominal(v); setDiketik(v !== ''); }}
+          required
+        />
+        <p className="mt-1 text-[11px] text-slate-500">
+          {menurutRab > 0
+            ? `Harga RAB: ${angkaQty(n)} × ${formatRupiah(hargaSatuan)} = ${formatRupiah(menurutRab)}${diketik && bacaJumlah(nominal) !== menurutRab ? ' — nominal diubah sesuai harga nyata' : ''}`
+            : 'Isi qty yang dibeli; kosongkan untuk DP atau termin.'}
+        </p>
+      </div>
+      <div>
+        <label className="label" htmlFor={`bayar-cat-${itemId}`}>Catatan</label>
+        <input id={`bayar-cat-${itemId}`} name="note" className="input" placeholder="Opsional, mis. DP 50%" />
+      </div>
+    </>
+  );
+}
+
+/**
  * Realisasi satu item: pembayaran yang sudah dicatat (boleh beberapa kali,
  * sebagian-sebagian), formulir pembayaran baru, dan tanda selesai belanja.
  */
 export function RealisasiItemDialog({
-  itemId, nama, total, realisasi, selesai, pembayaran, tanggalBawaan,
+  itemId, nama, total, qtyRencana, hargaSatuan, realisasi, selesai, pembayaran, tanggalBawaan,
 }: {
   itemId: string;
   nama: string;
   total: number;
+  /** Qty dan harga satuan menurut RAB item — dasar isian otomatis nominal. */
+  qtyRencana: number;
+  hargaSatuan: number;
   realisasi: number;
   selesai: boolean;
   pembayaran: PembayaranTampil[];
@@ -231,6 +298,7 @@ export function RealisasiItemDialog({
   const [stateSelesai, tandai] = useActionState(setItemSelesai, initial);
   const sisa = Math.max(0, total - realisasi);
   const selisih = total - realisasi;
+  const qtyDibeli = qtyTerealisasi(pembayaran);
 
   return (
     <DialogTombol
@@ -243,8 +311,18 @@ export function RealisasiItemDialog({
       {(tutup) => (
         <div className="space-y-4">
           <dl className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-sm">
-            <div><dt className="text-xs text-slate-500">Rencana</dt><dd className="font-medium tabular-nums">{formatRupiah(total)}</dd></div>
-            <div><dt className="text-xs text-slate-500">Sudah dibayar</dt><dd className="font-medium tabular-nums">{formatRupiah(realisasi)}</dd></div>
+            <div>
+              <dt className="text-xs text-slate-500">Rencana</dt>
+              <dd className="font-medium tabular-nums">{formatRupiah(total)}</dd>
+              <dd className="text-[11px] text-slate-500">{angkaQty(qtyRencana)} qty</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Sudah dibayar</dt>
+              <dd className="font-medium tabular-nums">{formatRupiah(realisasi)}</dd>
+              <dd className="text-[11px] text-slate-500">
+                {qtyDibeli === null ? 'qty belum dicatat' : `${angkaQty(qtyDibeli)} dari ${angkaQty(qtyRencana)} qty`}
+              </dd>
+            </div>
             <div>
               <dt className="text-xs text-slate-500">{selesai ? (selisih >= 0 ? 'Hemat' : 'Lebih mahal') : 'Sisa'}</dt>
               <dd className={`font-medium tabular-nums ${selesai ? (selisih >= 0 ? 'text-emerald-700' : 'text-red-600') : ''}`}>
@@ -259,6 +337,9 @@ export function RealisasiItemDialog({
                 <li key={p.id} className="flex items-baseline justify-between gap-3 py-1.5">
                   <span>
                     <span className="tabular-nums">{p.tanggal}</span>
+                    {p.quantity != null && (
+                      <span className="ml-2 text-xs text-slate-600">{angkaQty(p.quantity)} qty</span>
+                    )}
                     {p.note && <span className="ml-2 text-xs text-slate-500">{p.note}</span>}
                   </span>
                   <span className="flex items-baseline gap-3">
@@ -272,20 +353,8 @@ export function RealisasiItemDialog({
 
           <form action={bayar} className="space-y-3 rounded-lg border border-slate-200 p-3" key={stateBayar.ok ? stateBayar.message : 'bayar'}>
             <input type="hidden" name="itemId" value={itemId} />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor={`bayar-tgl-${itemId}`}>Tanggal bayar</label>
-                <input id={`bayar-tgl-${itemId}`} name="date" type="date" className="input" defaultValue={tanggalBawaan} required />
-              </div>
-              <div className="min-w-0">
-                <label className="label" htmlFor={`bayar-nom-${itemId}`}>Nominal</label>
-                <MoneyInput id={`bayar-nom-${itemId}`} name="amount" placeholder={sisa > 0 ? String(Math.round(sisa)) : '0'} required />
-              </div>
-            </div>
-            <div>
-              <label className="label" htmlFor={`bayar-cat-${itemId}`}>Catatan</label>
-              <input id={`bayar-cat-${itemId}`} name="note" className="input" placeholder="Opsional, mis. DP 50%" />
-            </div>
+            <IsianBayar itemId={itemId} tanggalBawaan={tanggalBawaan} hargaSatuan={hargaSatuan} sisa={sisa}
+              sisaQty={Math.max(0, qtyRencana - (qtyDibeli ?? 0))} />
             <button type="submit" className="btn-primary">Catat pembayaran</button>
             {stateBayar.message && (
               <p className={`text-sm ${stateBayar.ok ? 'text-emerald-700' : 'text-red-600'}`}>{stateBayar.message}</p>

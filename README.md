@@ -323,7 +323,9 @@ berstatus *Direncanakan* dibaca sebagai Approved. Pembatasan siapa yang boleh me
 menyusul bersama hak akses pengguna. Proyek Funding Review dan Approved (sebelum mulai)
 bisa dikembalikan ke Draft.
 
-Realisasi item dicatat per pembayaran: satu item boleh dibayar beberapa kali. Status
+Realisasi item dicatat per pembayaran: satu item boleh dibayar beberapa kali. Setiap
+pembayaran boleh mencatat **qty** yang dibeli; nominalnya terisi sendiri dari qty × harga
+satuan RAB dan bisa diubah sesuai harga nyata. Qty boleh dikosongkan untuk DP atau termin. Status
 pembelanjaannya (**Belum dibayar / Sebagian / Selesai**) berdiri sendiri; item boleh
 ditandai selesai walau realisasinya tidak sama dengan rencana, dan selisihnya tampil
 sebagai *hemat* atau *lebih*. Peramalan hanya menghitung yang masih akan keluar: nol

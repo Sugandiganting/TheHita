@@ -154,3 +154,10 @@ test('uang proyek untuk rencana kas: sisa, pembayaran sesudah posisi, dan realis
   assert.equal(keluarProyekPada(daftar, '2026-11'), 7_000_000);
   assert.equal(keluarProyekPada(daftar, '2026-12'), 2_000_000);
 });
+
+import { qtyTerealisasi } from '../src/lib/proyek.ts';
+test('qty terealisasi hanya dari pembayaran yang mencatat qty', () => {
+  assert.equal(qtyTerealisasi([]), null);
+  assert.equal(qtyTerealisasi([{ quantity: null }]), null);
+  assert.equal(qtyTerealisasi([{ quantity: 1 }, { quantity: null }, { quantity: 0.5 }]), 1.5);
+});

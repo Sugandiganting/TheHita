@@ -331,3 +331,14 @@ export function keluarProyekUntukKas(
 export function keluarProyekPada(daftar: readonly KeluarProyek[], period: Period): number {
   return bulat(daftar.filter((k) => k.period === period).reduce((t, k) => t + k.amount, 0));
 }
+
+/**
+ * Qty yang sudah dibeli menurut pembayaran yang mencantumkannya. Pembayaran
+ * tanpa qty (DP, termin) tidak menambah apa pun. null bila belum ada satu pun
+ * pembayaran yang mencatat qty — beda dengan "sudah dicatat, nol".
+ */
+export function qtyTerealisasi(pembayaran: readonly { quantity?: number | null }[]): number | null {
+  const ber = pembayaran.filter((p) => p.quantity != null);
+  if (ber.length === 0) return null;
+  return bulat(ber.reduce((t, p) => t + (p.quantity ?? 0), 0));
+}

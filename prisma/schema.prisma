@@ -243,6 +243,9 @@ model ProjectCostPayment {
   itemId    String
   date      DateTime
   amount    Float
+  /// Qty yang dibeli dengan pembayaran ini. Kosong untuk DP/termin yang belum
+  /// menyangkut barang tertentu.
+  quantity  Float?
   note      String?
   createdAt DateTime @default(now())
 

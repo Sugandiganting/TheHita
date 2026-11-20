@@ -8,7 +8,7 @@ import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem } from '@/app/actions';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
 import { CostItemAccount, CostItemForm, RealisasiItemDialog, UbahItemProyekDialog } from '@/components/cost-item-form';
-import { LABEL_REALISASI_ITEM, hargaSatuanItem, realisasiDibuka, rekapHematProyek, rekapRealisasiItem } from '@/lib/proyek';
+import { LABEL_REALISASI_ITEM, hargaSatuanItem, qtyTerealisasi, realisasiDibuka, rekapHematProyek, rekapRealisasiItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -46,7 +46,9 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
   }).format(d);
 
-  const items = project.items.map((i) => ({ ...i, real: rekapRealisasiItem(i, i.pembayaran) }));
+  const items = project.items.map((i) => ({
+    ...i, real: rekapRealisasiItem(i, i.pembayaran), qtyDibeli: qtyTerealisasi(i.pembayaran),
+  }));
   const total = items.reduce((s, i) => s + i.amount, 0);
   const paid = items.reduce((s, i) => s + i.real.realisasi, 0);
   // Yang masih akan keluar — inilah yang dihitung peramalan.
@@ -176,6 +178,11 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                       <>
                         <td className="td num whitespace-nowrap">
                           {item.real.realisasi > 0 ? formatRupiah(item.real.realisasi) : <span className="text-slate-400">—</span>}
+                          {item.qtyDibeli !== null && (
+                            <span className="block text-[11px] text-slate-500">
+                              {item.qtyDibeli.toLocaleString('id-ID')} dari {item.quantity.toLocaleString('id-ID')} qty
+                            </span>
+                          )}
                           {item.pembayaran.length > 1 && (
                             <span className="block text-[11px] text-slate-400">{item.pembayaran.length} kali bayar</span>
                           )}
@@ -206,11 +213,13 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                           itemId={item.id}
                           nama={item.name}
                           total={item.amount}
+                          qtyRencana={item.quantity}
+                          hargaSatuan={hargaSatuanItem(item)}
                           realisasi={item.real.realisasi}
                           selesai={item.real.selesai}
                           tanggalBawaan={hariIni}
                           pembayaran={item.pembayaran.map((p) => ({
-                            id: p.id, tanggal: formatDate(p.date), amount: p.amount, note: p.note,
+                            id: p.id, tanggal: formatDate(p.date), amount: p.amount, quantity: p.quantity, note: p.note,
                           }))}
                         />}
                         <UbahItemProyekDialog

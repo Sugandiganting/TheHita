@@ -116,6 +116,7 @@ CREATE TABLE "ProjectCostPayment" (
     "itemId" TEXT NOT NULL,
     "date" DATETIME NOT NULL,
     "amount" REAL NOT NULL,
+    "quantity" REAL,
     "note" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "ProjectCostPayment_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "ProjectCostItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE

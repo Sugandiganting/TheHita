@@ -681,17 +681,21 @@ export async function tambahPembayaranItem(_prev: ActionState, formData: FormDat
   const tanggal = String(formData.get('date') ?? '');
   const amount = parseAmount(formData.get('amount'));
   const note = String(formData.get('note') ?? '').trim();
+  // Qty boleh kosong: DP atau termin belum tentu menyangkut barang tertentu.
+  const qtyTeks = String(formData.get('quantity') ?? '').trim();
+  const quantity = qtyTeks === '' ? null : bacaJumlah(qtyTeks);
 
   const item = await prisma.projectCostItem.findUnique({ where: { id: itemId }, select: { projectId: true, name: true } });
   if (!item) return fail('Item biaya tidak ditemukan.');
   const ditolak = await realisasiDitolak(itemId);
   if (ditolak) return fail(ditolak);
+  if (quantity !== null && quantity <= 0) return fail('Qty harus lebih besar dari nol, atau kosongkan untuk DP/termin.');
   if (amount <= 0) return fail('Nominal pembayaran harus lebih besar dari nol.');
   if (!tanggal) return fail('Tanggal pembayaran wajib diisi.');
 
   await ubahLunasLama(itemId);
   await prisma.projectCostPayment.create({
-    data: { itemId, date: parseDate(tanggal), amount, note: note || null },
+    data: { itemId, date: parseDate(tanggal), amount, quantity, note: note || null },
   });
   segarkanProyek(item.projectId);
   return ok(`Pembayaran ${formatRupiahShort(amount)} untuk "${item.name}" dicatat.`);
