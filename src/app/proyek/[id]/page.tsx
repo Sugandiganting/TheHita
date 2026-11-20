@@ -8,7 +8,7 @@ import { monthlyInstallment } from '@/lib/forecast';
 import { deleteCostItem } from '@/app/actions';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
 import { CostItemAccount, CostItemForm, RealisasiItemDialog, UbahItemProyekDialog } from '@/components/cost-item-form';
-import { LABEL_REALISASI_ITEM, hargaSatuanItem, realisasiDibuka, rekapRealisasiItem } from '@/lib/proyek';
+import { LABEL_REALISASI_ITEM, hargaSatuanItem, realisasiDibuka, rekapHematProyek, rekapRealisasiItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -51,8 +51,9 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
   const paid = items.reduce((s, i) => s + i.real.realisasi, 0);
   // Yang masih akan keluar — inilah yang dihitung peramalan.
   const outstanding = items.reduce((s, i) => s + i.real.sisaAkanKeluar, 0);
-  // Selisih item yang sudah selesai: positif hemat, negatif lebih mahal.
-  const selisihSelesai = items.reduce((s, i) => s + (i.real.selisih ?? 0), 0);
+  // Hemat bersih dari item yang sudah selesai (RAB − realisasi): positif hemat,
+  // negatif lebih mahal. Informasi kinerja saja — tidak memengaruhi kas.
+  const selisihSelesai = rekapHematProyek(project.items).bersih;
   const hariIni = toDateInput(new Date());
   // Realisasi baru dibuka setelah dana disetujui (Approved dan sesudahnya).
   const dibuka = realisasiDibuka(status);

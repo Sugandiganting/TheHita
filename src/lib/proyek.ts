@@ -190,3 +190,42 @@ export function rekapRealisasiItem(
 export function realisasiDibuka(status: StatusProyek): boolean {
   return status === 'APPROVED' || status === 'ONGOING' || status === 'DONE' || status === 'CANCELLED';
 }
+
+export type HematProyek = {
+  /** Jumlah RAB − realisasi dari item selesai yang lebih murah dari RAB. */
+  hemat: number;
+  /** Jumlah realisasi − RAB dari item selesai yang lebih mahal dari RAB. */
+  lebih: number;
+  /** hemat − lebih: kinerja penghematan proyek secara keseluruhan. */
+  bersih: number;
+  itemSelesai: number;
+  itemTotal: number;
+};
+
+/**
+ * Kinerja penghematan sebuah proyek: RAB dikurangi realisasi, dihitung per
+ * item setelah item ditandai selesai. Item yang belum selesai belum punya
+ * angka hemat — sisanya masih mungkin dibelanjakan.
+ *
+ * Angka ini murni informasi kinerja. Ia tidak ikut menghitung uang keluar
+ * maupun plafon belanja, dan tidak berubah karena posisi kas diperbarui:
+ * yang menentukannya hanya RAB item dan realisasinya.
+ */
+export function rekapHematProyek(
+  items: readonly { amount: number; paid: boolean; done: boolean; pembayaran: readonly { amount: number }[] }[],
+): HematProyek {
+  let hemat = 0;
+  let lebih = 0;
+  let itemSelesai = 0;
+  for (const item of items) {
+    const { selisih } = rekapRealisasiItem(item, item.pembayaran);
+    if (selisih === null) continue;
+    itemSelesai += 1;
+    if (selisih > 0) hemat += selisih;
+    else lebih -= selisih;
+  }
+  return {
+    hemat: bulat(hemat), lebih: bulat(lebih), bersih: bulat(hemat - lebih),
+    itemSelesai, itemTotal: items.length,
+  };
+}

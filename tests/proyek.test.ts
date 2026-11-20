@@ -93,3 +93,23 @@ test('realisasi baru dibuka setelah dana disetujui', () => {
   for (const s of ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'REJECTED'] as const) assert.equal(realisasiDibuka(s), false, s);
   for (const s of ['APPROVED', 'ONGOING', 'DONE', 'CANCELLED'] as const) assert.equal(realisasiDibuka(s), true, s);
 });
+
+import { rekapHematProyek } from '../src/lib/proyek.ts';
+test('hemat proyek: RAB − realisasi dari item yang sudah selesai saja', () => {
+  const r = rekapHematProyek([
+    // Selesai lebih murah: hemat 500 rb.
+    { amount: 3_000_000, paid: false, done: true, pembayaran: [{ amount: 1_000_000 }, { amount: 1_500_000 }] },
+    // Selesai lebih mahal: lebih 200 rb.
+    { amount: 1_000_000, paid: false, done: true, pembayaran: [{ amount: 1_200_000 }] },
+    // Baru sebagian: belum punya angka hemat walau realisasinya di bawah RAB.
+    { amount: 5_000_000, paid: false, done: false, pembayaran: [{ amount: 1_000_000 }] },
+    // Lunas lama: selesai, pas RAB.
+    { amount: 700_000, paid: true, done: false, pembayaran: [] },
+  ]);
+  assert.deepEqual(r, { hemat: 500_000, lebih: 200_000, bersih: 300_000, itemSelesai: 3, itemTotal: 4 });
+});
+
+test('hemat proyek kosong bila belum ada item selesai', () => {
+  const r = rekapHematProyek([{ amount: 2_000_000, paid: false, done: false, pembayaran: [] }]);
+  assert.deepEqual(r, { hemat: 0, lebih: 0, bersih: 0, itemSelesai: 0, itemTotal: 1 });
+});

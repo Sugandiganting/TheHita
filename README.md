@@ -333,6 +333,11 @@ proyek **Approved** (sesudah Funding Review), dan server pun menolak pencatatan 
 Bila proyek dikembalikan ke Draft, pembayaran yang sudah tercatat tetap tersimpan dan tampil
 lagi setelah disetujui ulang.
 
+**Hemat** dihitung per item setelah item ditandai selesai: RAB dikurangi realisasi.
+Jumlahnya per proyek (hemat dikurangi yang lebih mahal) tampil di menu Proyek dan di
+halaman detailnya. Angka ini informasi kinerja saja: tidak ikut menghitung uang keluar
+maupun plafon belanja, dan tidak berubah karena posisi kas diperbarui.
+
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
 pinjaman bank, atau setoran modal), dan perkiraan tambahan pendapatan setelah proyek

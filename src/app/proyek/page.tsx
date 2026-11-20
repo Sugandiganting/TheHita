@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, realisasiDibuka, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
+import { LABEL_STATUS_PROYEK, realisasiDibuka, rekapHematProyek, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +52,7 @@ export default async function ProyekPage() {
             const status = statusEfektif(p.status, p.startDate, new Date());
             // Realisasi baru ditampilkan setelah proyek Approved.
             const dibuka = realisasiDibuka(status);
+            const hemat = rekapHematProyek(p.items);
 
             return (
               <Card key={p.id} className="card-pad">
@@ -90,6 +91,24 @@ export default async function ProyekPage() {
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, progress)}%` }} />
                   </div>
+                  {/* Kinerja penghematan: informasi saja, tidak memengaruhi kas maupun plafon. */}
+                  <p className="mt-2 text-xs text-slate-500">
+                    {hemat.itemSelesai === 0 ? (
+                      'Hemat dihitung setelah ada item selesai'
+                    ) : (
+                      <>
+                        {hemat.bersih >= 0 ? (
+                          <span className="font-medium text-emerald-700">Hemat {formatRupiah(hemat.bersih)}</span>
+                        ) : (
+                          <span className="font-medium text-red-600">Lebih {formatRupiah(-hemat.bersih)}</span>
+                        )}
+                        {hemat.hemat > 0 && hemat.lebih > 0 && (
+                          <> (hemat {formatRupiah(hemat.hemat)} − lebih {formatRupiah(hemat.lebih)})</>
+                        )}
+                        {' '}· {hemat.itemSelesai} dari {hemat.itemTotal} item selesai
+                      </>
+                    )}
+                  </p>
                 </div>
                 )}
 
