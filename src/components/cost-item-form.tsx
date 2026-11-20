@@ -2,7 +2,10 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
-import { addCostItem, setCostItemAccount, updateCostItem, type ActionState } from '@/app/actions';
+import {
+  addCostItem, hapusPembayaranItem, setCostItemAccount, setItemSelesai, tambahPembayaranItem, updateCostItem,
+  type ActionState,
+} from '@/app/actions';
 import { formatRupiah } from '@/lib/format';
 import { bacaJumlah, totalItemProyek } from '@/lib/proyek';
 import { DialogTombol } from './dialog';
@@ -192,5 +195,116 @@ export function CostItemAccount({
       />
       {!state.ok && state.message && <span className="mt-0.5 block text-[11px] text-red-600">{state.message}</span>}
     </div>
+  );
+}
+
+export type PembayaranTampil = { id: string; tanggal: string; amount: number; note: string | null };
+
+function HapusPembayaran({ id }: { id: string }) {
+  const [state, action] = useActionState(hapusPembayaranItem, initial);
+  return (
+    <form action={action} className="inline">
+      <input type="hidden" name="id" value={id} />
+      <button type="submit" className="text-xs text-slate-400 hover:text-red-600">Hapus</button>
+      {!state.ok && state.message && <span className="ml-2 text-xs text-red-600">{state.message}</span>}
+    </form>
+  );
+}
+
+/**
+ * Realisasi satu item: pembayaran yang sudah dicatat (boleh beberapa kali,
+ * sebagian-sebagian), formulir pembayaran baru, dan tanda selesai belanja.
+ */
+export function RealisasiItemDialog({
+  itemId, nama, total, realisasi, selesai, pembayaran, tanggalBawaan,
+}: {
+  itemId: string;
+  nama: string;
+  total: number;
+  realisasi: number;
+  selesai: boolean;
+  pembayaran: PembayaranTampil[];
+  /** Hari ini, untuk isian tanggal pembayaran. */
+  tanggalBawaan: string;
+}) {
+  const [stateBayar, bayar] = useActionState(tambahPembayaranItem, initial);
+  const [stateSelesai, tandai] = useActionState(setItemSelesai, initial);
+  const sisa = Math.max(0, total - realisasi);
+  const selisih = total - realisasi;
+
+  return (
+    <DialogTombol
+      label="Realisasi"
+      varian="tautan"
+      lebar="sm"
+      judul={`Realisasi ${nama}`}
+      keterangan="Catat setiap pembayaran, boleh sebagian-sebagian. Tandai selesai bila pembelanjaannya sudah tuntas, berapa pun totalnya."
+    >
+      {(tutup) => (
+        <div className="space-y-4">
+          <dl className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-sm">
+            <div><dt className="text-xs text-slate-500">Rencana</dt><dd className="font-medium tabular-nums">{formatRupiah(total)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Sudah dibayar</dt><dd className="font-medium tabular-nums">{formatRupiah(realisasi)}</dd></div>
+            <div>
+              <dt className="text-xs text-slate-500">{selesai ? (selisih >= 0 ? 'Hemat' : 'Lebih mahal') : 'Sisa'}</dt>
+              <dd className={`font-medium tabular-nums ${selesai ? (selisih >= 0 ? 'text-emerald-700' : 'text-red-600') : ''}`}>
+                {formatRupiah(selesai ? Math.abs(selisih) : sisa)}
+              </dd>
+            </div>
+          </dl>
+
+          {pembayaran.length > 0 && (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {pembayaran.map((p) => (
+                <li key={p.id} className="flex items-baseline justify-between gap-3 py-1.5">
+                  <span>
+                    <span className="tabular-nums">{p.tanggal}</span>
+                    {p.note && <span className="ml-2 text-xs text-slate-500">{p.note}</span>}
+                  </span>
+                  <span className="flex items-baseline gap-3">
+                    <span className="font-medium tabular-nums">{formatRupiah(p.amount)}</span>
+                    <HapusPembayaran id={p.id} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form action={bayar} className="space-y-3 rounded-lg border border-slate-200 p-3" key={stateBayar.ok ? stateBayar.message : 'bayar'}>
+            <input type="hidden" name="itemId" value={itemId} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor={`bayar-tgl-${itemId}`}>Tanggal bayar</label>
+                <input id={`bayar-tgl-${itemId}`} name="date" type="date" className="input" defaultValue={tanggalBawaan} required />
+              </div>
+              <div className="min-w-0">
+                <label className="label" htmlFor={`bayar-nom-${itemId}`}>Nominal</label>
+                <MoneyInput id={`bayar-nom-${itemId}`} name="amount" placeholder={sisa > 0 ? String(Math.round(sisa)) : '0'} required />
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor={`bayar-cat-${itemId}`}>Catatan</label>
+              <input id={`bayar-cat-${itemId}`} name="note" className="input" placeholder="Opsional, mis. DP 50%" />
+            </div>
+            <button type="submit" className="btn-primary">Catat pembayaran</button>
+            {stateBayar.message && (
+              <p className={`text-sm ${stateBayar.ok ? 'text-emerald-700' : 'text-red-600'}`}>{stateBayar.message}</p>
+            )}
+          </form>
+
+          <form action={tandai} className="flex flex-wrap items-center gap-3">
+            <input type="hidden" name="itemId" value={itemId} />
+            <input type="hidden" name="selesai" value={selesai ? 'tidak' : 'ya'} />
+            <button type="submit" className={selesai ? 'btn-secondary' : 'btn-primary'}>
+              {selesai ? 'Buka lagi (belum selesai)' : 'Tandai pembelanjaan selesai'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={tutup}>Tutup</button>
+            {stateSelesai.message && (
+              <p className={`w-full text-sm ${stateSelesai.ok ? 'text-emerald-700' : 'text-red-600'}`}>{stateSelesai.message}</p>
+            )}
+          </form>
+        </div>
+      )}
+    </DialogTombol>
   );
 }

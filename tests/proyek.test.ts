@@ -38,9 +38,52 @@ test('Approved menjadi In Progress begitu tanggal mulai tiba', () => {
 test('tiap tahap hanya membuka langkah berikutnya', () => {
   assert.deepEqual(aksiTersedia('DRAFT'), ['AJUKAN']);
   assert.deepEqual(aksiTersedia('PROPOSED'), ['SETUJUI_RENCANA', 'TOLAK', 'KEMBALI_DRAF']);
-  assert.deepEqual(aksiTersedia('FUNDING_REVIEW'), ['SETUJUI_DANA', 'TOLAK']);
-  assert.deepEqual(aksiTersedia('APPROVED'), ['BATALKAN']);
+  assert.deepEqual(aksiTersedia('FUNDING_REVIEW'), ['SETUJUI_DANA', 'TOLAK', 'KEMBALI_DRAF']);
+  assert.deepEqual(aksiTersedia('APPROVED'), ['BATALKAN', 'KEMBALI_DRAF']);
   assert.deepEqual(aksiTersedia('ONGOING'), ['SELESAI', 'BATALKAN']);
   assert.deepEqual(aksiTersedia('DONE'), []);
   assert.equal(AKSI_PROYEK.SETUJUI_DANA.ke, 'APPROVED');
+});
+
+/* Realisasi item: pembayaran sebagian, status selesai, selisih terhadap rencana */
+import { rekapRealisasiItem } from '../src/lib/proyek.ts';
+
+test('belum ada pembayaran: seluruh total masih akan keluar', () => {
+  const r = rekapRealisasiItem({ amount: 10_000_000, paid: false, done: false }, []);
+  assert.equal(r.status, 'BELUM');
+  assert.equal(r.sisaAkanKeluar, 10_000_000);
+  assert.equal(r.selisih, null);
+});
+
+test('dibayar sebagian: sisanya masih akan keluar, selisih belum dihitung', () => {
+  const r = rekapRealisasiItem({ amount: 10_000_000, paid: false, done: false }, [{ amount: 3_000_000 }, { amount: 2_000_000 }]);
+  assert.equal(r.status, 'SEBAGIAN');
+  assert.equal(r.realisasi, 5_000_000);
+  assert.equal(r.sisaAkanKeluar, 5_000_000);
+  assert.equal(r.selisih, null);
+});
+
+test('selesai lebih murah: tidak ada lagi yang keluar, selisihnya hemat', () => {
+  const r = rekapRealisasiItem({ amount: 10_000_000, paid: false, done: true }, [{ amount: 8_500_000 }]);
+  assert.equal(r.status, 'SELESAI');
+  assert.equal(r.sisaAkanKeluar, 0);
+  assert.equal(r.selisih, 1_500_000);
+});
+
+test('selesai lebih mahal: selisih negatif', () => {
+  const r = rekapRealisasiItem({ amount: 10_000_000, paid: false, done: true }, [{ amount: 11_200_000 }]);
+  assert.equal(r.selisih, -1_200_000);
+});
+
+test('dibayar melebihi total tetapi belum selesai: sisa tidak minus', () => {
+  const r = rekapRealisasiItem({ amount: 10_000_000, paid: false, done: false }, [{ amount: 12_000_000 }]);
+  assert.equal(r.sisaAkanKeluar, 0);
+});
+
+test('tanda Lunas lama tanpa pembayaran dibaca selesai sebesar totalnya', () => {
+  const r = rekapRealisasiItem({ amount: 2_000_000, paid: true, done: false }, []);
+  assert.equal(r.status, 'SELESAI');
+  assert.equal(r.realisasi, 2_000_000);
+  assert.equal(r.selisih, 0);
+  assert.equal(r.dariLunasLama, true);
 });

@@ -5,10 +5,10 @@ import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
 import { LABEL_STATUS_PROYEK, statusEfektif } from '@/lib/proyek';
 import { ProjectApproval } from '@/components/project-approval';
 import { monthlyInstallment } from '@/lib/forecast';
-import { deleteCostItem, toggleCostItemPaid } from '@/app/actions';
+import { deleteCostItem } from '@/app/actions';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
-import { CostItemAccount, CostItemForm, UbahItemProyekDialog } from '@/components/cost-item-form';
-import { hargaSatuanItem } from '@/lib/proyek';
+import { CostItemAccount, CostItemForm, RealisasiItemDialog, UbahItemProyekDialog } from '@/components/cost-item-form';
+import { LABEL_REALISASI_ITEM, hargaSatuanItem, rekapRealisasiItem } from '@/lib/proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -22,7 +22,13 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
       where: { id },
       include: {
         unit: { select: { code: true, name: true } },
-        items: { orderBy: { plannedDate: 'asc' }, include: { account: { select: { code: true, name: true } } } },
+        items: {
+          orderBy: { plannedDate: 'asc' },
+          include: {
+            account: { select: { code: true, name: true } },
+            pembayaran: { orderBy: { date: 'asc' } },
+          },
+        },
         riwayatStatus: { orderBy: { createdAt: 'desc' } },
       },
     }),
@@ -40,9 +46,14 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
   }).format(d);
 
-  const total = project.items.reduce((s, i) => s + i.amount, 0);
-  const paid = project.items.filter((i) => i.paid).reduce((s, i) => s + i.amount, 0);
-  const outstanding = total - paid;
+  const items = project.items.map((i) => ({ ...i, real: rekapRealisasiItem(i, i.pembayaran) }));
+  const total = items.reduce((s, i) => s + i.amount, 0);
+  const paid = items.reduce((s, i) => s + i.real.realisasi, 0);
+  // Yang masih akan keluar — inilah yang dihitung peramalan.
+  const outstanding = items.reduce((s, i) => s + i.real.sisaAkanKeluar, 0);
+  // Selisih item yang sudah selesai: positif hemat, negatif lebih mahal.
+  const selisihSelesai = items.reduce((s, i) => s + (i.real.selisih ?? 0), 0);
+  const hariIni = toDateInput(new Date());
   const installment =
     project.fundingType === 'LOAN'
       ? monthlyInstallment(project.fundingAmount, project.loanRatePct, project.loanTenorMonths)
@@ -65,7 +76,16 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total biaya proyek" value={formatRupiah(total)} hint={`${project.items.length} item`} />
-        <StatCard label="Sudah dibayar" value={formatRupiah(paid)} tone="positive" />
+        <StatCard
+          label="Sudah dibayar"
+          value={formatRupiah(paid)}
+          tone="positive"
+          hint={selisihSelesai === 0
+            ? undefined
+            : selisihSelesai > 0
+              ? `Hemat ${formatRupiah(selisihSelesai)} dari item yang selesai`
+              : `Lebih mahal ${formatRupiah(-selisihSelesai)} dari item yang selesai`}
+        />
         <StatCard
           label="Belum dibayar"
           value={formatRupiah(outstanding)}
@@ -103,93 +123,129 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
         />
       </Card>
 
+      {/* Selebar halaman: sembilan kolom tidak muat di kolom kiri. */}
+      <Card className="card-pad mb-6 min-w-0">
+        <SectionTitle hint="Jadwal ini yang disuntikkan ke proyeksi arus kas bulan demi bulan.">
+          Rincian biaya &amp; jadwal pembayaran
+        </SectionTitle>
+
+        {project.items.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-500">
+            Belum ada item biaya. Tambahkan lewat formulir di samping.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="border-b border-slate-200">
+                <tr>
+                  <th className="th">Item</th>
+                  <th className="th">Jadwal bayar</th>
+                  <th className="th num">Qty</th>
+                  <th className="th num">Harga satuan</th>
+                  <th className="th num">Total</th>
+                  <th className="th num">Realisasi</th>
+                  <th className="th num">Selisih</th>
+                  <th className="th">Status</th>
+                  <th className="th num">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {items.map((item) => (
+                  <tr key={item.id} className={item.real.selesai ? 'text-slate-500' : ''}>
+                    <td className="td">
+                      <span className="font-medium text-slate-900">{item.name}</span>
+                      {/* Akunnya di bawah nama, supaya kolom realisasi muat. */}
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        {item.account
+                          ? `${item.account.code} ${item.account.name}`
+                          : <CostItemAccount id={item.id} accounts={capexAccounts} />}
+                      </span>
+                    </td>
+                    <td className="td whitespace-nowrap">{formatDate(item.plannedDate)}</td>
+                    <td className="td num">{item.quantity.toLocaleString('id-ID')}</td>
+                    <td className="td num whitespace-nowrap">{formatRupiah(hargaSatuanItem(item))}</td>
+                    <td className="td num whitespace-nowrap font-medium">{formatRupiah(item.amount)}</td>
+                    <td className="td num whitespace-nowrap">
+                      {item.real.realisasi > 0 ? formatRupiah(item.real.realisasi) : <span className="text-slate-400">—</span>}
+                      {item.pembayaran.length > 1 && (
+                        <span className="block text-[11px] text-slate-400">{item.pembayaran.length} kali bayar</span>
+                      )}
+                      {item.real.dariLunasLama && (
+                        <span className="block text-[11px] text-slate-400">dari tanda Lunas lama</span>
+                      )}
+                    </td>
+                    <td className="td num whitespace-nowrap">
+                      {item.real.selisih === null || item.real.selisih === 0 ? (
+                        item.real.selisih === 0 ? <span className="text-slate-400">pas</span>
+                          : <span className="text-[11px] text-slate-400">sisa {formatRupiah(item.real.sisaAkanKeluar)}</span>
+                      ) : item.real.selisih > 0 ? (
+                        <span className="text-emerald-700">hemat {formatRupiah(item.real.selisih)}</span>
+                      ) : (
+                        <span className="text-red-600">lebih {formatRupiah(-item.real.selisih)}</span>
+                      )}
+                    </td>
+                    <td className="td">
+                      <Badge tone={item.real.status === 'SELESAI' ? 'green' : item.real.status === 'SEBAGIAN' ? 'blue' : 'amber'}>
+                        {LABEL_REALISASI_ITEM[item.real.status]}
+                      </Badge>
+                    </td>
+                    <td className="td">
+                      <span className="flex items-center justify-end gap-3">
+                        <RealisasiItemDialog
+                          itemId={item.id}
+                          nama={item.name}
+                          total={item.amount}
+                          realisasi={item.real.realisasi}
+                          selesai={item.real.selesai}
+                          tanggalBawaan={hariIni}
+                          pembayaran={item.pembayaran.map((p) => ({
+                            id: p.id, tanggal: formatDate(p.date), amount: p.amount, note: p.note,
+                          }))}
+                        />
+                        <UbahItemProyekDialog
+                          accounts={capexAccounts}
+                          nilai={{
+                            id: item.id,
+                            name: item.name,
+                            quantity: item.quantity,
+                            unitPrice: hargaSatuanItem(item),
+                            plannedDate: toDateInput(item.plannedDate),
+                            accountId: item.accountId,
+                          }}
+                        />
+                        <form action={deleteCostItem}>
+                          <input type="hidden" name="id" value={item.id} />
+                          <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
+                            Hapus
+                          </button>
+                        </form>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 font-semibold">
+                <tr>
+                  <td className="td" colSpan={4}>
+                    Total
+                  </td>
+                  <td className="td num whitespace-nowrap">{formatRupiah(total)}</td>
+                  <td className="td num whitespace-nowrap">{formatRupiah(paid)}</td>
+                  <td className="td num whitespace-nowrap">
+                    {selisihSelesai > 0 ? <span className="text-emerald-700">hemat {formatRupiah(selisihSelesai)}</span>
+                      : selisihSelesai < 0 ? <span className="text-red-600">lebih {formatRupiah(-selisihSelesai)}</span>
+                        : '—'}
+                  </td>
+                  <td className="td" colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="min-w-0 space-y-6 lg:col-span-3">
-          <Card className="card-pad">
-            <SectionTitle hint="Jadwal ini yang disuntikkan ke proyeksi arus kas bulan demi bulan.">
-              Rincian biaya &amp; jadwal pembayaran
-            </SectionTitle>
-
-            {project.items.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">
-                Belum ada item biaya. Tambahkan lewat formulir di samping.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px]">
-                  <thead className="border-b border-slate-200">
-                    <tr>
-                      <th className="th">Item</th>
-                      <th className="th">Akun</th>
-                      <th className="th">Jadwal bayar</th>
-                      <th className="th num">Qty</th>
-                      <th className="th num">Harga satuan</th>
-                      <th className="th num">Total</th>
-                      <th className="th">Status</th>
-                      <th className="th num">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {project.items.map((item) => (
-                      <tr key={item.id} className={item.paid ? 'text-slate-400' : ''}>
-                        <td className="td font-medium">{item.name}</td>
-                        <td className="td text-xs">
-                          {item.account
-                            ? `${item.account.code} ${item.account.name}`
-                            : <CostItemAccount id={item.id} accounts={capexAccounts} />}
-                        </td>
-                        <td className="td whitespace-nowrap">{formatDate(item.plannedDate)}</td>
-                        <td className="td num">{item.quantity.toLocaleString('id-ID')}</td>
-                        <td className="td num whitespace-nowrap">{formatRupiah(hargaSatuanItem(item))}</td>
-                        <td className="td num whitespace-nowrap font-medium">{formatRupiah(item.amount)}</td>
-                        <td className="td">
-                          <form action={toggleCostItemPaid}>
-                            <input type="hidden" name="id" value={item.id} />
-                            <button type="submit">
-                              <Badge tone={item.paid ? 'green' : 'amber'}>
-                                {item.paid ? 'Lunas' : 'Belum bayar'}
-                              </Badge>
-                            </button>
-                          </form>
-                        </td>
-                        <td className="td">
-                          <span className="flex items-center justify-end gap-3">
-                            <UbahItemProyekDialog
-                              accounts={capexAccounts}
-                              nilai={{
-                                id: item.id,
-                                name: item.name,
-                                quantity: item.quantity,
-                                unitPrice: hargaSatuanItem(item),
-                                plannedDate: toDateInput(item.plannedDate),
-                                accountId: item.accountId,
-                              }}
-                            />
-                            <form action={deleteCostItem}>
-                              <input type="hidden" name="id" value={item.id} />
-                              <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                                Hapus
-                              </button>
-                            </form>
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t-2 border-slate-200 font-semibold">
-                    <tr>
-                      <td className="td" colSpan={5}>
-                        Total
-                      </td>
-                      <td className="td num whitespace-nowrap">{formatRupiah(total)}</td>
-                      <td className="td" colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </Card>
-
           <Card className="card-pad">
             <SectionTitle hint="Perubahan tersimpan langsung dan ikut memperbarui peramalan.">
               Ubah data proyek

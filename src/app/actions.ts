@@ -633,14 +633,81 @@ export async function setCostItemAccount(_prev: ActionState, formData: FormData)
   return ok(`Akun "${item.name}" disimpan.`);
 }
 
-export async function toggleCostItemPaid(formData: FormData): Promise<void> {
-  const id = String(formData.get('id') ?? '');
-  if (!id) return;
-  const item = await prisma.projectCostItem.findUnique({ where: { id }, select: { paid: true, projectId: true } });
-  if (!item) return;
-  await prisma.projectCostItem.update({ where: { id }, data: { paid: !item.paid } });
-  revalidatePath(`/proyek/${item.projectId}`);
+/**
+ * Item lama bertanda "Lunas" tanpa pembayaran dibaca selesai sebesar
+ * totalnya. Begitu item seperti itu disentuh lagi, tanda itu diubah menjadi
+ * satu pembayaran sungguhan sebesar totalnya pada jadwal bayarnya, supaya
+ * pembayaran yang ditambahkan sesudahnya tidak menghapus realisasi lamanya.
+ */
+async function ubahLunasLama(itemId: string) {
+  const item = await prisma.projectCostItem.findUnique({
+    where: { id: itemId },
+    select: { paid: true, amount: true, plannedDate: true, _count: { select: { pembayaran: true } } },
+  });
+  if (!item || !item.paid || item._count.pembayaran > 0) return;
+  await prisma.$transaction([
+    prisma.projectCostPayment.create({
+      data: { itemId, date: item.plannedDate, amount: item.amount, note: 'Dari tanda Lunas sebelumnya' },
+    }),
+    prisma.projectCostItem.update({ where: { id: itemId }, data: { paid: false, done: true } }),
+  ]);
+}
+
+function segarkanProyek(projectId: string) {
+  revalidatePath('/proyek');
+  revalidatePath(`/proyek/${projectId}`);
   revalidatePath('/peramalan');
+  revalidatePath('/');
+}
+
+/** Mencatat satu pembayaran realisasi item biaya — boleh sebagian. */
+export async function tambahPembayaranItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const itemId = String(formData.get('itemId') ?? '');
+  const tanggal = String(formData.get('date') ?? '');
+  const amount = parseAmount(formData.get('amount'));
+  const note = String(formData.get('note') ?? '').trim();
+
+  const item = await prisma.projectCostItem.findUnique({ where: { id: itemId }, select: { projectId: true, name: true } });
+  if (!item) return fail('Item biaya tidak ditemukan.');
+  if (amount <= 0) return fail('Nominal pembayaran harus lebih besar dari nol.');
+  if (!tanggal) return fail('Tanggal pembayaran wajib diisi.');
+
+  await ubahLunasLama(itemId);
+  await prisma.projectCostPayment.create({
+    data: { itemId, date: parseDate(tanggal), amount, note: note || null },
+  });
+  segarkanProyek(item.projectId);
+  return ok(`Pembayaran ${formatRupiahShort(amount)} untuk "${item.name}" dicatat.`);
+}
+
+export async function hapusPembayaranItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const bayar = await prisma.projectCostPayment.findUnique({
+    where: { id }, select: { item: { select: { projectId: true } } },
+  });
+  if (!bayar) return fail('Pembayaran tidak ditemukan.');
+  await prisma.projectCostPayment.delete({ where: { id } });
+  segarkanProyek(bayar.item.projectId);
+  return ok('Pembayaran dihapus.');
+}
+
+/**
+ * Menandai pembelanjaan sebuah item selesai atau belum, berapa pun
+ * realisasinya: selesai lebih murah adalah penghematan, lebih mahal adalah
+ * kelebihan biaya — dan keduanya berhenti dihitung akan keluar.
+ */
+export async function setItemSelesai(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const itemId = String(formData.get('itemId') ?? '');
+  const selesai = String(formData.get('selesai') ?? '') === 'ya';
+  const item = await prisma.projectCostItem.findUnique({ where: { id: itemId }, select: { projectId: true, name: true } });
+  if (!item) return fail('Item biaya tidak ditemukan.');
+
+  await ubahLunasLama(itemId);
+  await prisma.projectCostItem.update({ where: { id: itemId }, data: { done: selesai, paid: false } });
+  segarkanProyek(item.projectId);
+  return ok(selesai
+    ? `"${item.name}" ditandai selesai — tidak lagi dihitung akan keluar.`
+    : `"${item.name}" dibuka lagi — sisanya kembali dihitung akan keluar.`);
 }
 
 export async function deleteCostItem(formData: FormData): Promise<void> {

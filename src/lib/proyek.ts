@@ -115,10 +115,68 @@ export const AKSI_PROYEK: Record<AksiProyek, {
   TOLAK: { label: 'Reject', dari: ['PROPOSED', 'FUNDING_REVIEW'], ke: 'REJECTED', butuhCatatan: true, bahaya: true },
   SELESAI: { label: 'Mark Completed', dari: ['ONGOING'], ke: 'DONE', butuhCatatan: false },
   BATALKAN: { label: 'Cancel Project', dari: ['APPROVED', 'ONGOING'], ke: 'CANCELLED', butuhCatatan: true, bahaya: true },
-  KEMBALI_DRAF: { label: 'Return to Draft', dari: ['PROPOSED', 'REJECTED'], ke: 'DRAFT', butuhCatatan: false },
+  // Juga dari Funding Review dan Approved (sebelum mulai berjalan): rencana
+  // yang perlu disusun ulang setelah sempat disetujui kembali ke Draft dan
+  // keluar dari peramalan sampai diajukan lagi.
+  KEMBALI_DRAF: {
+    label: 'Return to Draft', dari: ['PROPOSED', 'FUNDING_REVIEW', 'APPROVED', 'REJECTED'], ke: 'DRAFT', butuhCatatan: false,
+  },
 };
 
 /** Aksi yang tersedia untuk sebuah status efektif, dalam urutan tampil. */
 export function aksiTersedia(status: StatusProyek): AksiProyek[] {
   return (Object.keys(AKSI_PROYEK) as AksiProyek[]).filter((a) => AKSI_PROYEK[a].dari.includes(status));
+}
+
+/* ------------------------------------------------------------------ */
+/* Realisasi item biaya                                                */
+/* ------------------------------------------------------------------ */
+
+export type StatusRealisasiItem = 'BELUM' | 'SEBAGIAN' | 'SELESAI';
+
+export const LABEL_REALISASI_ITEM: Record<StatusRealisasiItem, string> = {
+  BELUM: 'Belum dibayar',
+  SEBAGIAN: 'Sebagian',
+  SELESAI: 'Selesai',
+};
+
+export type RealisasiItem = {
+  /** Jumlah seluruh pembayaran. */
+  realisasi: number;
+  /** Pembelanjaannya sudah selesai, berapa pun realisasinya. */
+  selesai: boolean;
+  status: StatusRealisasiItem;
+  /** Yang masih akan keluar: nol bila selesai, selain itu total dikurangi realisasi. */
+  sisaAkanKeluar: number;
+  /**
+   * Total dikurangi realisasi, hanya untuk item yang selesai: positif berarti
+   * lebih murah dari rencana, negatif lebih mahal. null selama belum selesai,
+   * karena sisanya masih mungkin dibayar.
+   */
+  selisih: number | null;
+  /** Dibaca dari tanda "Lunas" lama, bukan dari pembayaran yang dicatat. */
+  dariLunasLama: boolean;
+};
+
+/**
+ * Realisasi sebuah item: dari pembayaran yang dicatat, atau — untuk item
+ * lama bertanda Lunas tanpa pembayaran — dianggap dibayar penuh sesuai
+ * totalnya, supaya item yang dulu sudah dilunasi tidak kembali terhitung
+ * akan keluar.
+ */
+export function rekapRealisasiItem(
+  item: { amount: number; paid: boolean; done: boolean },
+  pembayaran: readonly { amount: number }[],
+): RealisasiItem {
+  const lama = item.paid && pembayaran.length === 0;
+  const realisasi = lama ? item.amount : bulat(pembayaran.reduce((t, p) => t + p.amount, 0));
+  const selesai = item.done || lama;
+  return {
+    realisasi,
+    selesai,
+    status: selesai ? 'SELESAI' : realisasi > 0 ? 'SEBAGIAN' : 'BELUM',
+    sisaAkanKeluar: selesai ? 0 : Math.max(0, bulat(item.amount - realisasi)),
+    selisih: selesai ? bulat(item.amount - realisasi) : null,
+    dariLunasLama: lama,
+  };
 }

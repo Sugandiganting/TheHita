@@ -16,6 +16,7 @@
 
 import { addMonths, daysInPeriod, diffMonths, monthOf, periodRange, type Period } from './period';
 import { HARI_GAJI_AWAL } from './rencana-kas';
+import { rekapRealisasiItem } from './proyek';
 
 export type ForecastMethod = 'AVERAGE' | 'WEIGHTED' | 'TREND';
 
@@ -407,7 +408,13 @@ export function toProjectPlan(project: {
   id: string;
   name: string;
   unitId: string;
-  items: { amount: number; plannedDate: Date; paid: boolean }[];
+  items: {
+    amount: number;
+    plannedDate: Date;
+    paid: boolean;
+    done?: boolean;
+    pembayaran?: { amount: number }[];
+  }[];
   fundingAmount: number;
   fundingDate: Date | null;
   fundingType: string;
@@ -420,9 +427,16 @@ export function toProjectPlan(project: {
   const toP = (d: Date): Period =>
     `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 
+  // Yang masih akan keluar saja: item selesai tidak lagi dihitung, item yang
+  // baru dibayar sebagian tinggal sisanya. Pembayaran yang sudah terjadi
+  // tercermin di saldo kas, bukan di rencana.
   const costs = project.items
-    .filter((i) => !i.paid)
-    .map((i) => ({ period: toP(i.plannedDate), amount: i.amount }));
+    .map((i) => ({
+      period: toP(i.plannedDate),
+      amount: rekapRealisasiItem({ amount: i.amount, paid: i.paid, done: i.done ?? false }, i.pembayaran ?? [])
+        .sisaAkanKeluar,
+    }))
+    .filter((c) => c.amount > 0);
 
   const funding =
     project.fundingAmount > 0 && project.fundingDate

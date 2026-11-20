@@ -105,8 +105,20 @@ CREATE TABLE "ProjectCostItem" (
     "amount" REAL NOT NULL,
     "plannedDate" DATETIME NOT NULL,
     "paid" BOOLEAN NOT NULL DEFAULT false,
+    "done" BOOLEAN NOT NULL DEFAULT false,
     CONSTRAINT "ProjectCostItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "ProjectCostItem_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProjectCostPayment" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "itemId" TEXT NOT NULL,
+    "date" DATETIME NOT NULL,
+    "amount" REAL NOT NULL,
+    "note" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProjectCostPayment_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "ProjectCostItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -467,6 +479,9 @@ CREATE INDEX "Project_unitId_idx" ON "Project"("unitId");
 
 -- CreateIndex
 CREATE INDEX "ProjectCostItem_projectId_idx" ON "ProjectCostItem"("projectId");
+
+-- CreateIndex
+CREATE INDEX "ProjectCostPayment_itemId_idx" ON "ProjectCostPayment"("itemId");
 
 -- CreateIndex
 CREATE INDEX "ProjectStatusLog_projectId_idx" ON "ProjectStatusLog"("projectId");

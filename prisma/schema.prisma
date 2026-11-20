@@ -219,13 +219,36 @@ model ProjectCostItem {
   /// peramalan dan rencana kas sebagai uang yang akan keluar.
   amount      Float
   plannedDate DateTime
-  /// Sudah dibayar? Item yang sudah dibayar tidak dihitung lagi sebagai rencana keluar.
+  /// Tanda "Lunas" lama, dari sebelum realisasi dicatat per pembayaran. Item
+  /// bertanda ini tanpa pembayaran apa pun dibaca selesai dengan realisasi
+  /// sama dengan totalnya; begitu disentuh lagi, ia diubah menjadi satu
+  /// pembayaran sungguhan. Lihat src/lib/proyek.ts.
   paid        Boolean  @default(false)
+  /// Pembelanjaan item ini sudah selesai, berapa pun realisasinya. Yang
+  /// selesai tidak lagi dihitung akan keluar; selisihnya terhadap total
+  /// adalah penghematan atau kelebihan biaya.
+  done        Boolean  @default(false)
 
-  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  account Account? @relation(fields: [accountId], references: [id])
+  project    Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  account    Account?             @relation(fields: [accountId], references: [id])
+  pembayaran ProjectCostPayment[]
 
   @@index([projectId])
+}
+
+/// Satu pembayaran realisasi sebuah item biaya proyek. Satu item boleh
+/// dibayar beberapa kali; realisasinya adalah jumlah seluruh pembayarannya.
+model ProjectCostPayment {
+  id        String   @id @default(cuid())
+  itemId    String
+  date      DateTime
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  item ProjectCostItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
 }
 
 /// Satu perpindahan status proyek: siapa, kapan, dari mana ke mana, dan

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, statusEfektif, type StatusProyek } from '@/lib/proyek';
+import { LABEL_STATUS_PROYEK, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ const STATUS_TONE: Record<StatusProyek, string> = {
 
 export default async function ProyekPage() {
   const projects = await prisma.project.findMany({
-    include: { items: true, unit: { select: { code: true, name: true } } },
+    include: { items: { include: { pembayaran: { select: { amount: true } } } }, unit: { select: { code: true, name: true } } },
     orderBy: [{ status: 'asc' }, { startDate: 'asc' }],
   });
 
@@ -46,7 +46,8 @@ export default async function ProyekPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {projects.map((p) => {
             const total = p.items.reduce((s, i) => s + i.amount, 0);
-            const paid = p.items.filter((i) => i.paid).reduce((s, i) => s + i.amount, 0);
+            // Yang sungguh sudah dibayar, termasuk pembayaran sebagian.
+            const paid = p.items.reduce((s, i) => s + rekapRealisasiItem(i, i.pembayaran).realisasi, 0);
             const progress = total > 0 ? (paid / total) * 100 : 0;
 
             return (

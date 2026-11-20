@@ -33,7 +33,7 @@ export default async function PeramalanPage({ searchParams }: { searchParams: Pr
     prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
     prisma.project.findMany({
       where: { status: { in: [...STATUS_MEMOTONG_KAS] } },
-      include: { items: true, unit: { select: { code: true } } },
+      include: { items: { include: { pembayaran: { select: { amount: true } } } }, unit: { select: { code: true } } },
       orderBy: { startDate: 'asc' },
     }),
   ]);

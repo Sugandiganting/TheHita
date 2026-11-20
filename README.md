@@ -320,7 +320,14 @@ lalu **In Progress** sendiri saat tanggal mulainya tiba, dan **Completed**. Proy
 keduanya wajib disertai catatan. Setiap perpindahan dicatat oleh siapa dan kapan. Hanya
 proyek **Approved** dan **In Progress** yang ikut memotong kas di Peramalan; proyek lama
 berstatus *Direncanakan* dibaca sebagai Approved. Pembatasan siapa yang boleh menyetujui
-menyusul bersama hak akses pengguna.
+menyusul bersama hak akses pengguna. Proyek Funding Review dan Approved (sebelum mulai)
+bisa dikembalikan ke Draft.
+
+Realisasi item dicatat per pembayaran: satu item boleh dibayar beberapa kali. Status
+pembelanjaannya (**Belum dibayar / Sebagian / Selesai**) berdiri sendiri; item boleh
+ditandai selesai walau realisasinya tidak sama dengan rencana, dan selisihnya tampil
+sebagai *hemat* atau *lebih*. Peramalan hanya menghitung yang masih akan keluar: nol
+untuk item selesai, rencana dikurangi yang sudah dibayar untuk yang belum.
 
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
