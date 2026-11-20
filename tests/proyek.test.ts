@@ -113,3 +113,44 @@ test('hemat proyek kosong bila belum ada item selesai', () => {
   const r = rekapHematProyek([{ amount: 2_000_000, paid: false, done: false, pembayaran: [] }]);
   assert.deepEqual(r, { hemat: 0, lebih: 0, bersih: 0, itemSelesai: 0, itemTotal: 1 });
 });
+
+import { keluarProyekPada, keluarProyekUntukKas } from '../src/lib/proyek.ts';
+test('uang proyek untuk rencana kas: sisa, pembayaran sesudah posisi, dan realisasi item selesai', () => {
+  const posisi = tgl('2026-11-15');
+  const hariIni = tgl('2026-11-20');
+  const proyek = (status: string, items: Parameters<typeof keluarProyekUntukKas>[0][number]['items']) => ({
+    id: status, name: `P ${status}`, status, startDate: tgl('2026-12-01'), items,
+  });
+  const item = (id: string, amount: number, plannedDate: string, done: boolean, bayar: [string, number][] = []) => ({
+    id, name: id, amount, paid: false, done, plannedDate: tgl(plannedDate),
+    pembayaran: bayar.map(([d, a]) => ({ date: tgl(d), amount: a })),
+  });
+  const daftar = keluarProyekUntukKas([
+    proyek('APPROVED', [
+      item('belum', 3_000_000, '2026-11-20', false),
+      // DP 1 jt sesudah posisi + sisa 2 jt di tanggal rencana bulan depan.
+      item('sebagian', 3_000_000, '2026-12-10', false, [['2026-11-18', 1_000_000]]),
+      // Selesai lebih murah sesudah posisi: realisasinya saja, hemat tidak ikut.
+      item('hemat', 3_000_000, '2026-11-25', true, [['2026-11-18', 2_500_000]]),
+      // Selesai sebelum posisi: sudah ada di saldo.
+      item('lama', 3_000_000, '2026-11-10', true, [['2026-11-10', 2_500_000]]),
+      // Lewat tanggal rencana, belum dibayar: tetap dihitung bulan berjalan.
+      item('telat', 500_000, '2026-11-05', false),
+    ]),
+    proyek('FUNDING_REVIEW', [item('draf', 9_000_000, '2026-11-20', false)]),
+    proyek('DONE', [item('beres', 9_000_000, '2026-11-20', false)]),
+  ], posisi, '2026-11', hariIni);
+
+  assert.deepEqual(
+    daftar.map((k) => [k.itemId, k.jenis, k.period, k.amount, k.terlambat]),
+    [
+      ['telat', 'SISA', '2026-11', 500_000, true],
+      ['sebagian', 'BAYAR', '2026-11', 1_000_000, false],
+      ['hemat', 'BAYAR', '2026-11', 2_500_000, false],
+      ['belum', 'SISA', '2026-11', 3_000_000, false],
+      ['sebagian', 'SISA', '2026-12', 2_000_000, false],
+    ],
+  );
+  assert.equal(keluarProyekPada(daftar, '2026-11'), 7_000_000);
+  assert.equal(keluarProyekPada(daftar, '2026-12'), 2_000_000);
+});

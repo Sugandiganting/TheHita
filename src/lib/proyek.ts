@@ -6,6 +6,8 @@
  * sebelahnya supaya totalnya bisa ditelusuri dan diubah selama proyek berjalan.
  */
 
+import { toPeriod, type Period } from './period';
+
 const bulat = (n: number) => Math.round(n * 100) / 100;
 
 /** Total item: jumlah × harga satuan, dibulatkan ke sen. */
@@ -228,4 +230,104 @@ export function rekapHematProyek(
     hemat: bulat(hemat), lebih: bulat(lebih), bersih: bulat(hemat - lebih),
     itemSelesai, itemTotal: items.length,
   };
+}
+
+export type KeluarProyek = {
+  projectId: string;
+  proyek: string;
+  itemId: string;
+  item: string;
+  /** Tanggal pembayaran, atau tanggal rencana dibayar untuk sisa. */
+  tanggal: Date;
+  /** Bulan tempat uang ini dihitung keluar. */
+  period: Period;
+  amount: number;
+  /**
+   * BAYAR: pembayaran yang sudah dicatat tetapi sesudah posisi kas, jadi
+   * belum tercermin di saldo. SISA: yang belum dibayar.
+   */
+  jenis: 'BAYAR' | 'SISA';
+  /** Sisa yang tanggal rencananya sudah lewat: dihitung di bulan berjalan. */
+  terlambat: boolean;
+  /** Item sudah ditandai selesai — yang dihitung realisasinya, bukan RAB. */
+  selesai: boolean;
+};
+
+type ProyekUntukKas = {
+  id: string;
+  name: string;
+  status: string;
+  startDate: Date;
+  items: readonly {
+    id: string;
+    name: string;
+    amount: number;
+    paid: boolean;
+    done: boolean;
+    plannedDate: Date;
+    pembayaran: readonly { date: Date; amount: number }[];
+  }[];
+};
+
+const hariUtc = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+
+/**
+ * Uang proyek yang masih akan mengurangi kas, dilihat dari posisi kas
+ * terakhir — dipakai Rencana Kas Mingguan.
+ *
+ * Hanya proyek yang dananya sudah disetujui (Approved / In Progress). Per item:
+ * - pembayaran yang dicatat sesudah tanggal posisi kas belum tercermin di
+ *   saldo, jadi dihitung keluar pada tanggal bayarnya; yang sebelum atau pada
+ *   tanggal posisi kas sudah ada di saldo dan tidak dihitung lagi;
+ * - item yang belum selesai menambah sisanya (RAB − sudah dibayar) pada
+ *   tanggal rencana dibayar. Bila tanggal itu sudah lewat, sisanya dihitung
+ *   di bulan berjalan — uangnya belum keluar, bukan hilang;
+ * - item yang sudah selesai tidak punya sisa: yang keluar hanya realisasinya.
+ *   Selisihnya terhadap RAB (hemat) tidak dihitung di sini.
+ */
+export function keluarProyekUntukKas(
+  projects: readonly ProyekUntukKas[],
+  posisiKas: Date | null,
+  period: Period,
+  hariIni: Date = new Date(),
+): KeluarProyek[] {
+  const batas = posisiKas ? hariUtc(posisiKas) : null;
+  const diBulan = (d: Date): Period => (toPeriod(d) < period ? period : toPeriod(d));
+  const hasil: KeluarProyek[] = [];
+
+  for (const p of projects) {
+    const status = statusEfektif(p.status, p.startDate, hariIni);
+    if (!(STATUS_MEMOTONG_KAS as readonly string[]).includes(status)) continue;
+    for (const item of p.items) {
+      const real = rekapRealisasiItem(item, item.pembayaran);
+      const dasar = { projectId: p.id, proyek: p.name, itemId: item.id, item: item.name, selesai: real.selesai };
+      // Tanpa posisi kas tidak ada saldo yang bisa mencerminkan pembayaran,
+      // jadi hanya sisa yang dihitung.
+      if (batas !== null && !real.dariLunasLama) {
+        for (const b of item.pembayaran) {
+          if (hariUtc(b.date) <= batas || b.amount <= 0) continue;
+          hasil.push({ ...dasar, tanggal: b.date, period: diBulan(b.date), amount: bulat(b.amount), jenis: 'BAYAR', terlambat: false });
+        }
+      }
+      if (real.sisaAkanKeluar > 0) {
+        const terlambat = batas !== null
+          ? hariUtc(item.plannedDate) <= batas
+          : toPeriod(item.plannedDate) < period;
+        hasil.push({
+          ...dasar,
+          tanggal: item.plannedDate,
+          period: terlambat ? period : diBulan(item.plannedDate),
+          amount: real.sisaAkanKeluar,
+          jenis: 'SISA',
+          terlambat,
+        });
+      }
+    }
+  }
+  return hasil.sort((a, b) => a.tanggal.getTime() - b.tanggal.getTime());
+}
+
+/** Jumlah uang proyek yang keluar di sebuah bulan. */
+export function keluarProyekPada(daftar: readonly KeluarProyek[], period: Period): number {
+  return bulat(daftar.filter((k) => k.period === period).reduce((t, k) => t + k.amount, 0));
 }

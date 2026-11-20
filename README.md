@@ -338,6 +338,14 @@ Jumlahnya per proyek (hemat dikurangi yang lebih mahal) tampil di menu Proyek da
 halaman detailnya. Angka ini informasi kinerja saja: tidak ikut menghitung uang keluar
 maupun plafon belanja, dan tidak berubah karena posisi kas diperbarui.
 
+Proyek yang **Approved / In Progress** ikut memotong kas di **Rencana Kas Mingguan**
+(boleh belanja, "Kapan kas habis", dan kemampuan beli di rencana belanja) menurut tanggal
+rencana dibayar tiap item. Item yang belum selesai dihitung sisanya (RAB − sudah dibayar);
+yang tanggal rencananya sudah lewat dihitung di bulan berjalan. Item selesai hanya
+realisasinya. Pembayaran yang tanggalnya sebelum atau pada tanggal posisi kas sudah ada di
+saldo, jadi tidak dihitung lagi. Pembayaran proyek cukup dicatat di menu Proyek, jangan
+dicatat lagi di kategori Rencana Kas.
+
 Rencana belanja modal beserta jadwal pembayaran per item (qty × harga satuan = total, dan
 akun yang menanggungnya wajib dipilih; item bisa diubah selama proyek berjalan), sumber dana (kas sendiri,
 pinjaman bank, atau setoran modal), dan perkiraan tambahan pendapatan setelah proyek

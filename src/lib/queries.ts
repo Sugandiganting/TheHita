@@ -35,6 +35,7 @@ import {
   type Kejadian, type Kewajiban, type Pengulangan,
 } from './kewajiban';
 import { hitungTren, type Tren } from './tren-masuk';
+import { STATUS_MEMOTONG_KAS, keluarProyekPada, keluarProyekUntukKas, type KeluarProyek } from './proyek';
 import type { PurchaseCadence, PurchaseContext } from './forecast';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 import {
@@ -1065,6 +1066,16 @@ export type RencanaKasDetail = {
     belumKeluar: number;
   };
   /**
+   * Uang proyek Approved yang masih akan mengurangi kas, sesudah posisi kas
+   * terakhir: sisa item yang belum selesai pada tanggal rencananya dan
+   * pembayaran yang belum tercermin di saldo.
+   */
+  proyek: {
+    rincian: KeluarProyek[];
+    /** Yang dihitung di bulan berjalan. */
+    bulanIni: number;
+  };
+  /**
    * Konteks penilaian pembelian baru, satu untuk tiap skenario. Yang dipakai
    * dipilih di layar; pesimis adalah pilihan bawaannya.
    */
@@ -1926,6 +1937,24 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
   const kewajibanBulan = (p: Period) =>
     p === period ? kewajibanBulanIni : kewajibanPada(daftarKewajiban, p);
 
+  // Proyek yang dananya sudah disetujui ikut memotong kas menurut tanggal
+  // rencana dibayar tiap item. Seluruh cabang, sama seperti rencana kas ini.
+  const proyekDisetujui = await prisma.project.findMany({
+    where: { status: { in: [...STATUS_MEMOTONG_KAS] } },
+    select: {
+      id: true, name: true, status: true, startDate: true,
+      items: {
+        select: {
+          id: true, name: true, amount: true, paid: true, done: true, plannedDate: true,
+          pembayaran: { select: { date: true, amount: true } },
+        },
+      },
+    },
+  });
+  const keluarProyek = keluarProyekUntukKas(proyekDisetujui, batas, period);
+  const proyekBulanIni = keluarProyekPada(keluarProyek, period);
+  const proyekBulan = (p: Period) => keluarProyekPada(keluarProyek, p);
+
   // Sembilan bulan: tiga ke belakang sebagai pembanding nyata, bulan berjalan,
   // dan lima ke depan dari pola musim. Bulan lalu pun memakai proyeksi pola
   // yang berlaku sekarang, jadi mendampingkannya dengan kenyataan sekaligus
@@ -2021,6 +2050,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
         proyeksi: dipakai,
         cicilanBelanja: cicilanBulanIni,
         kewajiban: kewajibanBulanIni,
+        proyek: proyekBulanIni,
         // Gaji bulan depan disisihkan dari plafon: gaji dibayar di awal bulan,
         // jadi yang menutupinya adalah saldo akhir bulan ini.
         kebutuhanGaji: gaji,
@@ -2104,6 +2134,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
             kebutuhanGaji: gaji,
             cicilanPada: cicilanBulan,
             kewajibanPada: kewajibanBulan,
+            proyekPada: proyekBulan,
             lajuOperasionalHarian: laju?.perHari ?? null,
             sisaKeluarRencana: modeKategori ? rencana.keluarKategori : null,
             hariTersisa: rencana.hari,
@@ -2291,6 +2322,7 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
       mendatang: kejadianKewajiban(addMonths(period, 1), addMonths(period, HORIZON_BULAN)),
       belumKeluar: kewajibanBulanIni,
     },
+    proyek: { rincian: keluarProyek, bulanIni: proyekBulanIni },
     konteksBeli: runway && terakhir
       ? (Object.fromEntries(
           SKENARIO.map((sk) => [

@@ -702,6 +702,12 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
                       <Suku label="Kewajiban terjadwal" value={rencana.kewajiban} />
                     </span>
                   )}
+                  {rencana.proyek > 0 && (
+                    <span className="flex items-start gap-4">
+                      <Operator>−</Operator>
+                      <Suku label="Proyek Approved" value={rencana.proyek} />
+                    </span>
+                  )}
                   {rencana.cadanganGaji > 0 && (
                     <span className="flex items-start gap-4">
                       <Operator>−</Operator>
@@ -1355,6 +1361,64 @@ export default async function RencanaKasPage({ searchParams }: { searchParams: P
               </div>
             )}
           </Card>
+
+          {data.proyek.rincian.length > 0 && (
+            <Card className="card-pad min-w-0">
+              <SectionTitle hint="Proyek yang dananya sudah disetujui (Approved / In Progress). Item yang belum selesai dihitung sisanya pada tanggal rencana dibayar; item selesai hanya realisasinya. Pembayaran sebelum tanggal posisi kas sudah ada di saldo, jadi tidak dihitung lagi. Hemat tidak ikut dihitung.">
+                Proyek Approved
+              </SectionTitle>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px]">
+                  <thead className="border-b border-slate-200">
+                    <tr>
+                      <th className="th">Tanggal</th>
+                      <th className="th">Proyek / item</th>
+                      <th className="th num">Nominal</th>
+                      <th className="th">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.proyek.rincian.map((k) => (
+                      <tr key={`${k.itemId}-${k.jenis}-${k.tanggal.toISOString()}`}>
+                        <td className="td whitespace-nowrap">
+                          {formatDate(k.tanggal)}
+                          {k.period !== data.period && (
+                            <span className="block text-[11px] text-slate-400">{formatPeriodShort(k.period)}</span>
+                          )}
+                        </td>
+                        <td className="td">
+                          <Link href={`/proyek/${k.projectId}`} className="text-slate-900 hover:text-brand-700">{k.item}</Link>
+                          <span className="block text-xs text-slate-500">{k.proyek}</span>
+                        </td>
+                        <td className="td num whitespace-nowrap">{formatRupiah(k.amount)}</td>
+                        <td className="td text-xs text-slate-500">
+                          {k.jenis === 'BAYAR'
+                            ? k.selesai
+                              ? 'Realisasi item selesai, dibayar sesudah posisi kas'
+                              : 'Dibayar sesudah posisi kas, belum ada di saldo'
+                            : k.terlambat
+                              ? 'Sisa belum dibayar — tanggal rencana sudah lewat, dihitung bulan ini'
+                              : 'Sisa belum dibayar'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-slate-200 font-semibold">
+                    <tr>
+                      <td className="td" colSpan={2}>Keluar bulan ini</td>
+                      <td className="td num">{formatRupiah(data.proyek.bulanIni)}</td>
+                      <td className="td" />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Menekan boleh belanja bulan ini, saldo di &ldquo;Kapan kas habis&rdquo; pada bulannya masing-masing,
+                dan kemampuan beli di rencana belanja. Pembayaran proyek cukup dicatat di menu Proyek —
+                jangan dicatat lagi di kategori, supaya tidak terpotong dua kali.
+              </p>
+            </Card>
+          )}
 
           {(data.kewajiban.bulanIni.length > 0 || data.kewajiban.mendatang.length > 0) && (
             <Card className="card-pad min-w-0">

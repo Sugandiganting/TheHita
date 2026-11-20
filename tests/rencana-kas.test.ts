@@ -916,3 +916,24 @@ test('rencana belanja tidak mengubah plafon mingguan', () => {
   );
   assert.deepEqual(dengan.skenario, tanpa.skenario);
 });
+
+test('uang proyek Approved menurunkan saldo pada bulannya masing-masing', () => {
+  // Saldo cukup besar supaya bulan kedua ikut terbentuk.
+  const dasar = { ...runwaySeptember, saldoKas: jt(800), sisaMasuk: jt(211.6), proyeksiBulanan: jt(351) };
+  const tanpa = runway(dasar);
+  const proyek = (p: string) => (p === '2026-10' ? jt(10) : p === '2026-11' ? jt(2) : 0);
+  const dengan = runway({ ...dasar, proyekPada: proyek });
+  assert.equal(keJt(tanpa.bulan[0].saldoAkhir - dengan.bulan[0].saldoAkhir), 10);
+  assert.equal(keJt(tanpa.bulan[1].saldoAkhir - dengan.bulan[1].saldoAkhir), 12);
+});
+
+test('uang proyek bulan ini mengurangi boleh belanja seperti kewajiban', () => {
+  const m = {
+    period: '2026-11', tanggal: new Date(Date.UTC(2026, 10, 18)), saldoKas: jt(100), masukSampaiKini: 0,
+    proyeksi: { PESIMIS: jt(50), NORMAL: jt(60), OPTIMIS: jt(70) }, komitmen: [], kategori: [],
+  };
+  const tanpa = hitungRencana(m);
+  const dengan = hitungRencana({ ...m, proyek: jt(10) });
+  assert.equal(dengan.proyek, jt(10));
+  assert.equal(keJt(tanpa.skenario.NORMAL.bolehBelanja - dengan.skenario.NORMAL.bolehBelanja), 10);
+});
