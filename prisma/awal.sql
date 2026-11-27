@@ -448,6 +448,18 @@ CREATE TABLE "User" (
     "password" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "lastLogin" DATETIME,
+    "levelId" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "User_levelId_fkey" FOREIGN KEY ("levelId") REFERENCES "UserLevel" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "UserLevel" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "permissions" TEXT NOT NULL DEFAULT '',
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
@@ -630,6 +642,12 @@ CREATE INDEX "ObligationPayment_obligationId_idx" ON "ObligationPayment"("obliga
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+
+-- CreateIndex
+CREATE INDEX "User_levelId_idx" ON "User"("levelId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserLevel_name_key" ON "UserLevel"("name");
 
 -- CreateIndex
 CREATE INDEX "BudgetPayment_lineId_idx" ON "BudgetPayment"("lineId");

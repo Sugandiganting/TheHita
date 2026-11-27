@@ -7,6 +7,7 @@ import {
   AKSI_PROYEK, AKSI_TAMBAHAN, ARTI_STATUS_PROYEK, ARTI_STATUS_TAMBAHAN, LABEL_STATUS_PROYEK, aksiTambahanTersedia,
   aksiTersedia, statusTambahan, type StatusProyek,
 } from '@/lib/proyek';
+import { HAK_AKSI_PROYEK, HAK_AKSI_TAMBAHAN } from '@/lib/hak-akses';
 
 const initial: ActionState = { ok: false, message: '' };
 
@@ -56,6 +57,7 @@ export function ProjectApproval({
   riwayat,
   tanggalMulai,
   jenis = 'proyek',
+  hak,
 }: {
   /** Id proyek, atau id pengajuan tambahan bila jenis = 'tambahan'. */
   id: string;
@@ -66,6 +68,8 @@ export function ProjectApproval({
   tanggalMulai?: string;
   /** Proyeknya sendiri, atau satu pengajuan item tambahan. Alurnya sama. */
   jenis?: 'proyek' | 'tambahan';
+  /** Kode hak akses pengguna yang sedang masuk; langkah tanpa hak tidak ditampilkan. */
+  hak: string[];
 }) {
   const tambahan = jenis === 'tambahan';
   const [state, action] = useActionState(tambahan ? ubahStatusTambahan : ubahStatusProyek, initial);
@@ -74,7 +78,11 @@ export function ProjectApproval({
   // terbawa ke langkah berikutnya.
   useEffect(() => { if (state.ok) setCatatan(''); }, [state]);
   const aturan: Record<string, AturanAksi> = tambahan ? AKSI_TAMBAHAN : AKSI_PROYEK;
-  const aksi: string[] = tambahan ? aksiTambahanTersedia(statusTambahan(status)) : aksiTersedia(status);
+  const peta: Record<string, string> = tambahan ? HAK_AKSI_TAMBAHAN : HAK_AKSI_PROYEK;
+  const semuaAksi: string[] = tambahan ? aksiTambahanTersedia(statusTambahan(status)) : aksiTersedia(status);
+  // Langkah yang boleh dilakukan pengguna ini, dan yang menunggu orang lain.
+  const aksi = semuaAksi.filter((a) => hak.includes(peta[a]));
+  const menunggu = semuaAksi.filter((a) => !hak.includes(peta[a]));
   const tahap = tambahan ? TAHAP_TAMBAHAN : TAHAP;
   const posisi = tahap.indexOf(status);
   const keluar = status === 'REJECTED' || status === 'CANCELLED' || status === 'ON_HOLD';
@@ -123,6 +131,14 @@ export function ProjectApproval({
           </span>
         )}
       </p>
+
+      {menunggu.length > 0 && (
+        <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+          {aksi.length === 0 ? 'Langkah berikutnya' : 'Langkah lain'} —{' '}
+          <strong>{menunggu.map((a) => aturan[a].label).join(', ')}</strong> — menunggu pengguna yang
+          user level-nya punya hak itu.
+        </p>
+      )}
 
       {aksi.length > 0 && (
         <form action={action} className="space-y-3 rounded-lg border border-slate-200 p-3">

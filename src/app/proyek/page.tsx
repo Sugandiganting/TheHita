@@ -7,6 +7,7 @@ import {
 } from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 import type { SearchParams } from '@/lib/search-params';
+import { hakSaya } from '@/lib/hak-akses-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ const KELOMPOK: KelompokProyek[] = ['PENGAJUAN', 'BERJALAN', 'SELESAI', 'MANGKRA
 
 export default async function ProyekPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
+  const bolehKelola = (await hakSaya()).has('proyek.kelola');
   const mentah = Array.isArray(params.kelompok) ? params.kelompok[0] : params.kelompok;
   const dipilih = KELOMPOK.find((k) => k === mentah) ?? null;
   const semua = await prisma.project.findMany({
@@ -46,11 +48,11 @@ export default async function ProyekPage({ searchParams }: { searchParams: Promi
       <PageHeader
         title="Proyek & belanja modal"
         description="Rencanakan proyek besar seperti penambahan kamar, lalu lihat dampaknya terhadap kas di menu Peramalan."
-        action={
+        action={bolehKelola ? (
           <Link href="/proyek/baru" className="btn-primary">
             Proyek baru
           </Link>
-        }
+        ) : undefined}
       />
 
       {semua.length > 0 && (

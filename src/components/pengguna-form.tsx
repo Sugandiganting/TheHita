@@ -46,7 +46,7 @@ function Pesan({ state }: { state: ActionState }) {
   );
 }
 
-export function FormTambahPengguna() {
+export function FormTambahPengguna({ levels }: { levels: { id: string; name: string }[] }) {
   const [state, action] = useActionState(tambahPengguna, initial);
   const [sendiri, setSendiri] = useState(false);
 
@@ -58,6 +58,13 @@ export function FormTambahPengguna() {
       <div>
         <label className="label" htmlFor="pg-nama">Nama lengkap</label>
         <input id="pg-nama" name="name" className="input" placeholder="Sugandi" required />
+      </div>
+      <div>
+        <label className="label" htmlFor="pg-level">User level</label>
+        <select id="pg-level" name="levelId" className="input" defaultValue="">
+          <option value="">— Tanpa level (akses penuh) —</option>
+          {levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
       </div>
 
       <div>

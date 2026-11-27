@@ -118,6 +118,7 @@ const MENU: Entry[] = [
       { href: '/kewajiban', label: 'Kewajiban Terjadwal', desc: 'Pajak, izin, asuransi bertanggal' },
       { href: '/kendaraan', label: 'Kendaraan', desc: 'Armada & jadwal pajaknya' },
       { href: '/pengguna', label: 'Pengguna', desc: 'Siapa saja yang bisa masuk' },
+      { href: '/user-level', label: 'User Level', desc: 'Hak akses tiap kelompok pengguna' },
     ],
   },
 ];

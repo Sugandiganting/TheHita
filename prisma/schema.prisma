@@ -881,9 +881,31 @@ model User {
   active    Boolean   @default(true)
   /// Waktu masuk terakhir, untuk menandai akun yang sudah tidak dipakai.
   lastLogin DateTime?
+  /// User level yang menentukan hak aksesnya. null = belum diberi level,
+  /// dan untuk sementara berakses penuh seperti sebelum ada hak akses —
+  /// supaya tidak ada yang terkunci saat fitur ini pertama dipasang.
+  levelId   String?
+
+  level UserLevel? @relation(fields: [levelId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([levelId])
+}
+
+/// User level: kumpulan hak akses yang diberikan kepada sekelompok pengguna,
+/// misalnya Staff Proyek, Manajer Keuangan, Direktur.
+model UserLevel {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  /// Kode hak akses yang diberikan, dipisah koma — lihat src/lib/hak-akses.ts.
+  permissions String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
 }
 
 /// Satu pembayaran realisasi sebuah baris RAB — boleh beberapa kali,

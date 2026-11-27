@@ -11,6 +11,7 @@ import { monthlyInstallment } from '@/lib/forecast';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
 import { CostItemForm } from '@/components/cost-item-form';
 import { TabelItemProyek } from '@/components/tabel-item-proyek';
+import { hakSaya } from '@/lib/hak-akses-server';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -49,6 +50,10 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
   ]);
 
   if (!project) notFound();
+  const hak = await hakSaya();
+  const daftarHak = [...hak];
+  const bolehKelola = hak.has('proyek.kelola');
+  const bolehRealisasi = hak.has('proyek.realisasi');
   const status = statusEfektif(project.status, project.startDate, new Date());
   const waktu = (d: Date) => new Intl.DateTimeFormat('id-ID', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
@@ -97,7 +102,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
             <Link href="/peramalan" className="btn-secondary">
               Lihat dampak di peramalan
             </Link>
-            <HapusProyekTombol id={project.id} nama={project.name} />
+            {bolehKelola && <HapusProyekTombol id={project.id} nama={project.name} />}
           </div>
         }
       />
@@ -153,6 +158,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           status={status}
           tanggalMulai={formatDate(project.startDate)}
           riwayat={project.riwayatStatus.map(riwayatTampil)}
+          hak={daftarHak}
         />
       </Card>
 
@@ -171,7 +177,8 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
             items={rencanaAwal}
             accounts={capexAccounts}
             realisasi={dibuka}
-            bolehUbah
+            bolehUbah={bolehKelola}
+            bolehRealisasi={bolehRealisasi}
             hariIni={hariIni}
           />
         )}
@@ -213,7 +220,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                       <span className="tabular-nums text-slate-700">
                         {itemT.length} item · <strong>{formatRupiah(totalT)}</strong>
                       </span>
-                      {bisaUbah && <HapusTambahanTombol id={t.id} nomor={t.number} />}
+                      {bisaUbah && bolehKelola && <HapusTambahanTombol id={t.id} nomor={t.number} />}
                     </span>
                   </div>
                   {itemT.length === 0 ? (
@@ -224,7 +231,8 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                         items={itemT}
                         accounts={capexAccounts}
                         realisasi={dibuka && st === 'APPROVED'}
-                        bolehUbah={bisaUbah}
+                        bolehUbah={bisaUbah && bolehKelola}
+                        bolehRealisasi={bolehRealisasi}
                         hariIni={hariIni}
                       />
                     </div>
@@ -234,6 +242,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                     id={t.id}
                     status={st}
                     riwayat={t.riwayat.map(riwayatTampil)}
+                    hak={daftarHak}
                   />
                 </section>
               );
@@ -248,6 +257,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
             <SectionTitle hint="Perubahan tersimpan langsung dan ikut memperbarui peramalan.">
               Ubah data proyek
             </SectionTitle>
+            {bolehKelola ? (
             <ProjectForm
               units={units}
               values={{
@@ -268,12 +278,24 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
                 upliftStartDate: project.upliftStartDate ? toDateInput(project.upliftStartDate) : '',
               }}
             />
+            ) : (
+              <p className="text-sm text-slate-500">
+                User level Anda tidak punya hak &ldquo;Buat &amp; ubah proyek&rdquo;, jadi data proyek hanya bisa dilihat.
+              </p>
+            )}
           </Card>
         </div>
 
         <div className="lg:col-span-2">
           <Card className="card-pad">
-            {jalurItemBaru === 'DITUTUP' ? (
+            {!bolehKelola ? (
+              <>
+                <SectionTitle>Tambah item biaya</SectionTitle>
+                <p className="text-sm text-slate-500">
+                  User level Anda tidak punya hak &ldquo;Buat &amp; ubah proyek&rdquo;, jadi item tidak bisa ditambah.
+                </p>
+              </>
+            ) : jalurItemBaru === 'DITUTUP' ? (
               <>
                 <SectionTitle>Tambah item biaya</SectionTitle>
                 <p className="text-sm text-slate-500">

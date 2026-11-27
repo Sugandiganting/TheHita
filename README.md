@@ -319,9 +319,9 @@ lalu **In Progress** sendiri saat tanggal mulainya tiba, dan **Completed**. Proy
 **Rejected** (saat pengajuan atau peninjauan dana) atau **Cancelled** (setelah disetujui);
 keduanya wajib disertai catatan. Setiap perpindahan dicatat oleh siapa dan kapan. Hanya
 proyek **Approved** dan **In Progress** yang ikut memotong kas di Peramalan; proyek lama
-berstatus *Direncanakan* dibaca sebagai Approved. Pembatasan siapa yang boleh menyetujui
-menyusul bersama hak akses pengguna. Proyek Funding Review dan Approved (sebelum mulai)
-bisa dikembalikan ke Draft.
+berstatus *Direncanakan* dibaca sebagai Approved. Siapa yang boleh melakukan tiap langkah
+diatur lewat **User Level** (lihat di bawah). Proyek Funding Review dan Approved (sebelum
+mulai) bisa dikembalikan ke Draft.
 
 Proyek yang berhenti di tengah jalan ditandai **On Hold** (mangkrak, alasannya wajib).
 Sisa itemnya tidak lagi memotong kas sampai dilanjutkan (**Resume Project**, kembali ke
@@ -438,6 +438,23 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   sekali tetap terbaca sebagai entri pertama. Di Rencana Kas, sisa baris yang belum selesai
   tetap dihitung akan keluar, item selesai hanya realisasinya, dan pembayaran bertanggal
   sebelum atau pada tanggal posisi kas tidak dikurangkan lagi karena sudah ada di saldo.
+
+### User Level
+**Master Data › User Level** mengatur hak akses tiap kelompok pengguna. Setiap level
+mencentang hak yang diberikan; levelnya dipasang ke pengguna di menu **Pengguna**. Saat ini
+yang diatur:
+
+- **Proyek** — buat & ubah proyek, Submit Proposal, Approve Plan, Approve Funding, Reject,
+  Return to Draft, Put On Hold & Resume, Mark Completed, Cancel Project, dan catat
+  realisasi. Pengajuan item tambahan memakai hak yang sama dengan langkah senamanya.
+- **Pengguna** — kelola pengguna & user level.
+
+Server menolak langkah yang tidak dimiliki penggunanya, dan tombolnya tidak ditampilkan;
+kartu persetujuan menyebut langkah berikutnya yang menunggu pengguna lain. Hak akses dibaca
+dari basis data setiap kali, jadi perubahan langsung berlaku tanpa masuk ulang. Pengguna
+yang belum diberi level berakses penuh seperti sebelum fitur ini ada — supaya tidak ada yang
+terkunci — dan sistem menolak perubahan yang membuat tidak ada lagi pengguna aktif yang bisa
+mengelola pengguna. Menu lain belum dibatasi.
 
 ### COA
 Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di Indonesia).
@@ -671,6 +688,7 @@ double-entry.
 
 ## Keamanan
 
-Versi ini belum memiliki sistem login dan ditujukan untuk dijalankan di jaringan internal
-atau komputer pribadi. Sebelum dipasang di server yang bisa diakses publik, tambahkan
-autentikasi dan hak akses per pengguna terlebih dahulu.
+Setiap pengguna masuk dengan nama pengguna dan kata sandi. Hak akses per user level saat
+ini mengatur menu Proyek dan pengelolaan pengguna; menu lain masih terbuka untuk semua
+pengguna yang bisa masuk, jadi berikan akun hanya kepada orang yang berhak melihat
+pembukuan.

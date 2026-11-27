@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { ProjectForm } from '@/components/project-form';
-import { Card, PageHeader } from '@/components/ui';
+import { Alert, Card, PageHeader } from '@/components/ui';
+import { hakSaya } from '@/lib/hak-akses-server';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProyekBaruPage() {
   const units = await prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } });
+  const boleh = (await hakSaya()).has('proyek.kelola');
 
   return (
     <>
@@ -18,9 +20,15 @@ export default async function ProyekBaruPage() {
       <p className="mb-4 text-sm">
         <Link href="/proyek" className="text-slate-600 hover:underline">← Kembali ke daftar proyek</Link>
       </p>
-      <Card className="card-pad max-w-3xl">
-        <ProjectForm units={units} />
-      </Card>
+      {boleh ? (
+        <Card className="card-pad max-w-3xl">
+          <ProjectForm units={units} />
+        </Card>
+      ) : (
+        <Alert tone="warning">
+          User level Anda tidak punya hak &ldquo;Buat &amp; ubah proyek&rdquo;, jadi tidak bisa membuat proyek baru.
+        </Alert>
+      )}
     </>
   );
 }

@@ -26,7 +26,7 @@ export type ItemProyekTabel = {
  * dan hapus hanya bila itemnya masih boleh diubah.
  */
 export function TabelItemProyek({
-  items, accounts, realisasi, bolehUbah, hariIni,
+  items, accounts, realisasi, bolehUbah, bolehRealisasi = true, hariIni,
 }: {
   items: ItemProyekTabel[];
   accounts: { id: string; code: string; name: string }[];
@@ -34,6 +34,8 @@ export function TabelItemProyek({
   realisasi: boolean;
   /** Tampilkan tombol Ubah dan Hapus. */
   bolehUbah: boolean;
+  /** Pengguna ini boleh mencatat realisasi: tombol Realisasi ditampilkan. */
+  bolehRealisasi?: boolean;
   /** "YYYY-MM-DD", tanggal bawaan pembayaran. */
   hariIni: string;
 }) {
@@ -43,7 +45,7 @@ export function TabelItemProyek({
   const total = baris.reduce((s, i) => s + i.amount, 0);
   const dibayar = baris.reduce((s, i) => s + i.real.realisasi, 0);
   const hemat = rekapHematProyek(items).bersih;
-  const adaAksi = realisasi || bolehUbah;
+  const adaAksi = (realisasi && bolehRealisasi) || bolehUbah;
 
   return (
     <div className="overflow-x-auto">
@@ -113,7 +115,7 @@ export function TabelItemProyek({
               {adaAksi && (
                 <td className="td">
                   <span className="flex items-center justify-end gap-3">
-                    {realisasi && (
+                    {realisasi && bolehRealisasi && (
                       <RealisasiItemDialog
                         itemId={item.id}
                         nama={item.name}
