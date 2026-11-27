@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { hapusUserLevel, setelLevelPengguna, simpanUserLevel, type ActionState } from '@/app/actions';
-import { KATALOG_HAK } from '@/lib/hak-akses';
+import { AKSI_MASTER, KATALOG_HAK, LABEL_AKSI_MASTER } from '@/lib/hak-akses';
 import { DialogTombol } from './dialog';
 
 const initial: ActionState = { ok: false, message: '' };
@@ -62,11 +62,20 @@ export function UserLevelForm({
   const [tab, setTab] = useState(0);
   const modul = KATALOG_HAK[tab];
 
+  // Hak master: tambah/ubah/hapus tidak ada artinya tanpa lihat — halamannya
+  // tidak bisa dibuka. Mencentang salah satunya ikut mencentang lihat, dan
+  // melepas lihat ikut melepas ketiganya.
   const setel = (kode: readonly string[], centang: boolean) => setDipilih((lama) => {
     const baru = new Set(lama);
     for (const k of kode) {
-      if (centang) baru.add(k);
-      else baru.delete(k);
+      const m = /^(master\.[a-z_]+)\.(lihat|tambah|ubah|hapus)$/.exec(k);
+      if (centang) {
+        baru.add(k);
+        if (m && m[2] !== 'lihat') baru.add(`${m[1]}.lihat`);
+      } else {
+        baru.delete(k);
+        if (m && m[2] === 'lihat') for (const a of AKSI_MASTER) baru.delete(`${m[1]}.${a}`);
+      }
     }
     return baru;
   });
@@ -135,7 +144,71 @@ export function UserLevelForm({
             <span className="ml-auto text-xs text-slate-500">{jumlahDi(kodeTab)} dari {kodeTab.length} hak {modul.modul}</span>
           </label>
 
-          {kelompok.map((g) => {
+          {modul.hak.every((h) => h.aksi) ? (
+            /* Menu master: satu baris per menu, satu kolom per hak — 36 hak
+               dalam satu tabel ringkas, bukan daftar panjang. */
+            <div className="overflow-x-auto rounded-md bg-white shadow-sm">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50/60">
+                  <tr>
+                    <th className="th">Menu</th>
+                    {AKSI_MASTER.map((a) => {
+                      const kodeKolom = modul.hak.filter((h) => h.aksi === a).map((h) => h.kode);
+                      return (
+                        <th key={a} className="th text-center">
+                          <label className="inline-flex flex-col items-center gap-1">
+                            <span>{LABEL_AKSI_MASTER[a]}</span>
+                            <CentangInduk
+                              label={`${LABEL_AKSI_MASTER[a]} semua menu`}
+                              semua={jumlahDi(kodeKolom) === kodeKolom.length}
+                              sebagian={jumlahDi(kodeKolom) > 0}
+                              onChange={(c) => setel(kodeKolom, c)}
+                            />
+                          </label>
+                        </th>
+                      );
+                    })}
+                    <th className="th text-center">Semua</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {kelompok.map((g) => {
+                    const kodeSub = g.hak.map((h) => h.kode);
+                    return (
+                      <tr key={g.sub} className="hover:bg-slate-50">
+                        <td className="td font-medium text-slate-900">{g.sub}</td>
+                        {AKSI_MASTER.map((a) => {
+                          const h = g.hak.find((x) => x.aksi === a);
+                          return (
+                            <td key={a} className="td text-center">
+                              {h && (
+                                <input
+                                  type="checkbox"
+                                  aria-label={h.label}
+                                  title={h.keterangan}
+                                  checked={dipilih.has(h.kode)}
+                                  onChange={(e) => setel([h.kode], e.target.checked)}
+                                  className="h-4 w-4 rounded border-slate-300"
+                                />
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="td text-center">
+                          <CentangInduk
+                            label={`Semua hak ${g.sub}`}
+                            semua={jumlahDi(kodeSub) === kodeSub.length}
+                            sebagian={jumlahDi(kodeSub) > 0}
+                            onChange={(c) => setel(kodeSub, c)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : kelompok.map((g) => {
             const kodeSub = g.hak.map((h) => h.kode);
             return (
               <div key={g.sub} className="overflow-hidden rounded-md bg-white shadow-sm">

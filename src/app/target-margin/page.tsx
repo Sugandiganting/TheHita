@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { polaMusim, riwayatMargin, targetMarginPola } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
 import { formatPercent, formatPeriod, formatRupiah } from '@/lib/format';
@@ -25,6 +27,8 @@ const LABEL_GOLONGAN: Record<string, string> = {
  * dipilih sambil menebak bulan itu ramai atau sepi.
  */
 export default async function TargetMarginPage() {
+  const hak = await hakMenuMaster('target_margin');
+  if (!hak.lihat) return <TanpaAkses nama="Target Margin" />;
   const [pola, musim, riwayat] = await Promise.all([
     targetMarginPola(), polaMusim(), riwayatMargin(currentPeriod()),
   ]);
@@ -69,7 +73,8 @@ export default async function TargetMarginPage() {
               </p>
             )}
 
-            <div className="mt-3 overflow-x-auto">
+            {/* Tanpa hak ubah, seluruh isian dan tombolnya terkunci sekaligus. */}
+            <fieldset disabled={!hak.ubah} className="mt-3 overflow-x-auto disabled:opacity-80">
               <table className="w-full min-w-[640px]">
                 <thead className="border-b border-slate-200">
                   <tr>
@@ -103,7 +108,7 @@ export default async function TargetMarginPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </fieldset>
 
             <p className="mt-3 text-xs text-slate-500">
               Musim tiap bulan diatur di{' '}

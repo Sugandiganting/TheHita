@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { getKendaraan, getUnitPilihan } from '@/lib/queries';
 import { toDateInput } from '@/lib/format';
 import {
@@ -15,6 +17,8 @@ const NAMA_JENIS: Record<string, string> = {
 };
 
 export default async function KendaraanPage() {
+  const hak = await hakMenuMaster('kendaraan');
+  if (!hak.lihat) return <TanpaAkses nama="Kendaraan" />;
   const [daftar, unit] = await Promise.all([getKendaraan(), getUnitPilihan()]);
   const hariIni = toDateInput(new Date());
 
@@ -95,10 +99,12 @@ export default async function KendaraanPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="card-pad">
-            <SectionTitle>Tambah kendaraan</SectionTitle>
-            <VehicleForm unit={unit} />
-          </Card>
+          {hak.tambah && (
+            <Card className="card-pad">
+              <SectionTitle>Tambah kendaraan</SectionTitle>
+              <VehicleForm unit={unit} />
+            </Card>
+          )}
 
           <Card className="card-pad">
             <SectionTitle>Kaitannya dengan kas</SectionTitle>

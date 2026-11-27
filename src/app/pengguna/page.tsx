@@ -3,7 +3,8 @@ import { sesiSekarang } from '@/lib/sesi-server';
 import { formatDate } from '@/lib/format';
 import { FormTambahPengguna, SetelAktif, SetelSandi } from '@/components/pengguna-form';
 import { SetelLevel } from '@/components/user-level-form';
-import { hakSaya } from '@/lib/hak-akses-server';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import Link from 'next/link';
 import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 
@@ -19,7 +20,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PenggunaPage() {
   const sesi = await sesiSekarang();
-  const boleh = (await hakSaya()).has('pengguna.kelola');
+  const hak = await hakMenuMaster('pengguna');
+  if (!hak.lihat) return <TanpaAkses nama="Pengguna" />;
   const [daftar, levels] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ active: 'desc' }, { username: 'asc' }],
@@ -42,18 +44,18 @@ export default async function PenggunaPage() {
 
       {tanpaLevel > 0 ? (
         <Alert tone="warning" title={`${tanpaLevel} pengguna aktif belum diberi user level`}>
-          Pengguna tanpa level berakses penuh: bisa menyetujui proyek di semua tahap dan mengelola
-          pengguna. Pasang levelnya di kolom <strong>User level</strong>; hak tiap level diatur di{' '}
+          Pengguna tanpa level berakses penuh: bisa menyetujui proyek di semua tahap dan mengubah
+          seluruh Master Data. Pasang levelnya di kolom <strong>User level</strong>; hak tiap level diatur di{' '}
           <Link href="/user-level" className="font-medium underline">Master Data › User Level</Link>.
-          Hak akses saat ini mengatur menu Proyek dan pengelolaan pengguna; menu lain masih terbuka
-          untuk semua pengguna yang bisa masuk.
+          Hak akses saat ini mengatur menu Proyek dan Master Data; menu lain masih terbuka untuk
+          semua pengguna yang bisa masuk.
         </Alert>
       ) : (
         <Alert tone="info">
           Hak akses mengikuti user level masing-masing (atur di{' '}
           <Link href="/user-level" className="font-medium underline">Master Data › User Level</Link>).
-          Saat ini yang diatur adalah menu Proyek dan pengelolaan pengguna; menu lain masih terbuka untuk
-          semua pengguna yang bisa masuk.
+          Saat ini yang diatur adalah menu Proyek dan Master Data; menu lain masih terbuka untuk semua
+          pengguna yang bisa masuk.
         </Alert>
       )}
 
@@ -82,7 +84,7 @@ export default async function PenggunaPage() {
                       <td className="td font-medium">{u.name}</td>
                       <td className="td font-mono text-slate-600">{u.username}</td>
                       <td className="td min-w-[180px]">
-                        {boleh && u.active ? (
+                        {hak.ubah && u.active ? (
                           <SetelLevel id={u.id} levelId={u.levelId} levels={levels} />
                         ) : (
                           <span className="text-sm text-slate-600">{u.level?.name ?? 'Tanpa level (akses penuh)'}</span>
@@ -97,15 +99,18 @@ export default async function PenggunaPage() {
                         </Badge>
                       </td>
                       <td className="td">
-                        {boleh && <div className="flex flex-col gap-1">
-                          <SetelAktif
-                            id={u.id}
-                            username={u.username}
-                            aktif={u.active}
-                            diriSendiri={u.id === sesi?.id}
-                          />
-                          {u.active && <SetelSandi id={u.id} username={u.username} />}
-                        </div>}
+                        <div className="flex flex-col gap-1">
+                          {/* Menonaktifkan = hak Hapus; mengaktifkan lagi dan setel sandi = hak Ubah. */}
+                          {(u.active ? hak.hapus : hak.ubah) && (
+                            <SetelAktif
+                              id={u.id}
+                              username={u.username}
+                              aktif={u.active}
+                              diriSendiri={u.id === sesi?.id}
+                            />
+                          )}
+                          {u.active && hak.ubah && <SetelSandi id={u.id} username={u.username} />}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -115,7 +120,7 @@ export default async function PenggunaPage() {
           </Card>
         </div>
 
-        {boleh && (
+        {hak.tambah && (
           <div className="min-w-0">
             <Card className="card-pad">
               <SectionTitle hint="Nama pengguna tidak bisa diubah setelah dibuat.">

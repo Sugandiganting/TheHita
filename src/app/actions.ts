@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { HAK_AKSI_PROYEK, HAK_AKSI_TAMBAHAN, masihAdaPengelola, tulisHak } from '@/lib/hak-akses';
+import { HAK_AKSI_PROYEK, HAK_AKSI_TAMBAHAN, hakMaster, masihAdaPengelola, tulisHak } from '@/lib/hak-akses';
 import { tolakTanpaHak } from '@/lib/hak-akses-server';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -249,6 +249,8 @@ const SYSTEM_ACCOUNT_CODES = [INTERUNIT_RECEIVABLE, INTERUNIT_PAYABLE];
 
 export async function saveAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('coa', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const code = String(formData.get('code') ?? '').trim();
   const name = String(formData.get('name') ?? '').trim();
   const type = String(formData.get('type') ?? '');
@@ -338,6 +340,8 @@ export async function saveAccount(_prev: ActionState, formData: FormData): Promi
  * Akun yang sudah dipakai cukup dinonaktifkan supaya laporan lama tetap utuh.
  */
 export async function deleteAccount(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('coa', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   if (!id) return fail('Akun tidak ditemukan.');
 
@@ -379,6 +383,7 @@ export async function deleteAccount(_prev: ActionState, formData: FormData): Pro
 }
 
 export async function toggleAccountActive(formData: FormData): Promise<void> {
+  if (await tolakTanpaHak(hakMaster('coa', 'ubah'))) return;
   const id = String(formData.get('id') ?? '');
   if (!id) return;
   const account = await prisma.account.findUnique({ where: { id }, select: { active: true } });
@@ -389,6 +394,8 @@ export async function toggleAccountActive(formData: FormData): Promise<void> {
 
 export async function saveUnit(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('unit', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const code = String(formData.get('code') ?? '').trim().toUpperCase();
   const name = String(formData.get('name') ?? '').trim();
   const type = String(formData.get('type') ?? 'HOTEL');
@@ -429,6 +436,7 @@ export async function saveUnit(_prev: ActionState, formData: FormData): Promise<
 }
 
 export async function toggleUnitActive(formData: FormData): Promise<void> {
+  if (await tolakTanpaHak(hakMaster('unit', 'ubah'))) return;
   const id = String(formData.get('id') ?? '');
   if (!id) return;
   const unit = await prisma.businessUnit.findUnique({ where: { id }, select: { active: true } });
@@ -1410,6 +1418,8 @@ function segarkanJenisRab() {
  */
 export async function simpanJenisRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const code = String(formData.get('code') ?? '').trim();
+  const tanpaHak = await tolakTanpaHak(hakMaster('jenis_rab', code ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const name = normalNama(String(formData.get('name') ?? ''));
   if (!name) return fail('Nama jenis wajib diisi, mis. HR atau Management.');
 
@@ -1439,6 +1449,8 @@ export async function simpanJenisRab(_prev: ActionState, formData: FormData): Pr
 
 /** Menghapus jenis tambahan yang belum dipakai RAB maupun kategori rencana kas. */
 export async function hapusJenisRab(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('jenis_rab', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const code = String(formData.get('code') ?? '').trim();
   if (code === JENIS_PURCHASING || code === JENIS_UMUM) {
     return fail('Jenis bawaan tidak bisa dihapus, tetapi namanya boleh diganti.');
@@ -2202,6 +2214,8 @@ function segarkanTarget() {
 }
 
 export async function simpanTargetMargin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('target_margin', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const month = Number(String(formData.get('month') ?? ''));
   if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
 
@@ -2245,6 +2259,8 @@ export async function simpanTargetMargin(_prev: ActionState, formData: FormData)
 export async function salinTargetMarginKeSemua(
   _prev: ActionState, formData: FormData,
 ): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('target_margin', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const month = Number(String(formData.get('month') ?? ''));
   if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
 
@@ -2263,6 +2279,8 @@ export async function salinTargetMarginKeSemua(
 }
 
 export async function hapusTargetMargin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('target_margin', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const month = Number(String(formData.get('month') ?? ''));
   if (!Number.isInteger(month) || month < 1 || month > 12) return fail('Bulan tidak dikenal.');
   await prisma.monthMarginTarget.deleteMany({ where: { month } });
@@ -2298,6 +2316,8 @@ function segarkanMusim() {
 
 /** Mengisi daftar musim pertama kali, agar menunya tidak dibuka dalam keadaan kosong. */
 export async function seedSeasons(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('musim', 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const ada = await prisma.season.count();
   if (ada > 0) return fail('Daftar musim sudah terisi.');
 
@@ -2310,6 +2330,8 @@ export async function seedSeasons(_prev: ActionState, _formData: FormData): Prom
 
 export async function saveSeason(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('musim', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const code = String(formData.get('code') ?? '').trim().toUpperCase();
   const name = String(formData.get('name') ?? '').trim();
   const delta = Number(String(formData.get('delta') ?? '').replace(/[^\d.-]/g, ''));
@@ -2334,6 +2356,8 @@ export async function saveSeason(_prev: ActionState, formData: FormData): Promis
 }
 
 export async function deleteSeason(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('musim', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const musim = await prisma.season.findUnique({
     where: { id },
@@ -2354,6 +2378,8 @@ export async function deleteSeason(_prev: ActionState, formData: FormData): Prom
 
 /** Menetapkan musim sebuah bulan kalender. Kosong berarti bulan itu dilepas. */
 export async function setSeasonMonth(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('musim', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const month = Number(formData.get('month'));
   const seasonId = String(formData.get('seasonId') ?? '');
 
@@ -2454,6 +2480,8 @@ const JENIS_KENDARAAN = ['MOBIL', 'MOTOR', 'LAINNYA'];
 
 export async function saveVehicle(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('kendaraan', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const plate = String(formData.get('plate') ?? '').trim().toUpperCase();
   const name = String(formData.get('name') ?? '').trim();
   const kind = String(formData.get('kind') ?? 'MOBIL');
@@ -2482,6 +2510,8 @@ export async function saveVehicle(_prev: ActionState, formData: FormData): Promi
 }
 
 export async function deleteVehicle(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('kendaraan', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const ada = await prisma.vehicle.findUnique({
     where: { id },
@@ -2502,6 +2532,8 @@ export async function deleteVehicle(_prev: ActionState, formData: FormData): Pro
 
 export async function saveObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('kewajiban', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const label = String(formData.get('label') ?? '').trim();
   const amount = angka(formData, 'amount');
   const tanggalTeks = String(formData.get('dueDate') ?? '');
@@ -2539,6 +2571,8 @@ export async function saveObligation(_prev: ActionState, formData: FormData): Pr
 }
 
 export async function setObligationActive(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('kewajiban', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const active = String(formData.get('active') ?? '') === 'true';
   const ada = await prisma.scheduledObligation.findUnique({ where: { id }, select: { label: true } });
@@ -2552,6 +2586,8 @@ export async function setObligationActive(_prev: ActionState, formData: FormData
 }
 
 export async function deleteObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('kewajiban', 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const ada = await prisma.scheduledObligation.findUnique({
     where: { id },
@@ -2575,6 +2611,8 @@ export async function deleteObligation(_prev: ActionState, formData: FormData): 
  * tahun, dan angka tahun lalu adalah tebakan terbaik untuk tahun depan.
  */
 export async function payObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('kewajiban', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const dueTeks = String(formData.get('dueDate') ?? '');
   const paidTeks = String(formData.get('paidDate') ?? '');
@@ -2610,6 +2648,8 @@ export async function payObligation(_prev: ActionState, formData: FormData): Pro
 
 /** Membatalkan pelunasan terakhir, mis. salah tanggal atau salah nominal. */
 export async function unpayObligation(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const tanpaHak = await tolakTanpaHak(hakMaster('kewajiban', 'ubah'));
+  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const row = await prisma.scheduledObligation.findUnique({
     where: { id },
@@ -2716,7 +2756,7 @@ function periksaSandi(sandi: string, ulangi: string | null): string | null {
 }
 
 export async function tambahPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
+  const tanpaHak = await tolakTanpaHak(hakMaster('pengguna', 'tambah'));
   if (tanpaHak) return fail(tanpaHak);
   const sesi = await sesiSekarang();
   if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
@@ -2755,7 +2795,7 @@ export async function tambahPengguna(_prev: ActionState, formData: FormData): Pr
 }
 
 export async function setelSandiPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
+  const tanpaHak = await tolakTanpaHak(hakMaster('pengguna', 'ubah'));
   if (tanpaHak) return fail(tanpaHak);
   const sesi = await sesiSekarang();
   if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
@@ -2771,13 +2811,14 @@ export async function setelSandiPengguna(_prev: ActionState, formData: FormData)
 }
 
 export async function setelAktifPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
-  if (tanpaHak) return fail(tanpaHak);
   const sesi = await sesiSekarang();
   if (!sesi) return fail('Sesi berakhir. Muat ulang halaman lalu masuk kembali.');
 
   const id = String(formData.get('id') ?? '');
   const aktif = String(formData.get('aktif') ?? '') === 'true';
+  // Menonaktifkan = "hapus" pengguna (akun tidak pernah dihapus); mengaktifkan lagi = ubah.
+  const tanpaHak = await tolakTanpaHak(hakMaster('pengguna', aktif ? 'ubah' : 'hapus'));
+  if (tanpaHak) return fail(tanpaHak);
 
   const user = await prisma.user.findUnique({ where: { id }, select: { username: true, active: true } });
   if (!user) return fail('Pengguna tidak ditemukan.');
@@ -3101,8 +3142,8 @@ async function cekPengelolaTersisa(ubah: (u: PenggunaUntukCek) => PenggunaUntukC
   });
   return masihAdaPengelola(semua.map(ubah))
     ? null
-    : 'Perubahan ini membuat tidak ada lagi pengguna aktif yang bisa mengelola pengguna. '
-      + 'Sisakan minimal satu pengguna dengan hak "Kelola pengguna & user level".';
+    : 'Perubahan ini membuat tidak ada lagi pengguna aktif yang bisa mengelola hak akses. '
+      + 'Sisakan minimal satu pengguna dengan hak Lihat dan Ubah untuk Pengguna dan User Level.';
 }
 
 function segarkanHakAkses() {
@@ -3113,9 +3154,9 @@ function segarkanHakAkses() {
 
 /** Membuat atau mengubah user level beserta hak aksesnya. */
 export async function simpanUserLevel(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
-  if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
+  const tanpaHak = await tolakTanpaHak(hakMaster('user_level', id ? 'ubah' : 'tambah'));
+  if (tanpaHak) return fail(tanpaHak);
   const name = String(formData.get('name') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
   const permissions = tulisHak(formData.getAll('hak').map(String));
@@ -3135,7 +3176,7 @@ export async function simpanUserLevel(_prev: ActionState, formData: FormData): P
 }
 
 export async function hapusUserLevel(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
+  const tanpaHak = await tolakTanpaHak(hakMaster('user_level', 'hapus'));
   if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const level = await prisma.userLevel.findUnique({
@@ -3152,7 +3193,7 @@ export async function hapusUserLevel(_prev: ActionState, formData: FormData): Pr
 
 /** Memasang user level pada seorang pengguna; kosong berarti tanpa level (akses penuh). */
 export async function setelLevelPengguna(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const tanpaHak = await tolakTanpaHak('pengguna.kelola');
+  const tanpaHak = await tolakTanpaHak(hakMaster('pengguna', 'ubah'));
   if (tanpaHak) return fail(tanpaHak);
   const id = String(formData.get('id') ?? '');
   const levelId = String(formData.get('levelId') ?? '') || null;

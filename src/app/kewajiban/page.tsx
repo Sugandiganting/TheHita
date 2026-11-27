@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { getKendaraan, getKewajiban } from '@/lib/queries';
 import { labelPengulangan } from '@/lib/kewajiban';
 import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
@@ -16,6 +18,8 @@ function selisihHari(d: Date): number {
 }
 
 export default async function KewajibanPage() {
+  const hak = await hakMenuMaster('kewajiban');
+  if (!hak.lihat) return <TanpaAkses nama="Kewajiban Terjadwal" />;
   const [daftar, kendaraan] = await Promise.all([getKewajiban(), getKendaraan()]);
   const hariIni = toDateInput(new Date());
   const aktif = daftar.filter((k) => k.active);
@@ -106,7 +110,7 @@ export default async function KewajibanPage() {
                           </div>
                         </div>
 
-                        <KewajibanAksi
+                        {(hak.ubah || hak.hapus) && <KewajibanAksi
                           aktif={k.active}
                           adaPelunasan={k.riwayat.length > 0}
                           jatuhTempo={k.berikutnya?.jatuhTempo ?? null}
@@ -118,7 +122,7 @@ export default async function KewajibanPage() {
                             dueDate: toDateInput(k.dueDate), repeat: k.repeat,
                             repeatEvery: k.repeatEvery, vehicleId: k.vehicleId, notes: k.notes,
                           }}
-                        />
+                        />}
 
                         {k.riwayat.length > 0 && (
                           <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
@@ -139,13 +143,15 @@ export default async function KewajibanPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="card-pad">
-            <SectionTitle>Tambah kewajiban</SectionTitle>
-            <ObligationForm
-              kendaraan={kendaraan.map((v) => ({ id: v.id, plate: v.plate, name: v.name }))}
-              hariIni={hariIni}
-            />
-          </Card>
+          {hak.tambah && (
+            <Card className="card-pad">
+              <SectionTitle>Tambah kewajiban</SectionTitle>
+              <ObligationForm
+                kendaraan={kendaraan.map((v) => ({ id: v.id, plate: v.plate, name: v.name }))}
+                hariIni={hariIni}
+              />
+            </Card>
+          )}
 
           <Card className="card-pad">
             <SectionTitle>Cara dipakainya</SectionTitle>

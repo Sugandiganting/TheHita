@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/db';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { UNIT_TYPE_LABEL } from '@/lib/accounting';
 import { formatRupiah } from '@/lib/format';
 import { toggleUnitActive } from '@/app/actions';
@@ -8,6 +10,8 @@ import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 
 export default async function UnitPage() {
+  const hak = await hakMenuMaster('unit');
+  if (!hak.lihat) return <TanpaAkses nama="Unit Usaha" />;
   const [units, groups] = await Promise.all([
     prisma.businessUnit.findMany({
       orderBy: { code: 'asc' },
@@ -85,12 +89,16 @@ export default async function UnitPage() {
                       <td className="td num text-xs text-slate-500">{u._count.lines}</td>
                       <td className="td text-xs text-slate-500">{u.legacyPms ?? '—'}</td>
                       <td className="td">
-                        <form action={toggleUnitActive}>
-                          <input type="hidden" name="id" value={u.id} />
-                          <button type="submit">
-                            <Badge tone={u.active ? 'green' : 'slate'}>{u.active ? 'Aktif' : 'Non-aktif'}</Badge>
-                          </button>
-                        </form>
+                        {hak.ubah ? (
+                          <form action={toggleUnitActive}>
+                            <input type="hidden" name="id" value={u.id} />
+                            <button type="submit">
+                              <Badge tone={u.active ? 'green' : 'slate'}>{u.active ? 'Aktif' : 'Non-aktif'}</Badge>
+                            </button>
+                          </form>
+                        ) : (
+                          <Badge tone={u.active ? 'green' : 'slate'}>{u.active ? 'Aktif' : 'Non-aktif'}</Badge>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -127,12 +135,14 @@ export default async function UnitPage() {
         </div>
 
         <div>
-          <Card className="card-pad sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-            <SectionTitle hint="Menambah cabang atau lini usaha baru cukup lewat formulir ini.">
-              Unit baru
-            </SectionTitle>
-            <UnitForm />
-          </Card>
+          {hak.tambah && (
+            <Card className="card-pad sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
+              <SectionTitle hint="Menambah cabang atau lini usaha baru cukup lewat formulir ini.">
+                Unit baru
+              </SectionTitle>
+              <UnitForm />
+            </Card>
+          )}
         </div>
       </div>
     </>

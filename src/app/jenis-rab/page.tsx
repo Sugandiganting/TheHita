@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { prisma } from '@/lib/db';
 import { getJenisRab } from '@/lib/queries';
 import { currentPeriod } from '@/lib/period';
@@ -18,6 +20,8 @@ export const dynamic = 'force-dynamic';
  * mengambil jatahnya dari seluruh RAB HR bulan itu.
  */
 export default async function JenisRabPage() {
+  const hak = await hakMenuMaster('jenis_rab');
+  if (!hak.lihat) return <TanpaAkses nama="Jenis RAB" />;
   const kini = currentPeriod();
   const [jenis, rab, kategori, tautanKini] = await Promise.all([
     getJenisRab(),
@@ -39,7 +43,7 @@ export default async function JenisRabPage() {
       <PageHeader
         title="Jenis RAB"
         description="Pengelompokan RAB menurut pemegang anggarannya: Purchasing, HR, Management. Satu cabang boleh punya satu RAB tiap jenis dalam sebulan."
-        action={<TambahJenisRabDialog />}
+        action={hak.tambah ? <TambahJenisRabDialog /> : undefined}
       />
 
       <Card className="card-pad">
@@ -81,8 +85,8 @@ export default async function JenisRabPage() {
                     <td className="td num text-slate-500">{nRab} RAB</td>
                     <td className="td">
                       <span className="flex items-center gap-3">
-                        <UbahJenisRabDialog nilai={{ code: j.code, name: j.name }} />
-                        {!j.bawaan && (
+                        {hak.ubah && <UbahJenisRabDialog nilai={{ code: j.code, name: j.name }} />}
+                        {!j.bawaan && hak.hapus && (
                           <HapusJenisRab code={j.code} nama={j.name} dipakai={nRab + nKategori} />
                         )}
                       </span>

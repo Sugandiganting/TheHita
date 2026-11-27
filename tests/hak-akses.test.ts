@@ -25,6 +25,7 @@ test('setiap langkah proyek dan pengajuan tambahan punya hak aksesnya', () => {
 
 test('harus tersisa satu pengguna aktif yang bisa mengelola pengguna', () => {
   const staf = { permissions: 'proyek.ajukan' };
+  // Kode lama pengguna.kelola diterjemahkan menjadi hak Pengguna + User Level.
   const admin = { permissions: 'pengguna.kelola' };
   assert.equal(masihAdaPengelola([{ active: true, level: staf }]), false);
   assert.equal(masihAdaPengelola([{ active: true, level: staf }, { active: false, level: admin }]), false);
@@ -44,4 +45,28 @@ test('setiap hak punya sub menu, dan sub menu di satu menu berurutan', () => {
       assert.ok(!dilewati.has(sub), `${m.modul}: ${sub} terpecah`);
     });
   }
+});
+
+import { HAK_PENGELOLA, halamanTertutup, hakMaster } from '../src/lib/hak-akses.ts';
+test('master data: tiap menu punya lihat/tambah/ubah/hapus; kode lama diterjemahkan', () => {
+  for (const a of ['lihat', 'tambah', 'ubah', 'hapus'] as const) assert.ok(SEMUA_HAK.includes(hakMaster('coa', a)));
+  const lama = bacaHak('pengguna.kelola,proyek.ajukan');
+  for (const k of HAK_PENGELOLA) assert.ok(lama.includes(k), k);
+  assert.ok(lama.includes('proyek.ajukan'));
+  assert.ok(lama.includes(hakMaster('user_level', 'hapus')));
+});
+
+test('menu master tanpa hak lihat disembunyikan', () => {
+  const h = new Set<string>([hakMaster('coa', 'lihat'), hakMaster('unit', 'lihat')]);
+  const tutup = halamanTertutup(h);
+  assert.ok(!tutup.includes('/coa'));
+  assert.ok(tutup.includes('/kendaraan'));
+  assert.ok(tutup.includes('/user-level'));
+  assert.deepEqual(halamanTertutup(new Set(SEMUA_HAK)), []);
+});
+
+test('pengelola hak akses butuh lihat + ubah Pengguna dan User Level', () => {
+  const sebagian = { permissions: [hakMaster('pengguna', 'lihat'), hakMaster('pengguna', 'ubah'), hakMaster('user_level', 'lihat')].join(',') };
+  assert.equal(masihAdaPengelola([{ active: true, level: sebagian }]), false);
+  assert.equal(masihAdaPengelola([{ active: true, level: { permissions: HAK_PENGELOLA.join(',') } }]), true);
 });

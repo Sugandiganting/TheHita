@@ -158,8 +158,16 @@ function grupHalaman(pathname: string): string | null {
   return null;
 }
 
-export function Shell({ children, pengguna }: { children: ReactNode; pengguna?: string }) {
+export function Shell({ children, pengguna, tertutup = [] }: {
+  children: ReactNode;
+  pengguna?: string;
+  /** Halaman yang tidak boleh dibuka user level pengguna ini — disembunyikan dari menu. */
+  tertutup?: string[];
+}) {
   const pathname = usePathname();
+  const menu = MENU
+    .map((e) => (isGroup(e) ? { ...e, items: e.items.filter((i) => !tertutup.includes(i.href)) } : e))
+    .filter((e) => !isGroup(e) || e.items.length > 0);
   // Di layar lebar sidebar mengecil jadi ikon; di ponsel ia menjadi laci geser.
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -288,7 +296,7 @@ export function Shell({ children, pengguna }: { children: ReactNode; pengguna?: 
         </div>
 
         <nav className="space-y-0.5 p-2.5">
-          {MENU.map((entry) => {
+          {menu.map((entry) => {
             if (!isGroup(entry)) {
               const on = active(entry.href);
               return (

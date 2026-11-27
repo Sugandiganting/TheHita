@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { KATALOG_HAK, LABEL_HAK, bacaHak } from '@/lib/hak-akses';
-import { hakSaya } from '@/lib/hak-akses-server';
+import { KATALOG_HAK, LABEL_AKSI_MASTER, LABEL_HAK, bacaHak } from '@/lib/hak-akses';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { HapusUserLevel, TambahUserLevelDialog, UbahUserLevelDialog } from '@/components/user-level-form';
 import { Alert, Badge, Card, PageHeader } from '@/components/ui';
 
@@ -9,10 +10,11 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Master data user level: kumpulan hak akses yang diberikan kepada pengguna.
- * Untuk sekarang mengatur menu Proyek dan pengelolaan pengguna.
+ * Untuk sekarang mengatur menu Proyek dan seluruh menu Master Data.
  */
 export default async function UserLevelPage() {
-  const boleh = (await hakSaya()).has('pengguna.kelola');
+  const hak = await hakMenuMaster('user_level');
+  if (!hak.lihat) return <TanpaAkses nama="User Level" />;
   const [levels, tanpaLevel] = await Promise.all([
     prisma.userLevel.findMany({
       orderBy: { name: 'asc' },
@@ -27,16 +29,9 @@ export default async function UserLevelPage() {
       <PageHeader
         title="User Level"
         description="Hak akses tiap kelompok pengguna. Pasang levelnya ke pengguna di menu Pengguna."
-        action={boleh ? <TambahUserLevelDialog /> : undefined}
+        action={hak.tambah ? <TambahUserLevelDialog /> : undefined}
       />
 
-      {!boleh && (
-        <div className="mb-6">
-          <Alert tone="warning">
-            User level Anda tidak punya hak &ldquo;Kelola pengguna &amp; user level&rdquo;, jadi halaman ini hanya bisa dilihat.
-          </Alert>
-        </div>
-      )}
 
       {tanpaLevel > 0 && (
         <div className="mb-6">
@@ -57,7 +52,7 @@ export default async function UserLevelPage() {
               </p>
             </Card>
           ) : levels.map((l) => {
-            const hak = bacaHak(l.permissions);
+            const hakLevel = bacaHak(l.permissions);
             const aktif = l.users.filter((u) => u.active);
             return (
               <Card key={l.id} className="card-pad">
@@ -66,20 +61,20 @@ export default async function UserLevelPage() {
                     <h2 className="font-medium text-slate-900">{l.name}</h2>
                     {l.description && <p className="text-sm text-slate-500">{l.description}</p>}
                     <p className="mt-1 text-xs text-slate-500">
-                      {hak.length} dari {jumlahHak} hak ·{' '}
+                      {hakLevel.length} dari {jumlahHak} hak ·{' '}
                       {aktif.length === 0 ? 'belum dipakai pengguna' : `${aktif.length} pengguna: ${aktif.map((u) => u.name).join(', ')}`}
                     </p>
                   </div>
-                  {boleh && (
+                  {(hak.ubah || hak.hapus) && (
                     <span className="flex items-center gap-3">
-                      <UbahUserLevelDialog nilai={{ id: l.id, name: l.name, description: l.description, hak }} />
-                      <HapusUserLevel id={l.id} nama={l.name} />
+                      {hak.ubah && <UbahUserLevelDialog nilai={{ id: l.id, name: l.name, description: l.description, hak: hakLevel }} />}
+                      {hak.hapus && <HapusUserLevel id={l.id} nama={l.name} />}
                     </span>
                   )}
                 </div>
                 <div className="mt-3 space-y-3">
                   {KATALOG_HAK.map((m) => {
-                    const punya = m.hak.filter((h) => hak.includes(h.kode));
+                    const punya = m.hak.filter((h) => hakLevel.includes(h.kode));
                     const subs = [...new Set(punya.map((h) => h.sub))];
                     return (
                       <div key={m.modul} className="text-xs">
@@ -90,9 +85,9 @@ export default async function UserLevelPage() {
                           <p className="text-slate-400">tidak ada akses</p>
                         ) : subs.map((sub) => (
                           <p key={sub} className="flex flex-wrap items-center gap-1.5 py-0.5">
-                            <span className="w-28 shrink-0 text-slate-500">{sub}</span>
+                            <span className="w-36 shrink-0 text-slate-500">{sub}</span>
                             {punya.filter((h) => h.sub === sub).map((h) => (
-                              <Badge key={h.kode} tone="brand">{LABEL_HAK[h.kode]}</Badge>
+                              <Badge key={h.kode} tone="brand">{h.aksi ? LABEL_AKSI_MASTER[h.aksi] : LABEL_HAK[h.kode]}</Badge>
                             ))}
                           </p>
                         ))}

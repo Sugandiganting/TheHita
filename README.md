@@ -448,14 +448,20 @@ Saat ini yang diatur:
 - **Proyek** — buat & ubah proyek, Submit Proposal, Approve Plan, Approve Funding, Reject,
   Return to Draft, Put On Hold & Resume, Mark Completed, Cancel Project, dan catat
   realisasi. Pengajuan item tambahan memakai hak yang sama dengan langkah senamanya.
-- **Pengguna** — kelola pengguna & user level.
+- **Master Data** — untuk setiap menu (Chart of Account, Unit Usaha, Musim, Target Margin,
+  Jenis RAB, Kewajiban Terjadwal, Kendaraan, Pengguna, User Level): **Lihat, Tambah, Ubah,
+  Hapus**, ditampilkan sebagai tabel di dialognya. Tanpa *Lihat*, menunya disembunyikan dari
+  sidebar dan halamannya tidak bisa dibuka; mencentang Tambah/Ubah/Hapus ikut mencentang
+  Lihat. Menonaktifkan pengguna memakai hak *Hapus Pengguna*. Hak lama "Kelola pengguna &
+  user level" otomatis dibaca sebagai seluruh hak Pengguna dan User Level.
 
 Server menolak langkah yang tidak dimiliki penggunanya, dan tombolnya tidak ditampilkan;
 kartu persetujuan menyebut langkah berikutnya yang menunggu pengguna lain. Hak akses dibaca
 dari basis data setiap kali, jadi perubahan langsung berlaku tanpa masuk ulang. Pengguna
 yang belum diberi level berakses penuh seperti sebelum fitur ini ada — supaya tidak ada yang
-terkunci — dan sistem menolak perubahan yang membuat tidak ada lagi pengguna aktif yang bisa
-mengelola pengguna. Menu lain belum dibatasi.
+terkunci — dan sistem menolak perubahan yang membuat tidak ada lagi pengguna aktif dengan hak
+Lihat dan Ubah untuk Pengguna dan User Level. Menu di luar Proyek dan Master Data belum
+dibatasi.
 
 ### COA
 Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di Indonesia).
@@ -690,6 +696,6 @@ double-entry.
 ## Keamanan
 
 Setiap pengguna masuk dengan nama pengguna dan kata sandi. Hak akses per user level saat
-ini mengatur menu Proyek dan pengelolaan pengguna; menu lain masih terbuka untuk semua
+ini mengatur menu Proyek dan seluruh Master Data; menu lain masih terbuka untuk semua
 pengguna yang bisa masuk, jadi berikan akun hanya kepada orang yang berhak melihat
 pembukuan.

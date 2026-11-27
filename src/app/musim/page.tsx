@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { getSeasons, polaMusim } from '@/lib/queries';
 import { NAMA_BULAN, musimAcuan, pengali, polaBervariasi } from '@/lib/musim';
 import { formatPercent } from '@/lib/format';
@@ -10,6 +12,8 @@ import { Alert, Card, EmptyState, PageHeader, SectionTitle } from '@/components/
 export const dynamic = 'force-dynamic';
 
 export default async function MusimPage() {
+  const hak = await hakMenuMaster('musim');
+  if (!hak.lihat) return <TanpaAkses nama="Musim" />;
   const [daftar, pola] = await Promise.all([getSeasons(), polaMusim()]);
   const acuan = musimAcuan(daftar);
   const bervariasi = polaBervariasi(pola);
@@ -33,9 +37,11 @@ export default async function MusimPage() {
             title="Belum ada musim"
             description="Tentukan musim beserta selisih persennya terhadap musim acuan, lalu tetapkan musim untuk tiap bulan."
           />
-          <div className="mt-4 flex justify-center">
-            <SeedSeasons />
-          </div>
+          {hak.tambah && (
+            <div className="mt-4 flex justify-center">
+              <SeedSeasons />
+            </div>
+          )}
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-3">
@@ -89,7 +95,9 @@ export default async function MusimPage() {
                         </td>
                         <td className="td font-mono text-xs text-slate-500">{s.code}</td>
                         <td className="td num">
-                          <SeasonDelta id={s.id} code={s.code} name={s.name} delta={s.delta} />
+                          {hak.ubah
+                            ? <SeasonDelta id={s.id} code={s.code} name={s.name} delta={s.delta} />
+                            : `${s.delta >= 0 ? '+' : ''}${s.delta}%`}
                         </td>
                         <td className="td num text-slate-500">{pengali(s).toFixed(2)}&times;</td>
                         <td className="td text-xs text-slate-600">
@@ -98,7 +106,7 @@ export default async function MusimPage() {
                             : s.bulan.map((b) => NAMA_BULAN[b - 1].slice(0, 3)).join(', ')}
                         </td>
                         <td className="td num">
-                          <SeasonDelete id={s.id} jumlahBulan={s.bulan.length} />
+                          {hak.hapus && <SeasonDelete id={s.id} jumlahBulan={s.bulan.length} />}
                         </td>
                       </tr>
                     ))}
@@ -115,11 +123,17 @@ export default async function MusimPage() {
                 {NAMA_BULAN.map((nama, i) => (
                   <div key={nama}>
                     <label className="label" htmlFor={`musim-bulan-${i + 1}`}>{nama}</label>
-                    <MonthSeason
-                      month={i + 1}
-                      seasonId={idPerBulan.get(i + 1) ?? null}
-                      seasons={daftar}
-                    />
+                    {hak.ubah ? (
+                      <MonthSeason
+                        month={i + 1}
+                        seasonId={idPerBulan.get(i + 1) ?? null}
+                        seasons={daftar}
+                      />
+                    ) : (
+                      <p id={`musim-bulan-${i + 1}`} className="text-sm text-slate-700">
+                        {daftar.find((d) => d.id === idPerBulan.get(i + 1))?.name ?? '—'}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -127,10 +141,12 @@ export default async function MusimPage() {
           </div>
 
           <div className="space-y-6">
-            <Card className="card-pad">
-              <SectionTitle>Tambah musim</SectionTitle>
-              <SeasonForm />
-            </Card>
+            {hak.tambah && (
+              <Card className="card-pad">
+                <SectionTitle>Tambah musim</SectionTitle>
+                <SeasonForm />
+              </Card>
+            )}
 
             <Card className="card-pad">
               <SectionTitle>Cara dipakainya</SectionTitle>

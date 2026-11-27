@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import './globals.css';
 import { Shell } from '@/components/sidebar';
 import { penggunaMasihAktif, sesiSekarang } from '@/lib/sesi-server';
+import { hakSaya } from '@/lib/hak-akses-server';
+import { halamanTertutup } from '@/lib/hak-akses';
 
 export const metadata: Metadata = {
   title: 'The Hita Finance — Akuntansi & Peramalan Kas',
@@ -32,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="id">
       <body>
-        <Shell pengguna={sesi?.name}>{children}</Shell>
+        <Shell pengguna={sesi?.name} tertutup={sesi ? halamanTertutup(await hakSaya()) : []}>{children}</Shell>
       </body>
     </html>
   );

@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { hakMenuMaster } from '@/lib/hak-akses-server';
+import { TanpaAkses } from '@/components/tanpa-akses';
 import { prisma } from '@/lib/db';
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABEL, INTERUNIT_PAYABLE, INTERUNIT_RECEIVABLE, type AccountType } from '@/lib/accounting';
 import { toggleAccountActive } from '@/app/actions';
@@ -16,6 +18,8 @@ function one(v: string | string[] | undefined): string | undefined {
 }
 
 export default async function CoaPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const hak = await hakMenuMaster('coa');
+  if (!hak.lihat) return <TanpaAkses nama="Chart of Account" />;
   const params = await searchParams;
   const editId = one(params.edit);
 
@@ -110,22 +114,26 @@ export default async function CoaPage({ searchParams }: { searchParams: Promise<
                             {a.isHeader ? '—' : `${a._count.lines}x`}
                           </td>
                           <td className="td">
-                            <form action={toggleAccountActive}>
-                              <input type="hidden" name="id" value={a.id} />
-                              <button type="submit">
-                                <Badge tone={a.active ? 'green' : 'slate'}>{a.active ? 'Aktif' : 'Non-aktif'}</Badge>
-                              </button>
-                            </form>
+                            {hak.ubah ? (
+                              <form action={toggleAccountActive}>
+                                <input type="hidden" name="id" value={a.id} />
+                                <button type="submit">
+                                  <Badge tone={a.active ? 'green' : 'slate'}>{a.active ? 'Aktif' : 'Non-aktif'}</Badge>
+                                </button>
+                              </form>
+                            ) : (
+                              <Badge tone={a.active ? 'green' : 'slate'}>{a.active ? 'Aktif' : 'Non-aktif'}</Badge>
+                            )}
                           </td>
                           <td className="td">
-                            <CoaRowActions
+                            {(hak.ubah || hak.hapus) && <CoaRowActions
                               id={a.id}
                               editHref={`/coa?edit=${a.id}`}
                               usage={a._count.lines}
                               childCount={a._count.children}
                               costItems={a._count.costItems}
                               isSystem={isSystem}
-                            />
+                            />}
                           </td>
                         </tr>
                       );
@@ -137,7 +145,7 @@ export default async function CoaPage({ searchParams }: { searchParams: Promise<
           ))}
         </div>
 
-        <div>
+        {(editing ? hak.ubah : hak.tambah) && <div>
           <Card className="card-pad sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
             <SectionTitle
               hint={
@@ -171,7 +179,7 @@ export default async function CoaPage({ searchParams }: { searchParams: Promise<
               }
             />
           </Card>
-        </div>
+        </div>}
       </div>
     </>
   );
