@@ -5,11 +5,11 @@
   "description": "Sistem akuntansi multi-unit & peramalan arus kas untuk The Hita Hospitality Group",
   "scripts": {
     "mulai": "node scripts/jalankan.mjs",
-    "predev": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs && tsx scripts/lengkapi-coa.ts",
+    "predev": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs && tsx scripts/lengkapi-coa.ts && tsx scripts/selaraskan-coa.ts",
     "dev": "next dev",
     "prebuild": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs",
     "build": "prisma generate && next build",
-    "prestart": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs && tsx scripts/lengkapi-coa.ts",
+    "prestart": "node scripts/siapkan-env.mjs && node scripts/siapkan-db.mjs && tsx scripts/lengkapi-coa.ts && tsx scripts/selaraskan-coa.ts",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

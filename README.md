@@ -468,6 +468,13 @@ Daftar akun (±125 akun bawaan, disusun mengikuti kebiasaan pembukuan hotel di I
 Bisa ditambah, diubah, atau dinonaktifkan. Akun bertanda **kas** adalah akun yang saldonya
 dipakai mesin peramalan.
 
+Nama beberapa akun beban disamakan dengan template RAB (mis. *Biaya Amenities*, *Biaya
+Cleaning & Supplies*, *Biaya Chemical Laundry*, *Biaya Supplies & Packaging IGYT*), dan air
+isi ulang IGYT mendapat akun sendiri (6160.07). Nomor akunnya tetap, jadi riwayat jurnal dan
+RAB tidak berubah. Penyelarasan ini berjalan sendiri saat aplikasi dinyalakan
+(`scripts/selaraskan-coa.ts`, daftarnya di `src/lib/coa-selaras.ts`) dan hanya mengubah akun
+yang namanya masih nama lama.
+
 ### Unit Usaha
 Daftar cabang dan jenis usaha. Menambah cabang baru cukup dari sini.
 

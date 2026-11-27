@@ -48,10 +48,13 @@ export function normalAkun(nama: string): string {
  * menu Master Barang.
  */
 export const ALIAS_AKUN: Record<string, string> = {
-  // Air isi ulang — satu akun untuk semuanya. Akhiran HK dan IGYT di lembar
-  // adalah departemen dan unit usaha, bukan dua jenis biaya.
+  // Sejak nama akun disamakan dengan template RAB (src/lib/coa-selaras.ts),
+  // nama-nama di bawah ini cocok langsung dengan akunnya. Aliasnya disimpan
+  // untuk database yang belum diselaraskan.
+
+  // Air isi ulang HK dan IGYT punya akun sendiri-sendiri, sesuai template.
   'biaya air isi ulang hk': '6160.05',
-  'biaya air isi ulang igyt': '6160.05',
+  'biaya air isi ulang igyt': '6160.07',
 
   // Amenities: nama di aplikasi lebih panjang, isinya sama persis — dental
   // kit, shower cap, kopi dan teh sachet untuk kamar.

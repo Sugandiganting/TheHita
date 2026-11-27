@@ -12,6 +12,7 @@ const akun: AkunRingkas[] = [
   { id: 'a3', code: '6160.05', name: 'Biaya Air Isi Ulang' },
   { id: 'a4', code: '6120.01', name: 'Biaya Listrik' },
   { id: 'a5', code: '6190.04', name: 'Biaya Packaging' },
+  { id: 'a6', code: '6160.07', name: 'Biaya Air Isi Ulang Dapur' },
 ];
 
 const baris = (o: Partial<BarisLembar>): BarisLembar => ({
@@ -32,12 +33,12 @@ test('nama akun yang ejaannya cuma beda "&" tetap ketemu tanpa perlu alias', () 
   assert.equal(h.lewatAlias, false, 'ini kecocokan nama, bukan keputusan yang perlu diperiksa');
 });
 
-test('akhiran departemen dilipat lewat tabel alias, dan ditandai supaya diperiksa', () => {
-  // Yang memisahkan laporan IGYT dari laporan hotel adalah kolom cabang pada
-  // jurnalnya, bukan akun bernama IGYT.
+test('nama lama yang belum diselaraskan ketemu lewat tabel alias, dan ditandai supaya diperiksa', () => {
+  // Air isi ulang IGYT punya akun sendiri (6160.07) sejak nama akun disamakan
+  // dengan template RAB; database lama masih bisa menamainya lain.
   const h = cocokkanAkun('Biaya Air Isi Ulang IGYT', akun);
   assert.ok(h.ok);
-  assert.equal(h.akun.code, '6160.05');
+  assert.equal(h.akun.code, '6160.07');
   assert.equal(h.lewatAlias, true, 'tiap alias adalah keputusan akuntansi, jadi harus ikut dilaporkan');
 });
 
@@ -45,7 +46,7 @@ test('alias yang menunjuk akun yang sudah tidak ada menolak, bukan diam-diam sal
   // Akun bisa dinonaktifkan atau diganti nomornya setelah alias ditulis.
   // Menolak membuat orangnya memperbaiki tabelnya; menebak akun terdekat
   // membuat barangnya masuk dengan akun yang salah tanpa ada yang tahu.
-  const tanpa6160 = akun.filter((a) => a.code !== '6160.05');
+  const tanpa6160 = akun.filter((a) => a.code !== '6160.07');
   const h = cocokkanAkun('Biaya Air Isi Ulang IGYT', tanpa6160);
   assert.equal(h.ok, false);
 });
