@@ -466,17 +466,26 @@ export function bandingkanBulanTerdekat(a: string, b: string, kini: string): num
 }
 
 /**
- * Daftar RAB diurutkan dari bulan terdekat, lalu pemilik, lalu jenis — urutan
- * yang sama di dalam satu bulan seperti sebelumnya. Tidak mengubah daftar asal.
+ * Daftar RAB diurutkan dari bulan terdekat, lalu jenis RAB, lalu pemilik —
+ * di dalam satu bulan RAB-nya berkelompok per jenis: semua Purchasing, semua
+ * HR, dan seterusnya. Urutan jenis mengikuti `urutanJenis` (urutan di Master
+ * Data Jenis RAB); jenis yang tidak ada di sana menyusul menurut abjad.
+ * Tidak mengubah daftar asal.
  */
 export function urutkanRabTerdekat<T extends { period: string; scope: string; kind: string }>(
   daftar: readonly T[],
   kini: string,
+  urutanJenis: readonly string[] = [],
 ): T[] {
+  const posisi = (kind: string) => {
+    const i = urutanJenis.indexOf(kind);
+    return i < 0 ? urutanJenis.length : i;
+  };
   return [...daftar].sort((x, y) =>
     bandingkanBulanTerdekat(x.period, y.period, kini)
-    || x.scope.localeCompare(y.scope)
-    || x.kind.localeCompare(y.kind));
+    || posisi(x.kind) - posisi(y.kind)
+    || x.kind.localeCompare(y.kind)
+    || x.scope.localeCompare(y.scope));
 }
 
 /**

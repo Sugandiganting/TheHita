@@ -354,16 +354,31 @@ test('daftar RAB: bulan ini, lalu bulan depan berurutan, lalu bulan lalu dari ya
   assert.deepEqual(hasil, ['2026-11', '2026-12', '2027-01', '2027-07', '2026-10', '2026-09']);
 });
 
-test('daftar RAB: di dalam satu bulan tetap urut pemilik lalu jenis', () => {
+test('daftar RAB: di dalam satu bulan berkelompok per jenis (urutan Master Data), lalu pemilik', () => {
   const hasil = urutkanRabTerdekat(
     [
       { period: '2026-11', scope: 'THU', kind: 'PURCHASING' },
-      { period: '2026-11', scope: 'IGYT', kind: 'UMUM' },
+      { period: '2026-11', scope: 'IGYT', kind: 'HR' },
       { period: '2026-11', scope: 'IGYT', kind: 'PURCHASING' },
+      { period: '2026-11', scope: 'THL', kind: 'MANAGEMENT' },
+      { period: '2026-11', scope: 'PLD', kind: 'HR' },
+      { period: '2026-11', scope: 'SKR', kind: 'LAINNYA' },
     ],
     '2026-11',
+    ['PURCHASING', 'UMUM', 'HR', 'MANAGEMENT'],
   ).map((r) => `${r.scope}/${r.kind}`);
-  assert.deepEqual(hasil, ['IGYT/PURCHASING', 'IGYT/UMUM', 'THU/PURCHASING']);
+  assert.deepEqual(hasil, [
+    'IGYT/PURCHASING', 'THU/PURCHASING', 'IGYT/HR', 'PLD/HR', 'THL/MANAGEMENT', 'SKR/LAINNYA',
+  ]);
+});
+
+test('daftar RAB: bulan tetap didahulukan sebelum jenis', () => {
+  const hasil = urutkanRabTerdekat(
+    [{ period: '2026-12', scope: 'A', kind: 'PURCHASING' }, { period: '2026-11', scope: 'A', kind: 'HR' }],
+    '2026-11',
+    ['PURCHASING', 'HR'],
+  ).map((r) => r.period);
+  assert.deepEqual(hasil, ['2026-11', '2026-12']);
 });
 
 test('daftar RAB: tahun berganti tidak mengacaukan urutan', () => {

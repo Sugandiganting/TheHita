@@ -65,6 +65,7 @@ export default async function RabPage({ searchParams }: { searchParams: Promise<
   const daftar = urutkanRabTerdekat(
     bulanDipilih ? semua.filter((r) => r.period === bulanDipilih) : semua,
     kini,
+    jenis.map((j) => j.code),
   );
 
   return (
