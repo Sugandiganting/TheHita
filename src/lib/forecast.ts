@@ -16,7 +16,7 @@
 
 import { addMonths, daysInPeriod, diffMonths, monthOf, periodRange, type Period } from './period';
 import { HARI_GAJI_AWAL } from './rencana-kas';
-import { rekapRealisasiItem } from './proyek';
+import { itemBerlaku, rekapRealisasiItem } from './proyek';
 
 export type ForecastMethod = 'AVERAGE' | 'WEIGHTED' | 'TREND';
 
@@ -414,6 +414,8 @@ export function toProjectPlan(project: {
     paid: boolean;
     done?: boolean;
     pembayaran?: { amount: number }[];
+    /** Pengajuan tambahannya; item tambahan baru dihitung setelah Approved. */
+    addendum?: { status: string } | null;
   }[];
   fundingAmount: number;
   fundingDate: Date | null;
@@ -431,6 +433,7 @@ export function toProjectPlan(project: {
   // baru dibayar sebagian tinggal sisanya. Pembayaran yang sudah terjadi
   // tercermin di saldo kas, bukan di rencana.
   const costs = project.items
+    .filter(itemBerlaku)
     .map((i) => ({
       period: toP(i.plannedDate),
       amount: rekapRealisasiItem({ amount: i.amount, paid: i.paid, done: i.done ?? false }, i.pembayaran ?? [])

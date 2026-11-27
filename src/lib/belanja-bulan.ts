@@ -19,7 +19,9 @@ import { toPeriod, type Period } from './period';
 import {
   realisasiSesudahPosisi, susunRealisasi, type PembayaranRab, type RealisasiLama,
 } from './rab';
-import { STATUS_MEMOTONG_KAS, keluarProyekUntukKas, rekapRealisasiItem, statusEfektif } from './proyek';
+import {
+  STATUS_MEMOTONG_KAS, itemBerlaku, keluarProyekUntukKas, realisasiDibuka, rekapRealisasiItem, statusEfektif,
+} from './proyek';
 
 export type SumberBelanja = 'RAB' | 'PROYEK' | 'KOMITMEN' | 'KEWAJIBAN' | 'CICILAN';
 
@@ -148,17 +150,19 @@ export function itemProyek(
   period: Period,
   hariIni: Date = new Date(),
 ): ItemBelanja[] {
-  // Hanya proyek yang dananya sudah disetujui.
-  const disetujui = projects.filter((p) =>
-    (STATUS_MEMOTONG_KAS as readonly string[]).includes(statusEfektif(p.status, p.startDate, hariIni)));
+  // Proyek yang dananya pernah disetujui. Yang sudah berhenti (On Hold,
+  // Completed, Cancelled) hanya membawa pembayaran yang belum di saldo.
+  const disetujui = projects.filter((p) => realisasiDibuka(statusEfektif(p.status, p.startDate, hariIni)));
   const arus = keluarProyekUntukKas(disetujui, posisi, period, hariIni).filter((k) => k.period === period);
   const hasil: ItemBelanja[] = [];
   for (const p of disetujui) {
+    const memotong = (STATUS_MEMOTONG_KAS as readonly string[]).includes(statusEfektif(p.status, p.startDate, hariIni));
     for (const item of p.items) {
+      if (!itemBerlaku(item)) continue;
       const milik = arus.filter((k) => k.itemId === item.id);
       // Yang dijadwalkan bulan ini tetap tampil walau sudah selesai — supaya
-      // terlihat realisasi dan hematnya.
-      if (milik.length === 0 && toPeriod(item.plannedDate) !== period) continue;
+      // terlihat realisasi dan hematnya — selama proyeknya masih berjalan.
+      if (milik.length === 0 && !(memotong && toPeriod(item.plannedDate) === period)) continue;
       const real = rekapRealisasiItem(item, item.pembayaran);
       const sisa = bulat(milik.filter((k) => k.jenis === 'SISA').reduce((t, k) => t + k.amount, 0));
       const sesudahPosisi = bulat(milik.filter((k) => k.jenis === 'BAYAR').reduce((t, k) => t + k.amount, 0));

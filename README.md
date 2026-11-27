@@ -323,6 +323,21 @@ berstatus *Direncanakan* dibaca sebagai Approved. Pembatasan siapa yang boleh me
 menyusul bersama hak akses pengguna. Proyek Funding Review dan Approved (sebelum mulai)
 bisa dikembalikan ke Draft.
 
+Proyek yang berhenti di tengah jalan ditandai **On Hold** (mangkrak, alasannya wajib).
+Sisa itemnya tidak lagi memotong kas sampai dilanjutkan (**Resume Project**, kembali ke
+Approved); dari On Hold proyek juga bisa dibatalkan. Daftar proyek bisa disaring menurut
+kelompoknya: Pengajuan, Berjalan, Selesai, Mangkrak, Batal. Proyek yang sudah berhenti
+(On Hold, Completed, Cancelled) tetap membawa pembayaran sesudah posisi kas ke Rencana
+Kas, karena uang itu belum tercermin di saldo.
+
+**Item tambahan.** Item yang ditambahkan setelah proyek Approved tidak langsung masuk
+rencana: ia dikumpulkan dalam **pengajuan tambahan** (Tambahan #1, #2, …) yang melewati
+alur yang sama — Draft → Proposed → Funding Review → Approved, atau Rejected. Itemnya
+baru ikut total proyek, memotong kas, dan bisa direalisasikan setelah pengajuannya
+Approved. Selama pengajuan ditinjau itemnya terkunci (kembalikan ke Draft untuk
+mengubah); yang sudah Approved tidak bisa ditarik lagi. Proyek yang On Hold, Completed,
+atau Cancelled tidak menerima item baru.
+
 Realisasi item dicatat per pembayaran: satu item boleh dibayar beberapa kali. Setiap
 pembayaran boleh mencatat **qty** yang dibeli; nominalnya terisi sendiri dari qty × harga
 satuan RAB dan bisa diubah sesuai harga nyata. Qty boleh dikosongkan untuk DP atau termin. Status

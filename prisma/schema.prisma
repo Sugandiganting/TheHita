@@ -196,6 +196,7 @@ model Project {
   unit    BusinessUnit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
   items   ProjectCostItem[]
   riwayatStatus ProjectStatusLog[]
+  tambahan ProjectAddendum[]
   entries JournalEntry[]
 
   createdAt DateTime @default(now())
@@ -228,11 +229,39 @@ model ProjectCostItem {
   /// selesai tidak lagi dihitung akan keluar; selisihnya terhadap total
   /// adalah penghematan atau kelebihan biaya.
   done        Boolean  @default(false)
+  /// Pengajuan tambahan tempat item ini diajukan, bila ditambahkan setelah
+  /// proyeknya Approved. null untuk item rencana awal. Item tambahan baru ikut
+  /// memotong kas dan bisa direalisasikan setelah pengajuannya Approved.
+  addendumId  String?
 
   project    Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   account    Account?             @relation(fields: [accountId], references: [id])
+  addendum   ProjectAddendum?     @relation(fields: [addendumId], references: [id], onDelete: Cascade)
   pembayaran ProjectCostPayment[]
 
+  @@index([projectId])
+  @@index([addendumId])
+}
+
+/// Pengajuan item tambahan untuk proyek yang sudah Approved. Beberapa item
+/// dikumpulkan dalam satu pengajuan, lalu melewati alur persetujuan yang sama
+/// dengan proyek baru: Draft → Proposed → Funding Review → Approved.
+model ProjectAddendum {
+  id        String   @id @default(cuid())
+  projectId String
+  /// Nomor urut di proyek itu: Tambahan #1, #2, …
+  number    Int
+  /// DRAFT | PROPOSED | FUNDING_REVIEW | APPROVED | REJECTED
+  status    String   @default("DRAFT")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   ProjectCostItem[]
+  riwayat ProjectStatusLog[]
+
+  @@unique([projectId, number])
   @@index([projectId])
 }
 
@@ -266,11 +295,15 @@ model ProjectStatusLog {
   /// walau akunnya kelak dihapus.
   userId     String?
   userName   String
+  /// Diisi bila perpindahan ini milik pengajuan tambahan, bukan proyeknya.
+  addendumId String?
   createdAt  DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  addendum ProjectAddendum? @relation(fields: [addendumId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([addendumId])
 }
 
 /// Statistik operasional bulanan per unit (kamar terjual, tamu, dll).

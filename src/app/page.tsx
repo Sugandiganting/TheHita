@@ -225,7 +225,7 @@ async function ForecastTeaser({ unitIds }: { unitIds: string[] | null }) {
     getMonthlyActuals(window.from, window.to, unitIds),
     prisma.project.findMany({
       where: { status: { in: [...STATUS_MEMOTONG_KAS] }, ...(unitIds ? { unitId: { in: unitIds } } : {}) },
-      include: { items: { include: { pembayaran: { select: { amount: true } } } } },
+      include: { items: { include: { pembayaran: { select: { amount: true } }, addendum: { select: { status: true } } } } },
     }),
     getCashBalance(addMonths(start, -1), unitIds),
   ]);

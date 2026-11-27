@@ -15,7 +15,8 @@ import {
 } from '@/lib/rab';
 import { formatPeriod, formatRupiahShort } from '@/lib/format';
 import {
-  AKSI_PROYEK, LABEL_STATUS_PROYEK, bacaJumlah, realisasiDibuka, statusEfektif, totalItemProyek, type AksiProyek,
+  AKSI_PROYEK, AKSI_TAMBAHAN, LABEL_STATUS_PROYEK, bacaJumlah, itemBaruLewatTambahan, itemBerlaku, realisasiDibuka,
+  statusEfektif, statusTambahan, totalItemProyek, type AksiProyek, type AksiTambahan,
 } from '@/lib/proyek';
 import { toPeriod } from '@/lib/period';
 import { MUSIM_BAWAAN, NAMA_BULAN } from '@/lib/musim';
@@ -570,14 +571,61 @@ export async function ubahStatusProyek(_prev: ActionState, formData: FormData): 
 export async function addCostItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const projectId = String(formData.get('projectId') ?? '');
   if (!projectId) return fail('Proyek tidak ditemukan.');
+  const proyek = await prisma.project.findUnique({
+    where: { id: projectId }, select: { status: true, startDate: true },
+  });
+  if (!proyek) return fail('Proyek tidak ditemukan.');
+  const status = statusEfektif(proyek.status, proyek.startDate, new Date());
+  const jalur = itemBaruLewatTambahan(status);
+  if (jalur === 'DITUTUP') {
+    return fail(`Proyek ${LABEL_STATUS_PROYEK[status]} tidak menerima item baru.`
+      + (status === 'ON_HOLD' ? ' Lanjutkan proyeknya dulu (Resume Project).' : ''));
+  }
   const isian = await bacaItemProyek(formData);
   if ('salah' in isian) return fail(isian.salah);
 
-  await prisma.projectCostItem.create({ data: { projectId, ...isian.data } });
+  // Sesudah dana proyek disetujui, item baru masuk pengajuan tambahan yang
+  // masih draf — dibuat bila belum ada — dan baru dihitung setelah pengajuan
+  // itu disetujui.
+  let addendum: { id: string; number: number } | null = null;
+  if (jalur === 'TAMBAHAN') {
+    addendum = await prisma.projectAddendum.findFirst({
+      where: { projectId, status: 'DRAFT' }, orderBy: { number: 'desc' }, select: { id: true, number: true },
+    });
+    if (!addendum) {
+      const terakhir = await prisma.projectAddendum.aggregate({ where: { projectId }, _max: { number: true } });
+      addendum = await prisma.projectAddendum.create({
+        data: { projectId, number: (terakhir._max.number ?? 0) + 1 },
+        select: { id: true, number: true },
+      });
+    }
+  }
 
-  revalidatePath(`/proyek/${projectId}`);
-  revalidatePath('/peramalan');
-  return ok(`Item "${isian.data.name}" ditambahkan, total ${formatRupiahShort(isian.data.amount)}.`);
+  await prisma.projectCostItem.create({ data: { projectId, ...isian.data, addendumId: addendum?.id ?? null } });
+
+  segarkanProyek(projectId);
+  return ok(addendum
+    ? `Item "${isian.data.name}" masuk Tambahan #${addendum.number}, total ${formatRupiahShort(isian.data.amount)}. `
+      + 'Ajukan pengajuannya supaya ikut dihitung.'
+    : `Item "${isian.data.name}" ditambahkan, total ${formatRupiahShort(isian.data.amount)}.`);
+}
+
+/**
+ * Item tambahan hanya boleh diubah atau dihapus selama pengajuannya masih
+ * Draft atau ditolak. Yang sedang ditinjau harus dikembalikan ke Draft dulu,
+ * supaya yang disetujui sama dengan yang diajukan; yang sudah Approved sudah
+ * diputuskan. Null bila boleh; selain itu alasannya.
+ */
+async function itemTambahanTerkunci(itemId: string): Promise<string | null> {
+  const item = await prisma.projectCostItem.findUnique({
+    where: { id: itemId }, select: { addendum: { select: { number: true, status: true } } },
+  });
+  if (!item?.addendum) return null;
+  const st = statusTambahan(item.addendum.status);
+  if (st === 'DRAFT' || st === 'REJECTED') return null;
+  return st === 'APPROVED'
+    ? `Tambahan #${item.addendum.number} sudah Approved; itemnya tidak bisa diubah lagi.`
+    : `Tambahan #${item.addendum.number} sedang ditinjau. Kembalikan ke Draft dulu untuk mengubah itemnya.`;
 }
 
 /**
@@ -589,6 +637,8 @@ export async function updateCostItem(_prev: ActionState, formData: FormData): Pr
   const id = String(formData.get('id') ?? '');
   const ada = await prisma.projectCostItem.findUnique({ where: { id }, select: { projectId: true } });
   if (!ada) return fail('Item biaya tidak ditemukan.');
+  const terkunci = await itemTambahanTerkunci(id);
+  if (terkunci) return fail(terkunci);
   const isian = await bacaItemProyek(formData);
   if ('salah' in isian) return fail(isian.salah);
 
@@ -659,13 +709,22 @@ async function ubahLunasLama(itemId: string) {
  */
 async function realisasiDitolak(itemId: string): Promise<string | null> {
   const item = await prisma.projectCostItem.findUnique({
-    where: { id: itemId }, select: { project: { select: { status: true, startDate: true } } },
+    where: { id: itemId },
+    select: {
+      project: { select: { status: true, startDate: true } },
+      addendum: { select: { number: true, status: true } },
+    },
   });
   if (!item) return 'Item biaya tidak ditemukan.';
   const status = statusEfektif(item.project.status, item.project.startDate, new Date());
-  return realisasiDibuka(status)
-    ? null
-    : `Realisasi baru bisa dicatat setelah proyek Approved — sekarang ${LABEL_STATUS_PROYEK[status]}.`;
+  if (!realisasiDibuka(status)) {
+    return `Realisasi baru bisa dicatat setelah proyek Approved — sekarang ${LABEL_STATUS_PROYEK[status]}.`;
+  }
+  // Item tambahan menunggu pengajuannya disetujui, sama seperti proyeknya dulu.
+  if (!itemBerlaku(item)) {
+    return `Item ini bagian dari Tambahan #${item.addendum!.number} yang belum Approved; realisasinya dibuka setelah disetujui.`;
+  }
+  return null;
 }
 
 function segarkanProyek(projectId: string) {
@@ -738,9 +797,73 @@ export async function deleteCostItem(formData: FormData): Promise<void> {
   if (!id) return;
   const item = await prisma.projectCostItem.findUnique({ where: { id }, select: { projectId: true } });
   if (!item) return;
+  if (await itemTambahanTerkunci(id)) return;
   await prisma.projectCostItem.delete({ where: { id } });
-  revalidatePath(`/proyek/${item.projectId}`);
-  revalidatePath('/peramalan');
+  segarkanProyek(item.projectId);
+}
+
+/** Memindahkan status sebuah pengajuan tambahan; dicatat di riwayat proyeknya. */
+export async function ubahStatusTambahan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const aksi = String(formData.get('aksi') ?? '') as AksiTambahan;
+  const catatan = String(formData.get('catatan') ?? '').trim();
+
+  const aturan = AKSI_TAMBAHAN[aksi];
+  if (!aturan) return fail('Langkah tidak dikenal.');
+  const tambahan = await prisma.projectAddendum.findUnique({
+    where: { id },
+    select: {
+      projectId: true, number: true, status: true, _count: { select: { items: true } },
+      project: { select: { status: true, startDate: true } },
+    },
+  });
+  if (!tambahan) return fail('Pengajuan tambahan tidak ditemukan.');
+  const sekarang = statusTambahan(tambahan.status);
+  if (!aturan.dari.includes(sekarang)) {
+    return fail(`"${aturan.label}" tidak bisa dilakukan saat Tambahan #${tambahan.number} berstatus ${LABEL_STATUS_PROYEK[sekarang]}.`);
+  }
+  if (aturan.butuhCatatan && !catatan) return fail(`Isi alasannya dulu untuk "${aturan.label}".`);
+  if (aksi === 'AJUKAN' && tambahan._count.items === 0) return fail('Tambahkan minimal satu item sebelum diajukan.');
+  // Persetujuan dana hanya untuk proyek yang masih berjalan.
+  const statusProyek = statusEfektif(tambahan.project.status, tambahan.project.startDate, new Date());
+  if (aksi === 'SETUJUI_DANA' && itemBaruLewatTambahan(statusProyek) !== 'TAMBAHAN') {
+    return fail(`Proyek sedang ${LABEL_STATUS_PROYEK[statusProyek]}; dana tambahan tidak bisa disetujui sekarang.`);
+  }
+
+  const sesi = await sesiSekarang();
+  await prisma.$transaction([
+    prisma.projectAddendum.update({ where: { id }, data: { status: aturan.ke } }),
+    prisma.projectStatusLog.create({
+      data: {
+        projectId: tambahan.projectId,
+        addendumId: id,
+        fromStatus: sekarang,
+        toStatus: aturan.ke,
+        note: catatan || null,
+        userId: sesi?.id ?? null,
+        userName: sesi?.name ?? 'Tidak diketahui',
+      },
+    }),
+  ]);
+  segarkanProyek(tambahan.projectId);
+  revalidatePath('/rencana-kas');
+  return ok(`Tambahan #${tambahan.number}: ${LABEL_STATUS_PROYEK[sekarang]} → ${LABEL_STATUS_PROYEK[aturan.ke]}.`);
+}
+
+/** Menghapus pengajuan tambahan yang masih Draft atau ditolak, beserta itemnya. */
+export async function hapusTambahan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get('id') ?? '');
+  const tambahan = await prisma.projectAddendum.findUnique({
+    where: { id }, select: { projectId: true, number: true, status: true },
+  });
+  if (!tambahan) return fail('Pengajuan tambahan tidak ditemukan.');
+  const st = statusTambahan(tambahan.status);
+  if (st !== 'DRAFT' && st !== 'REJECTED') {
+    return fail(`Tambahan #${tambahan.number} ${st === 'APPROVED' ? 'sudah Approved' : 'sedang ditinjau'}; tidak bisa dihapus.`);
+  }
+  await prisma.projectAddendum.delete({ where: { id } });
+  segarkanProyek(tambahan.projectId);
+  return ok(`Tambahan #${tambahan.number} dihapus.`);
 }
 
 export async function deleteProject(formData: FormData): Promise<void> {

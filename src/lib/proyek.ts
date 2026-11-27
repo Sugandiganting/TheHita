@@ -39,7 +39,11 @@ export function bacaJumlah(teks: string): number {
  * Alur persetujuan proyek:
  *
  *   Draft → Proposed → Funding Review → Approved → In Progress → Completed
- *                ↘ Rejected     ↘ Rejected        ↘ Cancelled
+ *                ↘ Rejected     ↘ Rejected        ↘ On Hold ⇄ Approved
+ *                                                 ↘ Cancelled
+ *
+ * On Hold (mangkrak): belanjanya berhenti. Sisa item tidak lagi memotong kas
+ * sampai proyeknya dilanjutkan; pembayaran yang sudah tercatat tetap ada.
  *
  * Proposed: diajukan, menunggu rencananya disetujui. Funding Review: rencana
  * disetujui, menunggu keputusan dana. Approved: dana disetujui, menunggu
@@ -49,7 +53,7 @@ export function bacaJumlah(teks: string): number {
  * pengguna dibuat.
  */
 export const STATUS_PROYEK = [
-  'DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'APPROVED', 'ONGOING', 'DONE', 'REJECTED', 'CANCELLED',
+  'DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'APPROVED', 'ONGOING', 'ON_HOLD', 'DONE', 'REJECTED', 'CANCELLED',
 ] as const;
 export type StatusProyek = (typeof STATUS_PROYEK)[number];
 
@@ -59,6 +63,7 @@ export const LABEL_STATUS_PROYEK: Record<StatusProyek, string> = {
   FUNDING_REVIEW: 'Funding Review',
   APPROVED: 'Approved',
   ONGOING: 'In Progress',
+  ON_HOLD: 'On Hold',
   DONE: 'Completed',
   REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
@@ -71,6 +76,7 @@ export const ARTI_STATUS_PROYEK: Record<StatusProyek, string> = {
   FUNDING_REVIEW: 'Rencana disetujui, menunggu keputusan dana.',
   APPROVED: 'Dana disetujui, menunggu tanggal mulai proyek.',
   ONGOING: 'Sedang berjalan.',
+  ON_HOLD: 'Mangkrak — belanjanya berhenti. Sisa item tidak memotong kas sampai proyeknya dilanjutkan.',
   DONE: 'Selesai.',
   REJECTED: 'Tidak disetujui.',
   CANCELLED: 'Dihentikan setelah sempat disetujui.',
@@ -102,7 +108,8 @@ export function statusEfektif(status: string, tanggalMulai: Date, hariIni: Date)
 export const STATUS_MEMOTONG_KAS = ['PLANNED', 'APPROVED', 'ONGOING'] as const;
 
 export type AksiProyek =
-  | 'AJUKAN' | 'SETUJUI_RENCANA' | 'SETUJUI_DANA' | 'TOLAK' | 'SELESAI' | 'BATALKAN' | 'KEMBALI_DRAF';
+  | 'AJUKAN' | 'SETUJUI_RENCANA' | 'SETUJUI_DANA' | 'TOLAK' | 'SELESAI' | 'TUNDA' | 'LANJUTKAN' | 'BATALKAN'
+  | 'KEMBALI_DRAF';
 
 export const AKSI_PROYEK: Record<AksiProyek, {
   label: string;
@@ -116,7 +123,14 @@ export const AKSI_PROYEK: Record<AksiProyek, {
   SETUJUI_DANA: { label: 'Approve Funding', dari: ['FUNDING_REVIEW'], ke: 'APPROVED', butuhCatatan: false },
   TOLAK: { label: 'Reject', dari: ['PROPOSED', 'FUNDING_REVIEW'], ke: 'REJECTED', butuhCatatan: true, bahaya: true },
   SELESAI: { label: 'Mark Completed', dari: ['ONGOING'], ke: 'DONE', butuhCatatan: false },
-  BATALKAN: { label: 'Cancel Project', dari: ['APPROVED', 'ONGOING'], ke: 'CANCELLED', butuhCatatan: true, bahaya: true },
+  // Mangkrak: belanja berhenti sementara. Alasannya wajib, karena itulah yang
+  // dicari orang ketika proyeknya hendak dilanjutkan.
+  TUNDA: { label: 'Put On Hold', dari: ['APPROVED', 'ONGOING'], ke: 'ON_HOLD', butuhCatatan: true, bahaya: true },
+  // Kembali ke Approved; bila tanggal mulainya sudah lewat, terbaca In Progress.
+  LANJUTKAN: { label: 'Resume Project', dari: ['ON_HOLD'], ke: 'APPROVED', butuhCatatan: false },
+  BATALKAN: {
+    label: 'Cancel Project', dari: ['APPROVED', 'ONGOING', 'ON_HOLD'], ke: 'CANCELLED', butuhCatatan: true, bahaya: true,
+  },
   // Juga dari Funding Review dan Approved (sebelum mulai berjalan): rencana
   // yang perlu disusun ulang setelah sempat disetujui kembali ke Draft dan
   // keluar dari peramalan sampai diajukan lagi.
@@ -190,7 +204,8 @@ export function rekapRealisasiItem(
  * dibatalkan setelah Approved tetap menampilkan realisasi yang sempat terjadi.
  */
 export function realisasiDibuka(status: StatusProyek): boolean {
-  return status === 'APPROVED' || status === 'ONGOING' || status === 'DONE' || status === 'CANCELLED';
+  return status === 'APPROVED' || status === 'ONGOING' || status === 'ON_HOLD' || status === 'DONE'
+    || status === 'CANCELLED';
 }
 
 export type HematProyek = {
@@ -266,6 +281,8 @@ type ProyekUntukKas = {
     done: boolean;
     plannedDate: Date;
     pembayaran: readonly { date: Date; amount: number }[];
+    /** Pengajuan tambahannya, bila item ini item tambahan. */
+    addendum?: { status: string } | null;
   }[];
 };
 
@@ -297,8 +314,13 @@ export function keluarProyekUntukKas(
 
   for (const p of projects) {
     const status = statusEfektif(p.status, p.startDate, hariIni);
-    if (!(STATUS_MEMOTONG_KAS as readonly string[]).includes(status)) continue;
+    // Proyek yang sudah berhenti (On Hold, Completed, Cancelled) tidak lagi
+    // punya sisa yang akan keluar, tetapi pembayarannya sesudah posisi kas
+    // tetap belum tercermin di saldo.
+    const memotong = (STATUS_MEMOTONG_KAS as readonly string[]).includes(status);
+    if (!memotong && !realisasiDibuka(status)) continue;
     for (const item of p.items) {
+      if (!itemBerlaku(item)) continue;
       const real = rekapRealisasiItem(item, item.pembayaran);
       const dasar = { projectId: p.id, proyek: p.name, itemId: item.id, item: item.name, selesai: real.selesai };
       // Tanpa posisi kas tidak ada saldo yang bisa mencerminkan pembayaran,
@@ -309,7 +331,7 @@ export function keluarProyekUntukKas(
           hasil.push({ ...dasar, tanggal: b.date, period: diBulan(b.date), amount: bulat(b.amount), jenis: 'BAYAR', terlambat: false });
         }
       }
-      if (real.sisaAkanKeluar > 0) {
+      if (memotong && real.sisaAkanKeluar > 0) {
         const terlambat = batas !== null
           ? hariUtc(item.plannedDate) <= batas
           : toPeriod(item.plannedDate) < period;
@@ -341,4 +363,105 @@ export function qtyTerealisasi(pembayaran: readonly { quantity?: number | null }
   const ber = pembayaran.filter((p) => p.quantity != null);
   if (ber.length === 0) return null;
   return bulat(ber.reduce((t, p) => t + (p.quantity ?? 0), 0));
+}
+
+/* ------------------------------------------------------------------ */
+/* Pengajuan tambahan                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Item tambahan pada proyek yang sudah Approved dikumpulkan dalam satu
+ * pengajuan dan melewati alur yang sama dengan proyek baru:
+ *
+ *   Draft → Proposed → Funding Review → Approved
+ *              ↘ Rejected   ↘ Rejected
+ *
+ * Itemnya baru ikut memotong kas dan bisa direalisasikan setelah
+ * pengajuannya Approved.
+ */
+export const STATUS_TAMBAHAN = ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'APPROVED', 'REJECTED'] as const;
+export type StatusTambahan = (typeof STATUS_TAMBAHAN)[number];
+
+export function statusTambahan(status: string): StatusTambahan {
+  return (STATUS_TAMBAHAN as readonly string[]).includes(status) ? (status as StatusTambahan) : 'DRAFT';
+}
+
+export const ARTI_STATUS_TAMBAHAN: Record<StatusTambahan, string> = {
+  DRAFT: 'Masih disusun. Tambahkan item, lalu ajukan.',
+  PROPOSED: 'Diajukan, menunggu rencananya disetujui.',
+  FUNDING_REVIEW: 'Rencana disetujui, menunggu keputusan dana.',
+  APPROVED: 'Dana disetujui — itemnya ikut memotong kas dan bisa direalisasikan.',
+  REJECTED: 'Tidak disetujui. Itemnya tidak dihitung.',
+};
+
+export type AksiTambahan = 'AJUKAN' | 'SETUJUI_RENCANA' | 'SETUJUI_DANA' | 'TOLAK' | 'KEMBALI_DRAF';
+
+export const AKSI_TAMBAHAN: Record<AksiTambahan, {
+  label: string;
+  dari: readonly StatusTambahan[];
+  ke: StatusTambahan;
+  butuhCatatan: boolean;
+  bahaya?: boolean;
+}> = {
+  AJUKAN: { label: 'Submit Proposal', dari: ['DRAFT'], ke: 'PROPOSED', butuhCatatan: false },
+  SETUJUI_RENCANA: { label: 'Approve Plan', dari: ['PROPOSED'], ke: 'FUNDING_REVIEW', butuhCatatan: false },
+  SETUJUI_DANA: { label: 'Approve Funding', dari: ['FUNDING_REVIEW'], ke: 'APPROVED', butuhCatatan: false },
+  TOLAK: { label: 'Reject', dari: ['PROPOSED', 'FUNDING_REVIEW'], ke: 'REJECTED', butuhCatatan: true, bahaya: true },
+  // Pengajuan yang sudah Approved tidak bisa ditarik lagi: itemnya mungkin
+  // sudah dibayar.
+  KEMBALI_DRAF: { label: 'Return to Draft', dari: ['PROPOSED', 'FUNDING_REVIEW', 'REJECTED'], ke: 'DRAFT', butuhCatatan: false },
+};
+
+export function aksiTambahanTersedia(status: StatusTambahan): AksiTambahan[] {
+  return (Object.keys(AKSI_TAMBAHAN) as AksiTambahan[]).filter((a) => AKSI_TAMBAHAN[a].dari.includes(status));
+}
+
+/**
+ * Item yang berlaku: item rencana awal, atau item tambahan yang pengajuannya
+ * sudah Approved. Hanya item ini yang dihitung — di total proyek, peramalan,
+ * rencana kas — dan boleh direalisasikan.
+ */
+export function itemBerlaku(item: { addendum?: { status: string } | null }): boolean {
+  return !item.addendum || item.addendum.status === 'APPROVED';
+}
+
+/**
+ * Status proyek yang menerima item baru sebagai pengajuan tambahan: dananya
+ * sudah disetujui dan proyeknya masih berjalan. Sebelum Approved, item baru
+ * langsung masuk rencana awal; sesudah berhenti, tidak ada item baru.
+ */
+export function itemBaruLewatTambahan(status: StatusProyek): 'RENCANA' | 'TAMBAHAN' | 'DITUTUP' {
+  if (status === 'APPROVED' || status === 'ONGOING') return 'TAMBAHAN';
+  if (status === 'ON_HOLD' || status === 'DONE' || status === 'CANCELLED') return 'DITUTUP';
+  return 'RENCANA';
+}
+
+/**
+ * Kelompok proyek untuk penyaring di daftar proyek: masih diajukan, sedang
+ * berjalan, selesai, mangkrak, atau batal.
+ */
+export type KelompokProyek = 'PENGAJUAN' | 'BERJALAN' | 'SELESAI' | 'MANGKRAK' | 'BATAL';
+
+export const LABEL_KELOMPOK_PROYEK: Record<KelompokProyek, string> = {
+  PENGAJUAN: 'Pengajuan',
+  BERJALAN: 'Berjalan',
+  SELESAI: 'Selesai',
+  MANGKRAK: 'Mangkrak',
+  BATAL: 'Batal',
+};
+
+export function kelompokProyek(status: StatusProyek): KelompokProyek {
+  switch (status) {
+    case 'APPROVED':
+    case 'ONGOING':
+      return 'BERJALAN';
+    case 'DONE':
+      return 'SELESAI';
+    case 'ON_HOLD':
+      return 'MANGKRAK';
+    case 'CANCELLED':
+      return 'BATAL';
+    default:
+      return 'PENGAJUAN';
+  }
 }

@@ -2,16 +2,20 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { ubahStatusProyek, type ActionState } from '@/app/actions';
+import { hapusTambahan, ubahStatusProyek, ubahStatusTambahan, type ActionState } from '@/app/actions';
 import {
-  AKSI_PROYEK, ARTI_STATUS_PROYEK, LABEL_STATUS_PROYEK, aksiTersedia,
-  type AksiProyek, type StatusProyek,
+  AKSI_PROYEK, AKSI_TAMBAHAN, ARTI_STATUS_PROYEK, ARTI_STATUS_TAMBAHAN, LABEL_STATUS_PROYEK, aksiTambahanTersedia,
+  aksiTersedia, statusTambahan, type StatusProyek,
 } from '@/lib/proyek';
 
 const initial: ActionState = { ok: false, message: '' };
 
 /** Tahapan utama, untuk penanda langkah di atas kartu. */
 const TAHAP: StatusProyek[] = ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'APPROVED', 'ONGOING', 'DONE'];
+/** Pengajuan tambahan berhenti di Approved: itemnya lalu menjadi bagian proyek. */
+const TAHAP_TAMBAHAN: StatusProyek[] = ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'APPROVED'];
+
+type AturanAksi = { label: string; butuhCatatan: boolean; bahaya?: boolean };
 
 export type RiwayatStatus = {
   id: string;
@@ -23,9 +27,8 @@ export type RiwayatStatus = {
   waktu: string;
 };
 
-function Tombol({ aksi, kirim }: { aksi: AksiProyek; kirim: (data: FormData) => void }) {
+function Tombol({ aksi, a, kirim }: { aksi: string; a: AturanAksi; kirim: (data: FormData) => void }) {
   const { pending } = useFormStatus();
-  const a = AKSI_PROYEK[aksi];
   return (
     <button
       type="submit"
@@ -52,28 +55,37 @@ export function ProjectApproval({
   status,
   riwayat,
   tanggalMulai,
+  jenis = 'proyek',
 }: {
+  /** Id proyek, atau id pengajuan tambahan bila jenis = 'tambahan'. */
   id: string;
   /** Status efektif hari ini — Approved yang sudah lewat tanggal mulai terbaca In Progress. */
   status: StatusProyek;
   riwayat: RiwayatStatus[];
   /** "1 Des 2026", untuk keterangan Approved. */
-  tanggalMulai: string;
+  tanggalMulai?: string;
+  /** Proyeknya sendiri, atau satu pengajuan item tambahan. Alurnya sama. */
+  jenis?: 'proyek' | 'tambahan';
 }) {
-  const [state, action] = useActionState(ubahStatusProyek, initial);
+  const tambahan = jenis === 'tambahan';
+  const [state, action] = useActionState(tambahan ? ubahStatusTambahan : ubahStatusProyek, initial);
   const [catatan, setCatatan] = useState('');
   // Catatan milik satu langkah; setelah tersimpan dikosongkan supaya tidak
   // terbawa ke langkah berikutnya.
   useEffect(() => { if (state.ok) setCatatan(''); }, [state]);
-  const aksi = aksiTersedia(status);
-  const posisi = TAHAP.indexOf(status);
-  const keluar = status === 'REJECTED' || status === 'CANCELLED';
+  const aturan: Record<string, AturanAksi> = tambahan ? AKSI_TAMBAHAN : AKSI_PROYEK;
+  const aksi: string[] = tambahan ? aksiTambahanTersedia(statusTambahan(status)) : aksiTersedia(status);
+  const tahap = tambahan ? TAHAP_TAMBAHAN : TAHAP;
+  const posisi = tahap.indexOf(status);
+  const keluar = status === 'REJECTED' || status === 'CANCELLED' || status === 'ON_HOLD';
+  const wajibCatatan = aksi.filter((a) => aturan[a].butuhCatatan).map((a) => aturan[a].label);
+  const arti = tambahan ? ARTI_STATUS_TAMBAHAN[statusTambahan(status)] : ARTI_STATUS_PROYEK[status];
 
   return (
     <div className="space-y-4">
       {/* Penanda langkah: yang sudah dilewati, yang sekarang, dan yang belum. */}
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
-        {TAHAP.map((t, i) => {
+        {tahap.map((t, i) => {
           const lewat = !keluar && posisi > i;
           const kini = t === status;
           return (
@@ -87,20 +99,24 @@ export function ProjectApproval({
               >
                 {LABEL_STATUS_PROYEK[t]}
               </span>
-              {i < TAHAP.length - 1 && <span className="text-slate-300" aria-hidden="true">→</span>}
+              {i < tahap.length - 1 && <span className="text-slate-300" aria-hidden="true">→</span>}
             </li>
           );
         })}
         {keluar && (
-          <li className="rounded-full bg-red-100 px-2.5 py-1 font-medium text-red-700">
+          <li className={`rounded-full px-2.5 py-1 font-medium ${
+            status === 'ON_HOLD' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700'
+          }`}>
             {LABEL_STATUS_PROYEK[status]}
           </li>
         )}
       </ol>
 
       <p className="text-sm text-slate-700">
-        <strong>{LABEL_STATUS_PROYEK[status]}</strong> — {ARTI_STATUS_PROYEK[status]}
-        {status === 'APPROVED' && <> Mulai {tanggalMulai}; statusnya berubah sendiri menjadi In Progress pada tanggal itu.</>}
+        <strong>{LABEL_STATUS_PROYEK[status]}</strong> — {arti}
+        {!tambahan && status === 'APPROVED' && tanggalMulai && (
+          <> Mulai {tanggalMulai}; statusnya berubah sendiri menjadi In Progress pada tanggal itu.</>
+        )}
         {(status === 'DRAFT' || status === 'PROPOSED' || status === 'FUNDING_REVIEW') && (
           <span className="mt-1 block text-xs text-slate-500">
             Belum ikut memotong kas di Peramalan — baru dihitung setelah dananya disetujui (Approved).
@@ -113,7 +129,7 @@ export function ProjectApproval({
           <input type="hidden" name="id" value={id} />
           <div>
             <label className="label" htmlFor={`catatan-${id}`}>
-              Catatan {aksi.some((a) => AKSI_PROYEK[a].butuhCatatan) ? '(wajib untuk Reject dan Cancel)' : '(opsional)'}
+              Catatan {wajibCatatan.length > 0 ? `(wajib untuk ${wajibCatatan.join(', ')})` : '(opsional)'}
             </label>
             <textarea
               id={`catatan-${id}`}
@@ -126,7 +142,7 @@ export function ProjectApproval({
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {aksi.map((a) => <Tombol key={a} aksi={a} kirim={action} />)}
+            {aksi.map((a) => <Tombol key={a} aksi={a} a={aturan[a]} kirim={action} />)}
           </div>
           {state.message && (
             <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
@@ -154,5 +170,28 @@ export function ProjectApproval({
         )}
       </div>
     </div>
+  );
+}
+
+/** Menghapus pengajuan tambahan yang masih Draft atau ditolak, dua langkah. */
+export function HapusTambahanTombol({ id, nomor }: { id: string; nomor: number }) {
+  const [state, action] = useActionState(hapusTambahan, initial);
+  const [yakin, setYakin] = useState(false);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 text-xs">
+      {yakin ? (
+        <form action={action} className="inline-flex items-center gap-2">
+          <input type="hidden" name="id" value={id} />
+          <span className="text-slate-600">Hapus Tambahan #{nomor} beserta itemnya?</span>
+          <button type="submit" className="font-medium text-red-600 hover:underline">Ya, hapus</button>
+          <button type="button" className="text-slate-500 hover:underline" onClick={() => setYakin(false)}>Batal</button>
+        </form>
+      ) : (
+        <button type="button" className="font-medium text-red-600 hover:underline" onClick={() => setYakin(true)}>
+          Hapus pengajuan
+        </button>
+      )}
+      {!state.ok && state.message && <span className="text-red-600">{state.message}</span>}
+    </span>
   );
 }

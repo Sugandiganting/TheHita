@@ -1,8 +1,12 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, realisasiDibuka, rekapHematProyek, rekapRealisasiItem, statusEfektif, type StatusProyek } from '@/lib/proyek';
+import {
+  LABEL_KELOMPOK_PROYEK, LABEL_STATUS_PROYEK, itemBerlaku, kelompokProyek, realisasiDibuka, rekapHematProyek,
+  rekapRealisasiItem, statusEfektif, type KelompokProyek, type StatusProyek,
+} from '@/lib/proyek';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
+import type { SearchParams } from '@/lib/search-params';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,16 +16,30 @@ const STATUS_TONE: Record<StatusProyek, string> = {
   FUNDING_REVIEW: 'amber',
   APPROVED: 'brand',
   ONGOING: 'amber',
+  ON_HOLD: 'red',
   DONE: 'green',
   REJECTED: 'red',
   CANCELLED: 'red',
 };
 
-export default async function ProyekPage() {
-  const projects = await prisma.project.findMany({
-    include: { items: { include: { pembayaran: { select: { amount: true } } } }, unit: { select: { code: true, name: true } } },
+const KELOMPOK: KelompokProyek[] = ['PENGAJUAN', 'BERJALAN', 'SELESAI', 'MANGKRAK', 'BATAL'];
+
+export default async function ProyekPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
+  const mentah = Array.isArray(params.kelompok) ? params.kelompok[0] : params.kelompok;
+  const dipilih = KELOMPOK.find((k) => k === mentah) ?? null;
+  const semua = await prisma.project.findMany({
+    include: {
+      items: { include: { pembayaran: { select: { amount: true } }, addendum: { select: { status: true } } } },
+      unit: { select: { code: true, name: true } },
+      tambahan: { select: { number: true, status: true } },
+    },
     orderBy: [{ status: 'asc' }, { startDate: 'asc' }],
   });
+  const hariIni = new Date();
+  const kelompokDari = (p: (typeof semua)[number]) => kelompokProyek(statusEfektif(p.status, p.startDate, hariIni));
+  const jumlah = (k: KelompokProyek) => semua.filter((p) => kelompokDari(p) === k).length;
+  const projects = dipilih ? semua.filter((p) => kelompokDari(p) === dipilih) : semua;
 
   return (
     <>
@@ -35,7 +53,31 @@ export default async function ProyekPage() {
         }
       />
 
-      {projects.length === 0 ? (
+      {semua.length > 0 && (
+        <nav className="mb-4 flex flex-wrap gap-2 text-sm" aria-label="Saring proyek">
+          <Link
+            href="/proyek"
+            className={`rounded-full border px-3 py-1 ${dipilih === null ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}
+          >
+            Semua <span className="tabular-nums opacity-75">{semua.length}</span>
+          </Link>
+          {KELOMPOK.map((k) => (
+            <Link
+              key={k}
+              href={`/proyek?kelompok=${k}`}
+              className={`rounded-full border px-3 py-1 ${dipilih === k ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}
+            >
+              {LABEL_KELOMPOK_PROYEK[k]} <span className="tabular-nums opacity-75">{jumlah(k)}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {semua.length > 0 && projects.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">
+          Tidak ada proyek {dipilih ? LABEL_KELOMPOK_PROYEK[dipilih].toLowerCase() : ''}.
+        </p>
+      ) : projects.length === 0 ? (
         <EmptyState
           title="Belum ada proyek"
           description="Buat rencana proyek beserta jadwal pembayarannya. Peramalan akan menyuntikkan jadwal tersebut ke proyeksi arus kas, sehingga terlihat kapan kas menipis."
@@ -45,14 +87,17 @@ export default async function ProyekPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {projects.map((p) => {
-            const total = p.items.reduce((s, i) => s + i.amount, 0);
+            // Hanya item yang berlaku: rencana awal dan tambahan yang sudah Approved.
+            const items = p.items.filter(itemBerlaku);
+            const total = items.reduce((s, i) => s + i.amount, 0);
             // Yang sungguh sudah dibayar, termasuk pembayaran sebagian.
-            const paid = p.items.reduce((s, i) => s + rekapRealisasiItem(i, i.pembayaran).realisasi, 0);
+            const paid = items.reduce((s, i) => s + rekapRealisasiItem(i, i.pembayaran).realisasi, 0);
             const progress = total > 0 ? (paid / total) * 100 : 0;
-            const status = statusEfektif(p.status, p.startDate, new Date());
+            const status = statusEfektif(p.status, p.startDate, hariIni);
             // Realisasi baru ditampilkan setelah proyek Approved.
             const dibuka = realisasiDibuka(status);
-            const hemat = rekapHematProyek(p.items);
+            const hemat = rekapHematProyek(items);
+            const ditinjau = p.tambahan.filter((t) => t.status === 'PROPOSED' || t.status === 'FUNDING_REVIEW');
 
             return (
               <Card key={p.id} className="card-pad">
@@ -78,13 +123,13 @@ export default async function ProyekPage() {
 
                 {!dibuka ? (
                   <p className="mt-4 text-xs text-slate-500">
-                    {p.items.length} item · realisasi dibuka setelah Approved
+                    {items.length} item · realisasi dibuka setelah Approved
                   </p>
                 ) : (
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>
-                      Terbayar {formatRupiah(paid)} dari {p.items.length} item
+                      Terbayar {formatRupiah(paid)} dari {items.length} item
                     </span>
                     <span>{progress.toFixed(0)}%</span>
                   </div>
@@ -110,6 +155,12 @@ export default async function ProyekPage() {
                     )}
                   </p>
                 </div>
+                )}
+
+                {ditinjau.length > 0 && (
+                  <p className="mt-3 text-xs font-medium text-amber-700">
+                    {ditinjau.map((t) => `Tambahan #${t.number}`).join(', ')} menunggu persetujuan
+                  </p>
                 )}
 
                 {p.fundingAmount > 0 && (

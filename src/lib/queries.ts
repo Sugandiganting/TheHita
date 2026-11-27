@@ -1940,14 +1940,17 @@ export async function getRencanaKas(period: Period): Promise<RencanaKasDetail | 
 
   // Proyek yang dananya sudah disetujui ikut memotong kas menurut tanggal
   // rencana dibayar tiap item. Seluruh cabang, sama seperti rencana kas ini.
+  // Termasuk yang sudah berhenti (On Hold, Completed, Cancelled): sisanya
+  // tidak dihitung lagi, tetapi pembayaran sesudah posisi kas belum di saldo.
   const proyekDisetujui = await prisma.project.findMany({
-    where: { status: { in: [...STATUS_MEMOTONG_KAS] } },
+    where: { status: { in: [...STATUS_MEMOTONG_KAS, 'ON_HOLD', 'DONE', 'CANCELLED'] } },
     select: {
       id: true, name: true, status: true, startDate: true,
       items: {
         select: {
           id: true, name: true, amount: true, paid: true, done: true, plannedDate: true,
           pembayaran: { select: { date: true, amount: true } },
+          addendum: { select: { status: true } },
         },
       },
     },

@@ -39,8 +39,8 @@ test('tiap tahap hanya membuka langkah berikutnya', () => {
   assert.deepEqual(aksiTersedia('DRAFT'), ['AJUKAN']);
   assert.deepEqual(aksiTersedia('PROPOSED'), ['SETUJUI_RENCANA', 'TOLAK', 'KEMBALI_DRAF']);
   assert.deepEqual(aksiTersedia('FUNDING_REVIEW'), ['SETUJUI_DANA', 'TOLAK', 'KEMBALI_DRAF']);
-  assert.deepEqual(aksiTersedia('APPROVED'), ['BATALKAN', 'KEMBALI_DRAF']);
-  assert.deepEqual(aksiTersedia('ONGOING'), ['SELESAI', 'BATALKAN']);
+  assert.deepEqual(aksiTersedia('APPROVED'), ['TUNDA', 'BATALKAN', 'KEMBALI_DRAF']);
+  assert.deepEqual(aksiTersedia('ONGOING'), ['SELESAI', 'TUNDA', 'BATALKAN']);
   assert.deepEqual(aksiTersedia('DONE'), []);
   assert.equal(AKSI_PROYEK.SETUJUI_DANA.ke, 'APPROVED');
 });
@@ -160,4 +160,73 @@ test('qty terealisasi hanya dari pembayaran yang mencatat qty', () => {
   assert.equal(qtyTerealisasi([]), null);
   assert.equal(qtyTerealisasi([{ quantity: null }]), null);
   assert.equal(qtyTerealisasi([{ quantity: 1 }, { quantity: null }, { quantity: 0.5 }]), 1.5);
+});
+
+import {
+  aksiTambahanTersedia, itemBaruLewatTambahan, itemBerlaku,
+} from '../src/lib/proyek.ts';
+test('proyek bisa ditandai On Hold (mangkrak), dilanjutkan, atau dibatalkan dari sana', () => {
+  assert.ok(aksiTersedia('ONGOING').includes('TUNDA'));
+  assert.ok(aksiTersedia('APPROVED').includes('TUNDA'));
+  assert.deepEqual(aksiTersedia('ON_HOLD'), ['LANJUTKAN', 'BATALKAN']);
+  assert.equal(AKSI_PROYEK.TUNDA.butuhCatatan, true);
+  assert.equal(AKSI_PROYEK.LANJUTKAN.ke, 'APPROVED');
+  // Dilanjutkan sesudah tanggal mulai: terbaca In Progress lagi.
+  assert.equal(statusEfektif('APPROVED', tgl('2026-11-01'), tgl('2026-11-20')), 'ONGOING');
+  assert.equal(statusEfektif('ON_HOLD', tgl('2026-11-01'), tgl('2026-11-20')), 'ON_HOLD');
+  assert.equal(realisasiDibuka('ON_HOLD'), true);
+});
+
+test('pengajuan tambahan: alur sama dengan proyek, yang Approved tidak bisa ditarik', () => {
+  assert.deepEqual(aksiTambahanTersedia('DRAFT'), ['AJUKAN']);
+  assert.deepEqual(aksiTambahanTersedia('PROPOSED'), ['SETUJUI_RENCANA', 'TOLAK', 'KEMBALI_DRAF']);
+  assert.deepEqual(aksiTambahanTersedia('FUNDING_REVIEW'), ['SETUJUI_DANA', 'TOLAK', 'KEMBALI_DRAF']);
+  assert.deepEqual(aksiTambahanTersedia('APPROVED'), []);
+  assert.deepEqual(aksiTambahanTersedia('REJECTED'), ['KEMBALI_DRAF']);
+});
+
+test('item tambahan baru berlaku setelah pengajuannya Approved', () => {
+  assert.equal(itemBerlaku({}), true);
+  assert.equal(itemBerlaku({ addendum: null }), true);
+  assert.equal(itemBerlaku({ addendum: { status: 'FUNDING_REVIEW' } }), false);
+  assert.equal(itemBerlaku({ addendum: { status: 'APPROVED' } }), true);
+});
+
+test('item baru masuk rencana awal sebelum Approved, pengajuan tambahan sesudahnya', () => {
+  for (const s of ['DRAFT', 'PROPOSED', 'FUNDING_REVIEW', 'REJECTED'] as const) assert.equal(itemBaruLewatTambahan(s), 'RENCANA');
+  for (const s of ['APPROVED', 'ONGOING'] as const) assert.equal(itemBaruLewatTambahan(s), 'TAMBAHAN');
+  for (const s of ['ON_HOLD', 'DONE', 'CANCELLED'] as const) assert.equal(itemBaruLewatTambahan(s), 'DITUTUP');
+});
+
+test('proyek mangkrak atau selesai: sisa tidak dihitung, pembayaran sesudah posisi tetap; item tambahan menunggu persetujuan', () => {
+  const posisi = tgl('2026-11-15');
+  const hariIni = tgl('2026-11-20');
+  const item = (id: string, addendum: { status: string } | null = null) => ({
+    id, name: id, amount: 3_000_000, paid: false, done: false, plannedDate: tgl('2026-11-25'),
+    pembayaran: [{ date: tgl('2026-11-18'), amount: 1_000_000 }], addendum,
+  });
+  const proyek = (status: string, items: ReturnType<typeof item>[]) => ({
+    id: status, name: status, status, startDate: tgl('2026-11-01'), items,
+  });
+  const ringkas = (status: string, items: ReturnType<typeof item>[]) =>
+    keluarProyekUntukKas([proyek(status, items)], posisi, '2026-11', hariIni).map((k) => [k.itemId, k.jenis, k.amount]);
+
+  assert.deepEqual(ringkas('ON_HOLD', [item('a')]), [['a', 'BAYAR', 1_000_000]]);
+  assert.deepEqual(ringkas('DONE', [item('a')]), [['a', 'BAYAR', 1_000_000]]);
+  assert.deepEqual(ringkas('APPROVED', [item('a'), item('t', { status: 'PROPOSED' })]), [
+    ['a', 'BAYAR', 1_000_000], ['a', 'SISA', 2_000_000],
+  ]);
+  assert.deepEqual(ringkas('APPROVED', [item('t', { status: 'APPROVED' })]), [
+    ['t', 'BAYAR', 1_000_000], ['t', 'SISA', 2_000_000],
+  ]);
+  assert.deepEqual(ringkas('PROPOSED', [item('a')]), []);
+});
+
+import { kelompokProyek } from '../src/lib/proyek.ts';
+test('kelompok proyek untuk penyaring daftar', () => {
+  assert.equal(kelompokProyek('DONE'), 'SELESAI');
+  assert.equal(kelompokProyek('ON_HOLD'), 'MANGKRAK');
+  assert.equal(kelompokProyek('CANCELLED'), 'BATAL');
+  assert.equal(kelompokProyek('ONGOING'), 'BERJALAN');
+  assert.equal(kelompokProyek('REJECTED'), 'PENGAJUAN');
 });

@@ -2,13 +2,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { formatDate, formatRupiah, toDateInput } from '@/lib/format';
-import { LABEL_STATUS_PROYEK, STATUS_MEMOTONG_KAS, statusEfektif } from '@/lib/proyek';
-import { ProjectApproval } from '@/components/project-approval';
+import {
+  LABEL_STATUS_PROYEK, STATUS_MEMOTONG_KAS, itemBaruLewatTambahan, itemBerlaku, realisasiDibuka, rekapHematProyek,
+  rekapRealisasiItem, statusEfektif, statusTambahan,
+} from '@/lib/proyek';
+import { HapusTambahanTombol, ProjectApproval } from '@/components/project-approval';
 import { monthlyInstallment } from '@/lib/forecast';
-import { deleteCostItem } from '@/app/actions';
 import { HapusProyekTombol, ProjectForm } from '@/components/project-form';
-import { CostItemAccount, CostItemForm, RealisasiItemDialog, UbahItemProyekDialog } from '@/components/cost-item-form';
-import { LABEL_REALISASI_ITEM, hargaSatuanItem, qtyTerealisasi, realisasiDibuka, rekapHematProyek, rekapRealisasiItem } from '@/lib/proyek';
+import { CostItemForm } from '@/components/cost-item-form';
+import { TabelItemProyek } from '@/components/tabel-item-proyek';
 import { Alert, Badge, Card, PageHeader, SectionTitle, StatCard } from '@/components/ui';
 import { CABANG_SAJA } from '@/lib/penampung-master';
 
@@ -27,9 +29,15 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           include: {
             account: { select: { code: true, name: true } },
             pembayaran: { orderBy: { date: 'asc' } },
+            addendum: { select: { status: true } },
           },
         },
-        riwayatStatus: { orderBy: { createdAt: 'desc' } },
+        // Riwayat proyeknya sendiri; riwayat tiap pengajuan tambahan tampil di panelnya.
+        riwayatStatus: { where: { addendumId: null }, orderBy: { createdAt: 'desc' } },
+        tambahan: {
+          orderBy: { number: 'asc' },
+          include: { riwayat: { orderBy: { createdAt: 'desc' } } },
+        },
       },
     }),
     prisma.businessUnit.findMany({ where: CABANG_SAJA, orderBy: { code: 'asc' } }),
@@ -46,21 +54,34 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
   }).format(d);
 
-  const items = project.items.map((i) => ({
-    ...i, real: rekapRealisasiItem(i, i.pembayaran), qtyDibeli: qtyTerealisasi(i.pembayaran),
-  }));
+  // Rencana awal, dan item yang berlaku: rencana awal ditambah item tambahan
+  // yang pengajuannya sudah Approved. Angka di kartu atas memakai yang berlaku.
+  const rencanaAwal = project.items.filter((i) => i.addendumId === null);
+  const berlaku = project.items.filter(itemBerlaku);
+  const items = berlaku.map((i) => ({ ...i, real: rekapRealisasiItem(i, i.pembayaran) }));
   const total = items.reduce((s, i) => s + i.amount, 0);
   const paid = items.reduce((s, i) => s + i.real.realisasi, 0);
   // Yang masih akan keluar — inilah yang dihitung peramalan.
   const outstanding = items.reduce((s, i) => s + i.real.sisaAkanKeluar, 0);
   // Hemat bersih dari item yang sudah selesai (RAB − realisasi): positif hemat,
   // negatif lebih mahal. Informasi kinerja saja — tidak memengaruhi kas.
-  const selisihSelesai = rekapHematProyek(project.items).bersih;
+  const selisihSelesai = rekapHematProyek(berlaku).bersih;
+  const menunggu = project.items.filter((i) => !itemBerlaku(i) && i.addendum?.status !== 'REJECTED');
+  const totalMenunggu = menunggu.reduce((s, i) => s + i.amount, 0);
   const hariIni = toDateInput(new Date());
   // Realisasi baru dibuka setelah dana disetujui (Approved dan sesudahnya).
   const dibuka = realisasiDibuka(status);
-  const adaPembayaran = items.some((i) => i.pembayaran.length > 0 || i.real.dariLunasLama);
+  const adaPembayaran = rencanaAwal.some((i) => i.pembayaran.length > 0 || i.paid);
   const masukPeramalan = (STATUS_MEMOTONG_KAS as readonly string[]).includes(status);
+  // Ke mana item baru masuk: rencana awal (sebelum Approved), pengajuan
+  // tambahan (sesudahnya), atau tidak ada (proyek sudah berhenti).
+  const jalurItemBaru = itemBaruLewatTambahan(status);
+  const tambahanDraf = project.tambahan.find((t) => t.status === 'DRAFT');
+  const nomorBerikut = tambahanDraf?.number ?? (project.tambahan.reduce((m, t) => Math.max(m, t.number), 0) + 1);
+  const riwayatTampil = (r: { id: string; fromStatus: string; toStatus: string; note: string | null; userName: string; createdAt: Date }) => ({
+    id: r.id, fromStatus: r.fromStatus, toStatus: r.toStatus, note: r.note, userName: r.userName, waktu: waktu(r.createdAt),
+  });
+  const tampilPanelTambahan = project.tambahan.length > 0 || jalurItemBaru === 'TAMBAHAN';
   const installment =
     project.fundingType === 'LOAN'
       ? monthlyInstallment(project.fundingAmount, project.loanRatePct, project.loanTenorMonths)
@@ -82,7 +103,13 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total biaya proyek" value={formatRupiah(total)} hint={`${project.items.length} item`} />
+        <StatCard
+          label="Total biaya proyek"
+          value={formatRupiah(total)}
+          hint={totalMenunggu > 0
+            ? `${berlaku.length} item · +${formatRupiah(totalMenunggu)} tambahan menunggu persetujuan`
+            : `${berlaku.length} item`}
+        />
         <StatCard
           label="Sudah dibayar"
           value={dibuka ? formatRupiah(paid) : '—'}
@@ -125,10 +152,7 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           id={project.id}
           status={status}
           tanggalMulai={formatDate(project.startDate)}
-          riwayat={project.riwayatStatus.map((r) => ({
-            id: r.id, fromStatus: r.fromStatus, toStatus: r.toStatus, note: r.note,
-            userName: r.userName, waktu: waktu(r.createdAt),
-          }))}
+          riwayat={project.riwayatStatus.map(riwayatTampil)}
         />
       </Card>
 
@@ -138,139 +162,85 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
           Rincian biaya &amp; jadwal pembayaran
         </SectionTitle>
 
-        {project.items.length === 0 ? (
+        {rencanaAwal.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-500">
             Belum ada item biaya. Tambahkan lewat formulir di samping.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className={`w-full ${dibuka ? 'min-w-[900px]' : 'min-w-[620px]'}`}>
-              <thead className="border-b border-slate-200">
-                <tr>
-                  <th className="th">Item</th>
-                  <th className="th">Jadwal bayar</th>
-                  <th className="th num">Qty</th>
-                  <th className="th num">Harga satuan</th>
-                  <th className="th num">Total</th>
-                  {dibuka && <th className="th num">Realisasi</th>}
-                  {dibuka && <th className="th num">Selisih</th>}
-                  {dibuka && <th className="th">Status</th>}
-                  <th className="th num">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {items.map((item) => (
-                  <tr key={item.id} className={dibuka && item.real.selesai ? 'text-slate-500' : ''}>
-                    <td className="td">
-                      <span className="font-medium text-slate-900">{item.name}</span>
-                      {/* Akunnya di bawah nama, supaya kolom realisasi muat. */}
-                      <span className="mt-0.5 block text-xs text-slate-500">
-                        {item.account
-                          ? `${item.account.code} ${item.account.name}`
-                          : <CostItemAccount id={item.id} accounts={capexAccounts} />}
-                      </span>
-                    </td>
-                    <td className="td whitespace-nowrap">{formatDate(item.plannedDate)}</td>
-                    <td className="td num">{item.quantity.toLocaleString('id-ID')}</td>
-                    <td className="td num whitespace-nowrap">{formatRupiah(hargaSatuanItem(item))}</td>
-                    <td className="td num whitespace-nowrap font-medium">{formatRupiah(item.amount)}</td>
-                    {dibuka && (
-                      <>
-                        <td className="td num whitespace-nowrap">
-                          {item.real.realisasi > 0 ? formatRupiah(item.real.realisasi) : <span className="text-slate-400">—</span>}
-                          {item.qtyDibeli !== null && (
-                            <span className="block text-[11px] text-slate-500">
-                              {item.qtyDibeli.toLocaleString('id-ID')} dari {item.quantity.toLocaleString('id-ID')} qty
-                            </span>
-                          )}
-                          {item.pembayaran.length > 1 && (
-                            <span className="block text-[11px] text-slate-400">{item.pembayaran.length} kali bayar</span>
-                          )}
-                          {item.real.dariLunasLama && (
-                            <span className="block text-[11px] text-slate-400">dari tanda Lunas lama</span>
-                          )}
-                        </td>
-                        <td className="td num whitespace-nowrap">
-                          {item.real.selisih === null || item.real.selisih === 0 ? (
-                            item.real.selisih === 0 ? <span className="text-slate-400">pas</span>
-                              : <span className="text-[11px] text-slate-400">sisa {formatRupiah(item.real.sisaAkanKeluar)}</span>
-                          ) : item.real.selisih > 0 ? (
-                            <span className="text-emerald-700">hemat {formatRupiah(item.real.selisih)}</span>
-                          ) : (
-                            <span className="text-red-600">lebih {formatRupiah(-item.real.selisih)}</span>
-                          )}
-                        </td>
-                        <td className="td">
-                          <Badge tone={item.real.status === 'SELESAI' ? 'green' : item.real.status === 'SEBAGIAN' ? 'blue' : 'amber'}>
-                            {LABEL_REALISASI_ITEM[item.real.status]}
-                          </Badge>
-                        </td>
-                      </>
-                    )}
-                    <td className="td">
-                      <span className="flex items-center justify-end gap-3">
-                        {dibuka && <RealisasiItemDialog
-                          itemId={item.id}
-                          nama={item.name}
-                          total={item.amount}
-                          qtyRencana={item.quantity}
-                          hargaSatuan={hargaSatuanItem(item)}
-                          realisasi={item.real.realisasi}
-                          selesai={item.real.selesai}
-                          tanggalBawaan={hariIni}
-                          pembayaran={item.pembayaran.map((p) => ({
-                            id: p.id, tanggal: formatDate(p.date), amount: p.amount, quantity: p.quantity, note: p.note,
-                          }))}
-                        />}
-                        <UbahItemProyekDialog
-                          accounts={capexAccounts}
-                          nilai={{
-                            id: item.id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            unitPrice: hargaSatuanItem(item),
-                            plannedDate: toDateInput(item.plannedDate),
-                            accountId: item.accountId,
-                          }}
-                        />
-                        <form action={deleteCostItem}>
-                          <input type="hidden" name="id" value={item.id} />
-                          <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                            Hapus
-                          </button>
-                        </form>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-slate-200 font-semibold">
-                <tr>
-                  <td className="td" colSpan={4}>
-                    Total
-                  </td>
-                  <td className="td num whitespace-nowrap">{formatRupiah(total)}</td>
-                  {dibuka && <td className="td num whitespace-nowrap">{formatRupiah(paid)}</td>}
-                  {dibuka && (
-                    <td className="td num whitespace-nowrap">
-                      {selisihSelesai > 0 ? <span className="text-emerald-700">hemat {formatRupiah(selisihSelesai)}</span>
-                        : selisihSelesai < 0 ? <span className="text-red-600">lebih {formatRupiah(-selisihSelesai)}</span>
-                          : '—'}
-                    </td>
-                  )}
-                  <td className="td" colSpan={dibuka ? 2 : 1} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <TabelItemProyek
+            items={rencanaAwal}
+            accounts={capexAccounts}
+            realisasi={dibuka}
+            bolehUbah
+            hariIni={hariIni}
+          />
         )}
-        {!dibuka && project.items.length > 0 && (
+        {!dibuka && rencanaAwal.length > 0 && (
           <p className="mt-3 text-xs text-slate-500">
             Realisasi pembayaran dan status selesai per item muncul setelah proyek <strong>Approved</strong> (sesudah Funding Review).
             {adaPembayaran && ' Pembayaran yang sempat dicatat sebelumnya tetap tersimpan dan tampil lagi saat itu.'}
           </p>
         )}
       </Card>
+
+      {tampilPanelTambahan && (
+        <Card className="card-pad mb-6 min-w-0" id="tambahan">
+          <SectionTitle hint="Item yang ditambahkan setelah proyek Approved. Beberapa item dikumpulkan dalam satu pengajuan, lalu melewati alur yang sama dengan proyek baru. Itemnya baru memotong kas dan bisa direalisasikan setelah pengajuannya Approved.">
+            Item tambahan
+          </SectionTitle>
+          {project.tambahan.length === 0 && (
+            <p className="py-4 text-sm text-slate-500">
+              Belum ada item tambahan. Item yang ditambahkan lewat formulir di samping akan masuk{' '}
+              <strong>Tambahan #{nomorBerikut}</strong> dan perlu disetujui dulu sebelum dihitung.
+            </p>
+          )}
+          <div className="space-y-6">
+            {project.tambahan.map((t) => {
+              const st = statusTambahan(t.status);
+              const itemT = project.items.filter((i) => i.addendumId === t.id);
+              const totalT = itemT.reduce((s, i) => s + i.amount, 0);
+              const bisaUbah = st === 'DRAFT' || st === 'REJECTED';
+              return (
+                <section key={t.id} className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="flex items-center gap-2 font-medium text-slate-900">
+                      Tambahan #{t.number}
+                      <Badge tone={st === 'APPROVED' ? 'green' : st === 'REJECTED' ? 'red' : st === 'DRAFT' ? 'slate' : 'amber'}>
+                        {LABEL_STATUS_PROYEK[st]}
+                      </Badge>
+                    </h3>
+                    <span className="flex items-center gap-3 text-sm">
+                      <span className="tabular-nums text-slate-700">
+                        {itemT.length} item · <strong>{formatRupiah(totalT)}</strong>
+                      </span>
+                      {bisaUbah && <HapusTambahanTombol id={t.id} nomor={t.number} />}
+                    </span>
+                  </div>
+                  {itemT.length === 0 ? (
+                    <p className="mb-3 text-sm text-slate-500">Belum ada item. Tambahkan lewat formulir di samping.</p>
+                  ) : (
+                    <div className="mb-4">
+                      <TabelItemProyek
+                        items={itemT}
+                        accounts={capexAccounts}
+                        realisasi={dibuka && st === 'APPROVED'}
+                        bolehUbah={bisaUbah}
+                        hariIni={hariIni}
+                      />
+                    </div>
+                  )}
+                  <ProjectApproval
+                    jenis="tambahan"
+                    id={t.id}
+                    status={st}
+                    riwayat={t.riwayat.map(riwayatTampil)}
+                  />
+                </section>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="min-w-0 space-y-6 lg:col-span-3">
@@ -303,8 +273,32 @@ export default async function ProyekDetailPage({ params }: { params: Promise<{ i
 
         <div className="lg:col-span-2">
           <Card className="card-pad">
-            <SectionTitle>Tambah item biaya</SectionTitle>
-            <CostItemForm projectId={project.id} accounts={capexAccounts} />
+            {jalurItemBaru === 'DITUTUP' ? (
+              <>
+                <SectionTitle>Tambah item biaya</SectionTitle>
+                <p className="text-sm text-slate-500">
+                  Proyek {LABEL_STATUS_PROYEK[status]} tidak menerima item baru.
+                  {status === 'ON_HOLD' && ' Lanjutkan proyeknya dulu (Resume Project) untuk menambah item.'}
+                </p>
+              </>
+            ) : jalurItemBaru === 'TAMBAHAN' ? (
+              <>
+                <SectionTitle hint="Proyek sudah Approved, jadi item baru diajukan terpisah dan baru dihitung setelah disetujui.">
+                  Tambah item tambahan
+                </SectionTitle>
+                <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                  Masuk ke <strong>Tambahan #{nomorBerikut}</strong>
+                  {tambahanDraf ? ' (draf)' : ' (pengajuan baru)'}. Setelah itemnya lengkap, ajukan lewat panel{' '}
+                  <a href="#tambahan" className="underline">Item tambahan</a>.
+                </p>
+                <CostItemForm projectId={project.id} accounts={capexAccounts} />
+              </>
+            ) : (
+              <>
+                <SectionTitle>Tambah item biaya</SectionTitle>
+                <CostItemForm projectId={project.id} accounts={capexAccounts} />
+              </>
+            )}
           </Card>
 
           <Card className="card-pad mt-6">

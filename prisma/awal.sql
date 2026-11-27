@@ -106,8 +106,22 @@ CREATE TABLE "ProjectCostItem" (
     "plannedDate" DATETIME NOT NULL,
     "paid" BOOLEAN NOT NULL DEFAULT false,
     "done" BOOLEAN NOT NULL DEFAULT false,
+    "addendumId" TEXT,
     CONSTRAINT "ProjectCostItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "ProjectCostItem_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT "ProjectCostItem_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "ProjectCostItem_addendumId_fkey" FOREIGN KEY ("addendumId") REFERENCES "ProjectAddendum" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProjectAddendum" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "number" INTEGER NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "note" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "ProjectAddendum_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -131,8 +145,10 @@ CREATE TABLE "ProjectStatusLog" (
     "note" TEXT,
     "userId" TEXT,
     "userName" TEXT NOT NULL,
+    "addendumId" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ProjectStatusLog_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "ProjectStatusLog_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ProjectStatusLog_addendumId_fkey" FOREIGN KEY ("addendumId") REFERENCES "ProjectAddendum" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -496,10 +512,22 @@ CREATE INDEX "Project_unitId_idx" ON "Project"("unitId");
 CREATE INDEX "ProjectCostItem_projectId_idx" ON "ProjectCostItem"("projectId");
 
 -- CreateIndex
+CREATE INDEX "ProjectCostItem_addendumId_idx" ON "ProjectCostItem"("addendumId");
+
+-- CreateIndex
+CREATE INDEX "ProjectAddendum_projectId_idx" ON "ProjectAddendum"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProjectAddendum_projectId_number_key" ON "ProjectAddendum"("projectId", "number");
+
+-- CreateIndex
 CREATE INDEX "ProjectCostPayment_itemId_idx" ON "ProjectCostPayment"("itemId");
 
 -- CreateIndex
 CREATE INDEX "ProjectStatusLog_projectId_idx" ON "ProjectStatusLog"("projectId");
+
+-- CreateIndex
+CREATE INDEX "ProjectStatusLog_addendumId_idx" ON "ProjectStatusLog"("addendumId");
 
 -- CreateIndex
 CREATE INDEX "MonthlyStat_unitId_idx" ON "MonthlyStat"("unitId");
