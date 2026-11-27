@@ -31,3 +31,17 @@ test('harus tersisa satu pengguna aktif yang bisa mengelola pengguna', () => {
   assert.equal(masihAdaPengelola([{ active: true, level: staf }, { active: true, level: admin }]), true);
   assert.equal(masihAdaPengelola([{ active: true, level: null }]), true);
 });
+
+import { KATALOG_HAK } from '../src/lib/hak-akses.ts';
+test('setiap hak punya sub menu, dan sub menu di satu menu berurutan', () => {
+  for (const m of KATALOG_HAK) {
+    const urutan = m.hak.map((h) => h.sub);
+    for (const h of m.hak) assert.ok(h.sub.length > 0, h.kode);
+    // Sub menu yang sama tidak terpecah: begitu ditinggalkan, tidak muncul lagi.
+    const dilewati = new Set<string>();
+    urutan.forEach((sub, i) => {
+      if (i > 0 && urutan[i - 1] !== sub) dilewati.add(urutan[i - 1]);
+      assert.ok(!dilewati.has(sub), `${m.modul}: ${sub} terpecah`);
+    });
+  }
+});

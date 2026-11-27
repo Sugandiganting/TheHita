@@ -2,7 +2,8 @@
  * Hak akses per user level.
  *
  * Setiap user level memegang sekumpulan kode hak akses yang dicentang di
- * Master Data › User Level. Untuk sekarang yang diatur adalah menu Proyek —
+ * Master Data › User Level. Katalognya disusun per menu (tab di formulir),
+ * lalu per sub menu di dalamnya, supaya pemberian aksesnya rapi. Untuk sekarang yang diatur adalah menu Proyek —
  * siapa yang boleh menyusun, mengajukan, menyetujui rencana, menyetujui dana,
  * dan seterusnya — serta pengelolaan pengguna. Menu lain menyusul dengan
  * menambah baris di katalog ini.
@@ -16,22 +17,22 @@ export const KATALOG_HAK = [
   {
     modul: 'Proyek',
     hak: [
-      { kode: 'proyek.kelola', label: 'Buat & ubah proyek', keterangan: 'Membuat, mengubah, dan menghapus proyek serta item biayanya.' },
-      { kode: 'proyek.ajukan', label: 'Submit Proposal', keterangan: 'Mengajukan proyek atau item tambahan (Draft → Proposed).' },
-      { kode: 'proyek.setujui_rencana', label: 'Approve Plan', keterangan: 'Menyetujui rencana (Proposed → Funding Review).' },
-      { kode: 'proyek.setujui_dana', label: 'Approve Funding', keterangan: 'Menyetujui dana (Funding Review → Approved).' },
-      { kode: 'proyek.tolak', label: 'Reject', keterangan: 'Menolak pengajuan saat Proposed atau Funding Review.' },
-      { kode: 'proyek.kembali_draf', label: 'Return to Draft', keterangan: 'Mengembalikan pengajuan ke Draft untuk disusun ulang.' },
-      { kode: 'proyek.tunda', label: 'Put On Hold & Resume', keterangan: 'Menandai proyek mangkrak dan melanjutkannya lagi.' },
-      { kode: 'proyek.selesai', label: 'Mark Completed', keterangan: 'Menandai proyek selesai.' },
-      { kode: 'proyek.batalkan', label: 'Cancel Project', keterangan: 'Membatalkan proyek yang sudah disetujui.' },
-      { kode: 'proyek.realisasi', label: 'Catat realisasi', keterangan: 'Mencatat pembayaran item dan menandai pembelanjaan selesai.' },
+      { kode: 'proyek.kelola', sub: 'Data proyek', label: 'Buat & ubah proyek', keterangan: 'Membuat, mengubah, dan menghapus proyek serta item biayanya.' },
+      { kode: 'proyek.ajukan', sub: 'Persetujuan', label: 'Submit Proposal', keterangan: 'Mengajukan proyek atau item tambahan (Draft → Proposed).' },
+      { kode: 'proyek.setujui_rencana', sub: 'Persetujuan', label: 'Approve Plan', keterangan: 'Menyetujui rencana (Proposed → Funding Review).' },
+      { kode: 'proyek.setujui_dana', sub: 'Persetujuan', label: 'Approve Funding', keterangan: 'Menyetujui dana (Funding Review → Approved).' },
+      { kode: 'proyek.tolak', sub: 'Persetujuan', label: 'Reject', keterangan: 'Menolak pengajuan saat Proposed atau Funding Review.' },
+      { kode: 'proyek.kembali_draf', sub: 'Persetujuan', label: 'Return to Draft', keterangan: 'Mengembalikan pengajuan ke Draft untuk disusun ulang.' },
+      { kode: 'proyek.tunda', sub: 'Status proyek', label: 'Put On Hold & Resume', keterangan: 'Menandai proyek mangkrak dan melanjutkannya lagi.' },
+      { kode: 'proyek.selesai', sub: 'Status proyek', label: 'Mark Completed', keterangan: 'Menandai proyek selesai.' },
+      { kode: 'proyek.batalkan', sub: 'Status proyek', label: 'Cancel Project', keterangan: 'Membatalkan proyek yang sudah disetujui.' },
+      { kode: 'proyek.realisasi', sub: 'Realisasi', label: 'Catat realisasi', keterangan: 'Mencatat pembayaran item dan menandai pembelanjaan selesai.' },
     ],
   },
   {
     modul: 'Pengguna',
     hak: [
-      { kode: 'pengguna.kelola', label: 'Kelola pengguna & user level', keterangan: 'Menambah pengguna, mengganti sandi, menonaktifkan, dan mengatur user level beserta hak aksesnya.' },
+      { kode: 'pengguna.kelola', sub: 'Pengguna & user level', label: 'Kelola pengguna & user level', keterangan: 'Menambah pengguna, mengganti sandi, menonaktifkan, dan mengatur user level beserta hak aksesnya.' },
     ],
   },
 ] as const;

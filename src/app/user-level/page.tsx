@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { KATALOG_HAK, LABEL_HAK, bacaHak } from '@/lib/hak-akses';
 import { hakSaya } from '@/lib/hak-akses-server';
-import { HapusUserLevel, UbahUserLevelDialog, UserLevelForm } from '@/components/user-level-form';
-import { Alert, Badge, Card, PageHeader, SectionTitle } from '@/components/ui';
+import { HapusUserLevel, TambahUserLevelDialog, UbahUserLevelDialog } from '@/components/user-level-form';
+import { Alert, Badge, Card, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,7 @@ export default async function UserLevelPage() {
       <PageHeader
         title="User Level"
         description="Hak akses tiap kelompok pengguna. Pasang levelnya ke pengguna di menu Pengguna."
+        action={boleh ? <TambahUserLevelDialog /> : undefined}
       />
 
       {!boleh && (
@@ -46,12 +47,11 @@ export default async function UserLevelPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-2">
           {levels.length === 0 ? (
             <Card className="card-pad">
               <p className="py-4 text-sm text-slate-500">
-                Belum ada user level. Buat lewat formulir di samping, misalnya <em>Staff Proyek</em> yang hanya
+                Belum ada user level. Buat lewat tombol <strong>Tambah user level</strong>, misalnya <em>Staff Proyek</em> yang hanya
                 boleh menyusun dan mengajukan, <em>Manajer</em> yang menyetujui rencana, dan <em>Direktur</em> yang
                 menyetujui dana.
               </p>
@@ -77,36 +77,32 @@ export default async function UserLevelPage() {
                     </span>
                   )}
                 </div>
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 space-y-3">
                   {KATALOG_HAK.map((m) => {
                     const punya = m.hak.filter((h) => hak.includes(h.kode));
+                    const subs = [...new Set(punya.map((h) => h.sub))];
                     return (
-                      <p key={m.modul} className="flex flex-wrap items-center gap-1.5 text-xs">
-                        <span className="w-20 shrink-0 font-medium text-slate-600">{m.modul}</span>
-                        {punya.length === 0
-                          ? <span className="text-slate-400">tidak ada akses</span>
-                          : punya.map((h) => <Badge key={h.kode} tone="brand">{LABEL_HAK[h.kode]}</Badge>)}
-                      </p>
+                      <div key={m.modul} className="text-xs">
+                        <p className="mb-1 font-semibold uppercase tracking-wide text-slate-600">
+                          {m.modul} <span className="font-normal normal-case text-slate-400">{punya.length}/{m.hak.length}</span>
+                        </p>
+                        {punya.length === 0 ? (
+                          <p className="text-slate-400">tidak ada akses</p>
+                        ) : subs.map((sub) => (
+                          <p key={sub} className="flex flex-wrap items-center gap-1.5 py-0.5">
+                            <span className="w-28 shrink-0 text-slate-500">{sub}</span>
+                            {punya.filter((h) => h.sub === sub).map((h) => (
+                              <Badge key={h.kode} tone="brand">{LABEL_HAK[h.kode]}</Badge>
+                            ))}
+                          </p>
+                        ))}
+                      </div>
                     );
                   })}
                 </div>
               </Card>
             );
           })}
-        </div>
-
-        {boleh && (
-          <div className="min-w-0">
-            <Card className="card-pad">
-              <SectionTitle hint="Centang apa saja yang boleh dilakukan pengguna di level ini.">
-                Tambah user level
-              </SectionTitle>
-              <div className="mt-3">
-                <UserLevelForm />
-              </div>
-            </Card>
-          </div>
-        )}
       </div>
     </>
   );

@@ -440,9 +440,10 @@ Beberapa hal yang menentukan laporannya bisa dipercaya:
   sebelum atau pada tanggal posisi kas tidak dikurangkan lagi karena sudah ada di saldo.
 
 ### User Level
-**Master Data › User Level** mengatur hak akses tiap kelompok pengguna. Setiap level
-mencentang hak yang diberikan; levelnya dipasang ke pengguna di menu **Pengguna**. Saat ini
-yang diatur:
+**Master Data › User Level** mengatur hak akses tiap kelompok pengguna. Level ditambah
+dan diubah lewat dialog bertab: satu tab per menu, hak dikelompokkan per sub menu, dengan
+*Pilih semua* per tab dan per sub menu. Levelnya dipasang ke pengguna di menu **Pengguna**.
+Saat ini yang diatur:
 
 - **Proyek** — buat & ubah proyek, Submit Proposal, Approve Plan, Approve Funding, Reject,
   Return to Draft, Put On Hold & Resume, Mark Completed, Cancel Project, dan catat

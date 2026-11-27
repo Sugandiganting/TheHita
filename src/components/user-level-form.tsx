@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { hapusUserLevel, setelLevelPengguna, simpanUserLevel, type ActionState } from '@/app/actions';
 import { KATALOG_HAK } from '@/lib/hak-akses';
@@ -17,7 +17,32 @@ function Simpan({ label }: { label: string }) {
   );
 }
 
-/** Formulir user level: nama, keterangan, dan centang hak akses per menu. */
+/** Kotak centang yang bisa setengah tercentang — untuk "pilih semua" sebagian. */
+function CentangInduk({ semua, sebagian, onChange, label }: {
+  semua: boolean; sebagian: boolean; onChange: (centang: boolean) => void; label: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (ref.current) ref.current.indeterminate = sebagian && !semua; }, [semua, sebagian]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label={label}
+      checked={semua}
+      onChange={(e) => onChange(e.target.checked)}
+      className="h-4 w-4 rounded border-slate-300"
+    />
+  );
+}
+
+/**
+ * Formulir user level: nama, keterangan, dan hak akses — satu tab per menu,
+ * dikelompokkan per sub menu, dengan "pilih semua" per tab dan per sub menu.
+ *
+ * Centangnya disimpan di state, bukan di kotak centangnya sendiri: tab yang
+ * tidak sedang dibuka tidak dirender, dan hak di tab itu tetap harus ikut
+ * terkirim. Yang dikirim adalah isian tersembunyi untuk setiap hak terpilih.
+ */
 export function UserLevelForm({
   nilai, onTutup,
 }: {
@@ -33,48 +58,140 @@ export function UserLevelForm({
     initial,
   );
   const awalan = nilai ? `ul-${nilai.id}` : 'ul-baru';
-  const dicentang = new Set(nilai?.hak ?? []);
+  const [dipilih, setDipilih] = useState<Set<string>>(() => new Set(nilai?.hak ?? []));
+  const [tab, setTab] = useState(0);
+  const modul = KATALOG_HAK[tab];
+
+  const setel = (kode: readonly string[], centang: boolean) => setDipilih((lama) => {
+    const baru = new Set(lama);
+    for (const k of kode) {
+      if (centang) baru.add(k);
+      else baru.delete(k);
+    }
+    return baru;
+  });
+  const jumlahDi = (kode: readonly string[]) => kode.filter((k) => dipilih.has(k)).length;
+
+  const kodeTab = modul.hak.map((h) => h.kode);
+  const kelompok = modul.hak.reduce<{ sub: string; hak: (typeof modul.hak)[number][] }[]>((acc, h) => {
+    const akhir = acc[acc.length - 1];
+    if (akhir && akhir.sub === h.sub) akhir.hak.push(h);
+    else acc.push({ sub: h.sub, hak: [h] });
+    return acc;
+  }, []);
 
   return (
-    <form action={action} className="space-y-4" key={!nilai && state.ok ? state.message : 'isi'}>
+    <form action={action} className="space-y-4">
       {nilai && <input type="hidden" name="id" value={nilai.id} />}
-      <div>
-        <label className="label" htmlFor={`${awalan}-nama`}>Nama user level</label>
-        <input id={`${awalan}-nama`} name="name" className="input" defaultValue={nilai?.name}
-          placeholder="Misalnya: Manajer Keuangan" required />
+      {[...dipilih].map((k) => <input key={k} type="hidden" name="hak" value={k} />)}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor={`${awalan}-nama`}>Nama user level</label>
+          <input id={`${awalan}-nama`} name="name" className="input" defaultValue={nilai?.name}
+            placeholder="Misalnya: Manajer Keuangan" required />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${awalan}-ket`}>Keterangan</label>
+          <input id={`${awalan}-ket`} name="description" className="input" defaultValue={nilai?.description ?? ''}
+            placeholder="Opsional, mis. menyetujui dana proyek" />
+        </div>
       </div>
+
       <div>
-        <label className="label" htmlFor={`${awalan}-ket`}>Keterangan</label>
-        <input id={`${awalan}-ket`} name="description" className="input" defaultValue={nilai?.description ?? ''}
-          placeholder="Opsional, mis. menyetujui dana proyek" />
-      </div>
-      {KATALOG_HAK.map((m) => (
-        <fieldset key={m.modul} className="rounded-lg border border-slate-200 p-3">
-          <legend className="px-1 text-sm font-medium text-slate-700">{m.modul}</legend>
-          <div className="space-y-2">
-            {m.hak.map((h) => (
-              <label key={h.kode} className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="hak" value={h.kode} defaultChecked={dicentang.has(h.kode)} className="mt-1" />
-                <span>
-                  <span className="font-medium text-slate-900">{h.label}</span>
-                  <span className="block text-xs text-slate-500">{h.keterangan}</span>
+        {/* Satu tab per menu, dengan jumlah hak yang sudah dicentang. */}
+        <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-slate-200">
+          {KATALOG_HAK.map((m, i) => {
+            const n = jumlahDi(m.hak.map((h) => h.kode));
+            return (
+              <button
+                key={m.modul}
+                type="button"
+                role="tab"
+                aria-selected={i === tab}
+                onClick={() => setTab(i)}
+                className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium uppercase tracking-wide ${
+                  i === tab ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {m.modul}
+                <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[11px] normal-case ${n > 0 ? 'bg-brand-100 text-brand-800' : 'bg-slate-100 text-slate-500'}`}>
+                  {n}/{m.hak.length}
                 </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      ))}
-      <Simpan label={nilai ? 'Simpan perubahan' : 'Tambah user level'} />
-      {state.message && (
-        <p className={`text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
-      )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div role="tabpanel" className="max-h-[50vh] space-y-3 overflow-y-auto rounded-b-lg bg-slate-50 p-3">
+          <label className="flex items-center gap-3 rounded-md bg-white px-4 py-3 shadow-sm">
+            <CentangInduk
+              label={`Pilih semua ${modul.modul}`}
+              semua={jumlahDi(kodeTab) === kodeTab.length}
+              sebagian={jumlahDi(kodeTab) > 0}
+              onChange={(c) => setel(kodeTab, c)}
+            />
+            <span className="font-medium text-slate-900">Pilih semua</span>
+            <span className="ml-auto text-xs text-slate-500">{jumlahDi(kodeTab)} dari {kodeTab.length} hak {modul.modul}</span>
+          </label>
+
+          {kelompok.map((g) => {
+            const kodeSub = g.hak.map((h) => h.kode);
+            return (
+              <div key={g.sub} className="overflow-hidden rounded-md bg-white shadow-sm">
+                <label className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2">
+                  <CentangInduk
+                    label={`Pilih semua ${g.sub}`}
+                    semua={jumlahDi(kodeSub) === kodeSub.length}
+                    sebagian={jumlahDi(kodeSub) > 0}
+                    onChange={(c) => setel(kodeSub, c)}
+                  />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">{g.sub}</span>
+                </label>
+                {g.hak.map((h) => (
+                  <label key={h.kode} className="flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={dipilih.has(h.kode)}
+                      onChange={(e) => setel([h.kode], e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-slate-900">{h.label}</span>
+                      <span className="block text-xs text-slate-500">{h.keterangan}</span>
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-slate-400 sm:block">{g.sub}</span>
+                  </label>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+        {state.message && (
+          <p className={`mr-auto text-sm ${state.ok ? 'text-emerald-700' : 'text-red-600'}`}>{state.message}</p>
+        )}
+        {onTutup && <button type="button" className="btn-secondary" onClick={onTutup}>Batal</button>}
+        <Simpan label={nilai ? 'Simpan perubahan' : 'Simpan'} />
+      </div>
     </form>
+  );
+}
+
+export function TambahUserLevelDialog() {
+  return (
+    <DialogTombol label="Tambah user level" lebar="lg" judul="Tambah user level"
+      keterangan="Centang apa saja yang boleh dilakukan pengguna di level ini. Hak dikelompokkan per menu dan sub menu.">
+      {(tutup) => <UserLevelForm onTutup={tutup} />}
+    </DialogTombol>
   );
 }
 
 export function UbahUserLevelDialog({ nilai }: { nilai: { id: string; name: string; description: string | null; hak: string[] } }) {
   return (
-    <DialogTombol label="Ubah" varian="tautan" judul={`Ubah ${nilai.name}`}
+    <DialogTombol label="Ubah" varian="tautan" lebar="lg" judul={`Ubah ${nilai.name}`}
       keterangan="Perubahan hak akses langsung berlaku bagi semua pengguna di level ini.">
       {(tutup) => <UserLevelForm nilai={nilai} onTutup={tutup} />}
     </DialogTombol>
